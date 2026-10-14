@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, fmt } from '../api'
-import { arrowPoints, dims, midOf, pathD, rectOf, shortName, snap, straight, uid } from './geometry'
+import { arrowPoints, bboxOf, edgesOf, fitToOutline, gateInfo, GATE_HALF, midOf, outlineOf, pathD, polyD, projectToOutline, rectOf, shortName, snap, straight, uid, dims } from './geometry'
 import Inspector from './Inspector'
 
 const TOOLS_FULL = [
@@ -9,8 +9,12 @@ const TOOLS_FULL = [
   { id: 'route', label: 'Ruta', key: 'T', tip: 'Clic en la máquina de origen y luego en la de destino. Sigue encadenando; Esc para terminar.' },
   { id: 'wall', label: 'Pared', key: 'P', tip: 'Arrastra para dibujar una pared. Se ajusta a 45°; con Alt queda libre.' },
   { id: 'zone', label: 'Zona', key: 'Z', tip: 'Arrastra un rectángulo: oficina, baños, comedor o zona bloqueada. Por ahí no pasa el material.' },
-  { id: 'gate', label: 'Portón', key: 'O', tip: 'Clic sobre el muro de la calle para agregar un portón.' },
+  { id: 'gate', label: 'Portón', key: 'O', tip: 'Clic sobre cualquier muro exterior para agregar un portón. La calle se agrega de ese lado.' },
+  { id: 'shape', label: 'Forma', key: 'F', tip: 'Arrastra una esquina para moverla. Arrastra el punto medio de un lado para expandir o encoger desde ahí; un clic en él crea una esquina nueva. Doble clic en una esquina la borra.' },
 ]
+
+/* Portapapeles compartido entre editores (se puede copiar en el paso 1 y pegar en el rediseño). */
+let clipboard = null
 
 /* Recorridos reales del motor, recalculados poco después de cada cambio. */
 function useLegs(plant, positions) {
@@ -43,11 +47,14 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
   const [draft, setDraft] = useState(null)
   const [cursor, setCursorPt] = useState(null)
   const drag = useRef(null)
+  const lastPt = useRef(null)
+  const frozenVB = useRef(null)
   const undo = useRef([])
   const redo = useRef([])
   const [, force] = useState(0)
   const live = useLegs(plant, positions)
   const { w: W, d: D } = plant.size
+  const outline = outlineOf(plant)
   const st = useMemo(() => Object.fromEntries(plant.stations.map((s) => [s.id, s])), [plant.stations])
   const kindName = useMemo(() => Object.fromEntries((catalog?.kinds || []).map((k) => [k.id, k.name])), [catalog])
 
@@ -83,6 +90,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
   }
 
   /* ---------- Acciones ---------- */
+  const snapOn = (v) => Math.round(v * 100) / 100
   const toPt = (e) => {
     const pt = svg.current.createSVGPoint()
     pt.x = e.clientX
@@ -160,7 +168,15 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     const onKey = (e) => {
       if (e.target.closest('input, textarea, select')) return
       const k = e.key.toLowerCase()
-      if ((e.ctrlKey || e.metaKey) && k === 'z') {
+      if ((e.ctrlKey || e.metaKey) && k === 'c') {
+        if (copy()) e.preventDefault()
+      } else if ((e.ctrlKey || e.metaKey) && k === 'v') {
+        e.preventDefault()
+        paste()
+      } else if ((e.ctrlKey || e.metaKey) && k === 'd') {
+        e.preventDefault()
+        duplicate()
+      } else if ((e.ctrlKey || e.metaKey) && k === 'z') {
         e.preventDefault()
         if (e.shiftKey) doRedo()
         else doUndo()
@@ -169,7 +185,8 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
         doRedo()
       } else if (k === 'delete' || k === 'backspace') {
         e.preventDefault()
-        remove()
+        if (sel?.type === 'vertex') removeVertex(sel.i)
+        else remove()
       } else if (k === 'r' && sel?.type === 'station') rotate(sel.id)
       else if (k === 'escape') {
         setRouteFrom(null)
@@ -250,10 +267,11 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       setDraft({ type: tool, x1: snap(x), z1: snap(z), x2: snap(x), z2: snap(z) })
       svg.current.setPointerCapture?.(e.pointerId)
     } else if (tool === 'gate') {
-      if (z < D - 3) return
+      const p = projectToOutline(outline, [x, z])
+      if (p.dist > 3) return
       const used = new Set(plant.gates.map((g) => g.id))
       const id = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find((c) => !used.has(c)) || uid('G')
-      commit({ ...plant, gates: [...plant.gates, { id, x: Math.min(W - 2.2, Math.max(2.2, snap(x))), label: `Portón ${id}` }] })
+      commit({ ...plant, gates: [...plant.gates, { id, x: snapOn(p.x), z: snapOn(p.z), label: `Portón ${id}` }] })
       setSel({ type: 'gate', id })
       setTool('select')
     } else if (tool === 'route') setRouteFrom(null)
@@ -261,6 +279,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
 
   const onMove = (e) => {
     const [x, z] = toPt(e)
+    lastPt.current = x >= 0 && z >= 0 && x <= W && z <= D ? [x, z] : null
     if (tool === 'route' && routeFrom) setCursorPt([x, z])
     if (draft) {
       let x2 = snap(x)
@@ -300,10 +319,31 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       markMoved(d)
       onChange({ ...plant, walls: plant.walls.map((q) => (q.id === d.id ? { ...q, x1: w.x1 + dx, z1: w.z1 + dz, x2: w.x2 + dx, z2: w.z2 + dz } : q)) }, positions)
     } else if (d.type === 'gate') {
-      const nx = Math.min(W - 2.2, Math.max(2.2, snap(x)))
-      if (nx === plant.gates.find((g) => g.id === d.id)?.x) return
+      // El portón se desliza por todo el contorno, de un muro exterior a otro.
+      const p = projectToOutline(outline, [x, z])
+      const g0 = plant.gates.find((g) => g.id === d.id)
+      const nx = snapOn(p.x)
+      const nz = snapOn(p.z)
+      if (nx === g0?.x && nz === (g0?.z ?? D)) return
       markMoved(d)
-      onChange({ ...plant, gates: plant.gates.map((g) => (g.id === d.id ? { ...g, x: nx } : g)) }, positions)
+      onChange({ ...plant, gates: plant.gates.map((g) => (g.id === d.id ? { ...g, x: nx, z: nz } : g)) }, positions)
+    } else if (d.type === 'vertex') {
+      const nx = snap(x)
+      const nz = snap(z)
+      const cur = d.outline[d.i]
+      if (nx === cur[0] && nz === cur[1]) return
+      markMoved(d)
+      d.outline = d.outline.map((q, k) => (k === d.i ? [nx, nz] : q))
+      onChange({ ...plant, outline: d.outline }, positions)
+    } else if (d.type === 'edge') {
+      // Empuja el lado completo sobre su normal: expande o encoge la planta desde ese lado.
+      const e = edgesOf(d.base)[d.i]
+      const delta = snap((x - d.x0) * e.n[0] + (z - d.z0) * e.n[1])
+      if (!delta && !d.moved) return
+      markMoved(d)
+      const j = (d.i + 1) % d.base.length
+      d.outline = d.base.map((q, k) => (k === d.i || k === j ? [q[0] + e.n[0] * delta, q[1] + e.n[1] * delta] : q))
+      onChange({ ...plant, outline: d.outline }, positions)
     }
   }
 
@@ -327,7 +367,99 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       setDraft(null)
       setTool('select')
     }
+    const d = drag.current
+    if (d?.type === 'vertex' || d?.type === 'edge') {
+      if (d.moved) {
+        const fit = fitToOutline(plant, positions, d.outline)
+        onChange(fit.plant, fit.positions)
+      } else if (d.type === 'edge') {
+        // Un clic (sin arrastrar) en el punto medio crea una esquina nueva ahí.
+        const e = edgesOf(d.base)[d.i]
+        const mid = [snap((e.a[0] + e.b[0]) / 2), snap((e.a[1] + e.b[1]) / 2)]
+        commit({ ...plant, outline: [...d.base.slice(0, d.i + 1), mid, ...d.base.slice(d.i + 1)] }, positions)
+        setSel({ type: 'vertex', i: d.i + 1 })
+      }
+      frozenVB.current = null
+    }
     drag.current = null
+  }
+
+  const onDownVertex = (e, i) => {
+    e.stopPropagation()
+    box.current.focus({ preventScroll: true })
+    setSel({ type: 'vertex', i })
+    frozenVB.current = viewBox
+    startDrag(e, { type: 'vertex', i, outline: outline.map((q) => [...q]) })
+  }
+  const onDownEdge = (e, i) => {
+    e.stopPropagation()
+    box.current.focus({ preventScroll: true })
+    const [x, z] = toPt(e)
+    frozenVB.current = viewBox
+    startDrag(e, { type: 'edge', i, x0: x, z0: z, base: outline.map((q) => [...q]), outline: null })
+  }
+  const removeVertex = (i) => {
+    if (outline.length <= 3) return
+    const fit = fitToOutline(plant, positions, outline.filter((_, k) => k !== i))
+    commit(fit.plant, fit.positions)
+    setSel(null)
+  }
+  const reshape = (next, size) => {
+    const fit = fitToOutline(size ? { ...plant, size } : plant, positions, next)
+    commit(fit.plant, fit.positions)
+  }
+
+  /* ---------- Copiar y pegar ---------- */
+  const copy = () => {
+    if (!sel || !full) return false
+    if (sel.type === 'station') {
+      const s = st[sel.id]
+      clipboard = s ? { type: 'station', item: s, rot: positions[sel.id]?.[2] || 0, at: positions[sel.id], n: 0 } : null
+    } else if (sel.type === 'zone') {
+      const z = plant.zones.find((q) => q.id === sel.id)
+      clipboard = z ? { type: 'zone', item: z, n: 0 } : null
+    } else if (sel.type === 'wall') {
+      const w = plant.walls.find((q) => q.id === sel.id)
+      clipboard = w ? { type: 'wall', item: w, n: 0 } : null
+    } else return false
+    return !!clipboard
+  }
+
+  const paste = () => {
+    if (!clipboard || !full) return
+    clipboard.n += 1
+    const off = clipboard.n
+    // Con el puntero sobre el plano se pega donde está el puntero; si no, corrido 1 m por cada copia.
+    const at = lastPt.current
+    const { type, item } = clipboard
+    if (type === 'station') {
+      const id = uid('s')
+      const s = { ...item, id, name: `${item.name} (copia)` }
+      const [x, z] = at || [clipboard.at[0] + off, clipboard.at[1] + off]
+      const [cx, cz] = clampStation(s, x, z, clipboard.rot)
+      commit({ ...plant, stations: [...plant.stations, s] }, { ...positions, [id]: [cx, cz, clipboard.rot] })
+      setSel({ type: 'station', id })
+    } else if (type === 'zone') {
+      const id = uid('z')
+      const [x, z] = at || [item.x + off, item.z + off]
+      const zn = { ...item, id, name: `${item.name} (copia)`, x: Math.min(W - item.w / 2, Math.max(item.w / 2, snap(x))), z: Math.min(D - item.d / 2, Math.max(item.d / 2, snap(z))) }
+      commit({ ...plant, zones: [...plant.zones, zn] })
+      setSel({ type: 'zone', id })
+    } else if (type === 'wall') {
+      const id = uid('w')
+      const mx = (item.x1 + item.x2) / 2
+      const mz = (item.z1 + item.z2) / 2
+      const [dx, dz] = at ? [snap(at[0] - mx), snap(at[1] - mz)] : [off, off]
+      commit({ ...plant, walls: [...plant.walls, { id, x1: item.x1 + dx, z1: item.z1 + dz, x2: item.x2 + dx, z2: item.z2 + dz }] })
+      setSel({ type: 'wall', id })
+    }
+  }
+
+  const duplicate = () => {
+    const keep = lastPt.current
+    lastPt.current = null
+    if (copy()) paste()
+    lastPt.current = keep
   }
 
   /* ---------- Dibujo ---------- */
@@ -335,6 +467,12 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
   const recv = plant.receive_gate
   const disp = plant.dispatch_gate
   const tools = full ? TOOLS_FULL : TOOLS_FULL.slice(0, 1)
+  const bb = bboxOf([...outline, [0, 0], [W, D]])
+  const M = plant.gates.some((g) => g.x <= 0.5 || g.x >= W - 0.5) ? 7 : 4
+  // Mientras se arrastra el contorno la vista queda fija, para que el punto no se escape del puntero.
+  const viewBox = frozenVB.current || `${bb.x0 - M} ${bb.z0 - M} ${bb.x1 - bb.x0 + 2 * M} ${bb.z1 - bb.z0 + 2 * M}`
+  const [vx, vz, vw, vh] = viewBox.split(' ').map(Number)
+  const shapeOn = full && tool === 'shape'
   const activeTip = tools.find((t) => t.id === tool)?.tip
 
   return (
@@ -396,10 +534,13 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
         <div className="editor-canvas" data-tool={tool}>
           <svg
             ref={svg}
-            viewBox={`-1.5 -1.5 ${W + 3} ${D + 5}`}
+            viewBox={viewBox}
             onPointerMove={onMove}
             onPointerUp={onUp}
-            onPointerLeave={() => setCursorPt(null)}
+            onPointerLeave={() => {
+              setCursorPt(null)
+              lastPt.current = null
+            }}
             role="img"
             aria-label="Plano de la planta"
           >
@@ -413,10 +554,8 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
               </pattern>
             </defs>
 
-            <rect x={0} y={0} width={W} height={D} fill="url(#grid)" stroke="#000" strokeWidth={0.3} onPointerDown={onDownBg} />
-            <text x={W / 2} y={D + 3.2} textAnchor="middle" fontSize="1" fill="#767676" letterSpacing="0.3" pointerEvents="none">
-              CALLE
-            </text>
+            <rect x={vx} y={vz} width={vw} height={vh} fill="transparent" onPointerDown={onDownBg} />
+            <path d={polyD(outline)} fill="url(#grid)" stroke="#000" strokeWidth={0.3} onPointerDown={onDownBg} />
 
             {plant.zones.map((zn) => {
               const on = sel?.type === 'zone' && sel.id === zn.id
@@ -480,15 +619,52 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
             {plant.gates.map((g) => {
               const on = sel?.type === 'gate' && sel.id === g.id
               const role = g.id === recv && g.id === disp ? 'entra y sale' : g.id === recv ? 'entra' : g.id === disp ? 'sale' : ''
+              const gi = gateInfo(plant, g)
+              const lift = 1.7 + Math.abs(gi.n[0]) * 2.2
               return (
-                <g key={g.id} onPointerDown={(e) => onDownGate(e, g)} style={{ cursor: full && tool === 'select' ? 'ew-resize' : undefined }}>
-                  <rect x={g.x - 2.2} y={D - 0.35} width={4.4} height={1} fill={role ? '#000' : '#fff'} stroke="#000" strokeWidth={on ? 0.3 : 0.15} />
-                  <text x={g.x} y={D + 1.9} textAnchor="middle" fontSize="0.9" fontWeight={role ? 800 : 500} fill="#000" pointerEvents="none">
+                <g key={g.id} onPointerDown={(e) => onDownGate(e, g)} style={{ cursor: full && tool === 'select' ? 'move' : undefined }}>
+                  <rect x={-GATE_HALF} y={-0.35} width={GATE_HALF * 2} height={1} transform={`translate(${gi.x} ${gi.z}) rotate(${gi.deg})`} fill={role ? '#000' : '#fff'} stroke="#000" strokeWidth={on ? 0.3 : 0.15} />
+                  <text x={gi.x + gi.n[0] * lift} y={gi.z + gi.n[1] * lift + 0.3} textAnchor="middle" fontSize="0.9" fontWeight={role ? 800 : 500} fill="#000" pointerEvents="none">
                     {g.id} {role}
                   </text>
                 </g>
               )
             })}
+
+            {shapeOn &&
+              edgesOf(outline).map((e) => {
+                const mx = (e.a[0] + e.b[0]) / 2
+                const mz = (e.a[1] + e.b[1]) / 2
+                return (
+                  <g key={`e${e.i}`}>
+                    <circle cx={mx} cy={mz} r={0.55} fill="#fff" stroke="#000" strokeWidth={0.15} style={{ cursor: 'grab' }} onPointerDown={(ev) => onDownEdge(ev, e.i)}>
+                      <title>Arrastra para expandir o encoger. Clic para crear una esquina.</title>
+                    </circle>
+                    <text x={mx + e.n[0] * 1.6} y={mz + e.n[1] * 1.6 + 0.3} textAnchor="middle" fontSize="0.75" fill="#767676" pointerEvents="none">
+                      {fmt(e.len, 1)} m
+                    </text>
+                  </g>
+                )
+              })}
+            {shapeOn &&
+              outline.map((q, i) => {
+                const on = sel?.type === 'vertex' && sel.i === i
+                return (
+                  <rect
+                    key={`v${i}`}
+                    x={q[0] - 0.55}
+                    y={q[1] - 0.55}
+                    width={1.1}
+                    height={1.1}
+                    fill={on ? '#000' : '#fff'}
+                    stroke="#000"
+                    strokeWidth={0.2}
+                    style={{ cursor: 'move' }}
+                    onPointerDown={(ev) => onDownVertex(ev, i)}
+                    onDoubleClick={() => removeVertex(i)}
+                  />
+                )
+              })}
 
             {routeFrom && cursor && positions[routeFrom] && (
               <line x1={positions[routeFrom][0]} y1={positions[routeFrom][1]} x2={cursor[0]} y2={cursor[1]} stroke="#000" strokeWidth={0.15} strokeDasharray="0.4 0.3" pointerEvents="none" />
@@ -501,7 +677,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
           <p className="editor-tip small">{tool === 'route' && routeFrom ? `Desde «${st[routeFrom]?.name}»: clic en la máquina de destino.` : activeTip}</p>
         </div>
 
-        <Inspector plant={plant} positions={positions} sel={sel} setSel={setSel} commit={commit} rotate={rotate} remove={remove} catalog={catalog} full={full} live={live} />
+        <Inspector plant={plant} positions={positions} sel={sel} setSel={setSel} commit={commit} rotate={rotate} remove={remove} catalog={catalog} full={full} live={live} duplicate={duplicate} reshape={reshape} removeVertex={removeVertex} />
       </div>
     </div>
   )

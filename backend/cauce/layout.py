@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 
 from .catalog import CLEAN, DIRTY
-from .engine import dims, evaluate, gate_x, manhattan, params, rebalance_ops, seg_dist, station_map, zone_rect
+from .engine import dims, evaluate, gate_pt, gate_x, manhattan, outline, params, point_in_poly, poly_area, poly_edges, rebalance_ops, seg_dist, station_map, zone_rect
 
 GAP = 1.2       # pasillo mínimo entre estaciones (m)
 EDGE = 0.4      # separación mínima a las paredes de la bodega (m)
@@ -55,6 +55,13 @@ def feasible(plant, r, placed):
         return False
     if _hits_wall(r, plant.get("walls", [])):
         return False
+    poly = outline(plant)
+    if poly:
+        # Dentro de la forma de la planta y lejos de su contorno.
+        if not all(point_in_poly(poly, x, z) for x, z in ((r[0], r[1]), (r[2], r[1]), (r[0], r[3]), (r[2], r[3]))):
+            return False
+        if _hits_wall(r, [{"x1": a[0], "z1": a[1], "x2": b[0], "z2": b[1]} for a, b in poly_edges(poly)], EDGE):
+            return False
     return not any(_overlap(r, q, GAP) for q in placed)
 
 
@@ -112,7 +119,6 @@ def search_cost(plant, positions):
         if r["from"] in positions and r["to"] in positions:
             c += float(r.get("frac", 1) or 0) * manhattan(positions[r["from"]], positions[r["to"]])
     kinds = {s["id"]: s["kind"] for s in plant["stations"]}
-    D = plant["size"]["d"]
     # Áreas que ensucian (polvo, ruido, calor) lejos de las que deben quedar limpias.
     dirty = [p for sid, p in positions.items() if kinds.get(sid) in DIRTY]
     if dirty:
@@ -120,9 +126,9 @@ def search_cost(plant, positions):
         c += sum(40 for a in dirty for b in clean if manhattan(a, b) < 8)
     for sid, pos in positions.items():
         if kinds.get(sid) == "recepcion":
-            c += manhattan(pos, (gate_x(plant, plant.get("receive_gate")), D))
+            c += manhattan(pos, gate_pt(plant, plant.get("receive_gate")))
         if kinds.get(sid) == "despacho":
-            c += manhattan(pos, (gate_x(plant, plant.get("dispatch_gate")), D))
+            c += manhattan(pos, gate_pt(plant, plant.get("dispatch_gate")))
     return c
 
 
@@ -141,14 +147,13 @@ def _point_at(path, s):
 def _pin_ends(plant, order, positions, placed):
     """Recepción junto al portón de entrada y despacho junto al de salida."""
     st = station_map(plant)
-    D = plant["size"]["d"]
     rest = []
     for sid in order:
         kind = st[sid]["kind"]
         if kind in ("recepcion", "despacho"):
-            gx = gate_x(plant, plant.get("receive_gate" if kind == "recepcion" else "dispatch_gate"))
             w, d = dims(st[sid], 0)
-            pos, r = nearest_free(plant, st[sid], (gx, D - d / 2 - EDGE), placed)
+            target = gate_pt(plant, plant.get("receive_gate" if kind == "recepcion" else "dispatch_gate"), d / 2 + EDGE)
+            pos, r = nearest_free(plant, st[sid], target, placed)
             positions[sid] = pos
             placed.append(r)
         else:
@@ -300,6 +305,31 @@ def initial_layout(plant):
         x += w + 2.5
         row_d = max(row_d, d)
     return positions
+
+
+# ---------- Formas de planta ----------
+
+def plant_area(plant):
+    poly = outline(plant)
+    return round(poly_area(poly) if poly else plant["size"]["w"] * plant["size"]["d"], 1)
+
+
+def shape_outline(kind, W, D):
+    """Las mismas formas base que ofrece el editor. None es el rectángulo completo."""
+    def r(v):
+        return round(v * 2) / 2
+
+    if kind == "L":
+        return [[0, 0], [r(W * 0.5), 0], [r(W * 0.5), r(D * 0.5)], [W, r(D * 0.5)], [W, D], [0, D]]
+    if kind == "U":
+        return [[0, 0], [r(W * 0.33), 0], [r(W * 0.33), r(D * 0.55)], [r(W * 0.67), r(D * 0.55)], [r(W * 0.67), 0], [W, 0], [W, D], [0, D]]
+    if kind == "T":
+        return [[0, 0], [W, 0], [W, r(D * 0.45)], [r(W * 0.68), r(D * 0.45)], [r(W * 0.68), D], [r(W * 0.32), D], [r(W * 0.32), r(D * 0.45)], [0, r(D * 0.45)]]
+    if kind == "triangulo":
+        return [[r(W / 2), 0], [W, D], [0, D]]
+    if kind == "circulo":
+        return [[round(W / 2 + math.cos(i / 28 * 2 * math.pi) * W / 2, 2), round(D / 2 + math.sin(i / 28 * 2 * math.pi) * D / 2, 2)] for i in range(28)]
+    return None
 
 
 # ---------- Alternativas ----------

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { M, TALL, box, makeCart, makeMachine, makeOperator, makeTree, makeTruck } from './models'
+import { edgesOf, gateInfo, outlineOf, pointInPoly } from '../editor/geometry'
 
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 const easeOut = (t) => 1 - Math.pow(1 - t, 4)
@@ -202,29 +203,68 @@ export default class PlantScene {
 
   buildSite() {
     const { W, D } = this
+    const poly = outlineOf(this.plant)
+    this.poly = poly
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(W + 140, D + 140), new THREE.MeshStandardMaterial({ color: 0xdcdcdc, roughness: 1 }))
     ground.rotation.x = -Math.PI / 2
     ground.position.set(W / 2, -0.02, D / 2)
     ground.receiveShadow = true
     this.root.add(ground)
 
-    const street = new THREE.Mesh(new THREE.PlaneGeometry(W + 140, 13), new THREE.MeshStandardMaterial({ color: 0x3d3d3d, roughness: 0.95 }))
-    street.rotation.x = -Math.PI / 2
-    street.position.set(W / 2, 0, D + 9.5)
-    street.receiveShadow = true
-    this.root.add(street)
-    box(this.root, W + 140, 0.12, 3, new THREE.MeshStandardMaterial({ color: 0xbdbdbd }), W / 2, 0, D + 1.5, false)
-    for (let x = -60; x < W + 60; x += 6) box(this.root, 3, 0.02, 0.22, M.white, x, 0.01, D + 10, false)
-    for (let i = 0; i < 6; i++) box(this.root, 0.6, 0.02, 4, M.white, W / 2 - 4 + i * 1.2 - 10, 0.01, D + 9.5, false)
+    // Una calle frente a cada lado del contorno que tiene portón.
+    const edges = edgesOf(poly)
+    const used = [...new Set(this.plant.gates.map((g) => gateInfo(this.plant, g).edge))]
+    const streets = []
+    used.forEach((ei, k) => {
+      const e = edges[ei]
+      const th = Math.atan2(e.n[0], e.n[1])
+      const mid = [(e.a[0] + e.b[0]) / 2, (e.a[1] + e.b[1]) / 2]
+      const ax = [Math.cos(th), -Math.sin(th)]
+      const toWorld = (lx, lz) => [mid[0] + ax[0] * lx + e.n[0] * lz, mid[1] + ax[1] * lx + e.n[1] * lz]
+      // La calle se alarga mientras no atraviese el edificio (en formas en L o U un lado interior queda corto).
+      let ext = 0
+      for (const tryExt of [70, 30, 12, 4, 0]) {
+        ext = tryExt
+        const half = e.len / 2 + tryExt
+        const probe = [-half, -half / 2, 0, half / 2, half].flatMap((lx) => [2, 9.5, 16].map((lz) => toWorld(lx, lz)))
+        if (!probe.some((p) => pointInPoly(poly, p))) break
+      }
+      const L = e.len + 2 * ext
+      const g = new THREE.Group()
+      g.position.set(mid[0], k * 0.003, mid[1])
+      g.rotation.y = th
+      const street = new THREE.Mesh(new THREE.PlaneGeometry(L, 13), new THREE.MeshStandardMaterial({ color: 0x3d3d3d, roughness: 0.95 }))
+      street.rotation.x = -Math.PI / 2
+      street.position.set(0, 0, 9.5)
+      street.receiveShadow = true
+      g.add(street)
+      box(g, L, 0.12, 3, new THREE.MeshStandardMaterial({ color: 0xbdbdbd }), 0, 0, 1.5, false)
+      for (let x = -L / 2 + 1.5; x < L / 2 - 1.5; x += 6) box(g, 3, 0.02, 0.22, M.white, x, 0.01, 10, false)
+      for (let i = 0; i < 6; i++) box(g, 0.6, 0.02, 4, M.white, -Math.min(14, e.len / 2) + i * 1.2, 0.01, 9.5, false)
+      this.root.add(g)
+      streets.push({ toLocal: (x, z) => [(x - mid[0]) * ax[0] + (z - mid[1]) * ax[1], (x - mid[0]) * e.n[0] + (z - mid[1]) * e.n[1]], half: L / 2 })
+    })
 
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(W, 0.2, D), new THREE.MeshStandardMaterial({ map: floorTexture(W, D), roughness: 0.92 }))
-    floor.position.set(W / 2, -0.09, D / 2)
+    // Piso con la forma de la planta.
+    const shape = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z)))
+    const tex = floorTexture(W, D)
+    tex.repeat.set(1 / W, 1 / D)
+    tex.offset.set(0, 1)
+    const floor = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.2, bevelEnabled: false }), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92 }))
+    floor.rotation.x = -Math.PI / 2
+    floor.position.y = -0.19
     floor.receiveShadow = true
     this.root.add(floor)
 
-
     const trees = [[-5, 3], [-6, 12], [-4, 20], [W + 5, 4], [W + 6, 14], [6, -5], [18, -6], [30, -5], [41, -6], [-14, D + 18], [W / 2, D + 19], [W + 12, D + 18]]
     for (const [x, z] of trees) {
+      // Sin árboles dentro de la planta ni sobre una calle.
+      if (pointInPoly(poly, [x, z])) continue
+      const onStreet = streets.some((st) => {
+        const [lx, lz] = st.toLocal(x, z)
+        return Math.abs(lx) < st.half && lz > -1.5 && lz < 17.5
+      })
+      if (onStreet) continue
       const t = makeTree()
       t.position.set(x, 0, z)
       t.scale.setScalar(0.9 + ((x * 7 + z) % 5) / 10)
@@ -234,26 +274,41 @@ export default class PlantScene {
 
   buildWalls(opts) {
     this.walls.clear()
-    const { W, D } = this
     const h = 2.3
     const t = 0.3
     const mat = M.white
-    box(this.walls, W + t, h, t, mat, W / 2, 0, -t / 2)
-    box(this.walls, t, h, D, mat, -t / 2, 0, D / 2)
-    box(this.walls, t, h, D, mat, W + t / 2, 0, D / 2)
+    const poly = this.poly || outlineOf(this.plant)
     const open = opts.gates ? opts.gates.map((id) => this.plant.gates.find((g) => g.id === id)).filter(Boolean) : this.plant.gates
-    const cuts = open.map((g) => [g.x - 2.2, g.x + 2.2]).sort((a, b) => a[0] - b[0])
-    let x = 0
-    for (const [a, b] of cuts) {
-      if (a > x) box(this.walls, a - x, h, t, mat, (x + a) / 2, 0, D + t / 2)
-      x = b
+    const infos = open.map((g) => gateInfo(this.plant, g))
+    // Muros exteriores por cada lado del contorno, con el hueco de cada portón.
+    for (const e of edgesOf(poly)) {
+      const seg = (s0, s1) => {
+        const len = s1 - s0
+        if (len < 0.05) return
+        // En las esquinas el muro se alarga para cerrar el ángulo.
+        const a0 = s0 <= 0.01 ? t : 0
+        const a1 = s1 >= e.len - 0.01 ? t : 0
+        const c = s0 - a0 + (len + a0 + a1) / 2
+        const m = box(this.walls, len + a0 + a1, h, t, mat, 0, 0, 0)
+        m.position.set(e.a[0] + e.dir[0] * c + (e.n[0] * t) / 2, h / 2, e.a[1] + e.dir[1] * c + (e.n[1] * t) / 2)
+        m.rotation.y = -Math.atan2(e.dir[1], e.dir[0])
+      }
+      const cuts = infos.filter((gi) => gi.edge === e.i).map((gi) => [gi.t - 2.2, gi.t + 2.2]).sort((a, b) => a[0] - b[0])
+      let s0 = 0
+      for (const [a, b] of cuts) {
+        if (a > s0) seg(s0, a)
+        s0 = Math.max(s0, b)
+      }
+      if (s0 < e.len) seg(s0, e.len)
     }
-    if (x < W) box(this.walls, W - x, h, t, mat, (x + W) / 2, 0, D + t / 2)
-    for (const g of open) {
+    for (const gi of infos) {
+      const g = new THREE.Group()
+      g.position.set(gi.x + gi.n[0] * 0.6, 0.03, gi.z + gi.n[1] * 0.6)
+      g.rotation.y = Math.atan2(gi.n[0], gi.n[1])
       const stripe = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.2), new THREE.MeshStandardMaterial({ map: this.hatch(), roughness: 0.9 }))
       stripe.rotation.x = -Math.PI / 2
-      stripe.position.set(g.x, 0.03, D + 0.6)
-      this.walls.add(stripe)
+      g.add(stripe)
+      this.walls.add(g)
     }
     for (const w of this.plant.walls || []) {
       const len = Math.hypot(w.x2 - w.x1, w.z2 - w.z1)
@@ -294,21 +349,31 @@ export default class PlantScene {
     this.extras.clear()
     this.operators = []
 
-    const gx = (id) => this.plant.gates.find((g) => g.id === id)?.x ?? this.W / 2
-    const dispatchX = gx(o.dispatchGate || this.plant.dispatch_gate)
-    const receiveX = gx(o.receiveGate || this.plant.receive_gate)
+    // Los camiones esperan en la calle frente a su portón, de reversa hacia la planta.
+    const info = (id) => {
+      const g = this.plant.gates.find((q) => q.id === id) || this.plant.gates[0]
+      return g ? gateInfo(this.plant, g) : { x: this.W / 2, z: this.D, n: [0, 1] }
+    }
+    const put = (obj, gi, along, out) => {
+      const th = Math.atan2(gi.n[0], gi.n[1])
+      obj.rotation.y = th
+      obj.position.set(gi.x + Math.cos(th) * along + gi.n[0] * out, 0, gi.z - Math.sin(th) * along + gi.n[1] * out)
+      obj.userData.bob = true
+    }
+    const dispId = o.dispatchGate || this.plant.dispatch_gate
+    const recvId = o.receiveGate || this.plant.receive_gate
+    const disp = info(dispId)
+    const recv = info(recvId)
     const trucks = o.trucks ?? 2
     for (let i = 0; i < trucks; i++) {
       const tr = makeTruck(i === 0 ? 'flat' : 'box')
-      const x = i === 0 ? dispatchX : dispatchX - 6
-      tr.position.set(x, 0, this.D + 5.6 + (i ? 1.5 : 0))
-      tr.userData.baseZ = tr.position.z
+      put(tr, disp, i === 0 ? 0 : -6, 5.6 + (i ? 1.5 : 0))
       this.extras.add(tr)
     }
-    if (receiveX !== dispatchX) {
+    if (recvId !== dispId && Math.hypot(recv.x - disp.x, recv.z - disp.z) > 1) {
       const van = makeTruck('flat')
       van.scale.setScalar(0.85)
-      van.position.set(receiveX, 0, this.D + 5.4)
+      put(van, recv, 0, 5.4)
       this.extras.add(van)
     }
 
@@ -664,7 +729,7 @@ export default class PlantScene {
 
     for (const arm of this.arms || []) arm.rotation.y = Math.sin(time * 0.4) * 0.6
 
-    for (const tr of this.extras.children) if (tr.userData.baseZ) tr.position.y = Math.sin(time * 1.3) * 0.015
+    for (const tr of this.extras.children) if (tr.userData.bob) tr.position.y = Math.sin(time * 1.3) * 0.015
 
     if (this.pointerInside) {
       this.raycaster.setFromCamera(this.pointer, this.camera)

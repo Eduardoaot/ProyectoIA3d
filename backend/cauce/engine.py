@@ -5,6 +5,7 @@ números salen de estas fórmulas.
 
 - Recorridos: ruta más corta por pasillos en una malla de 0,5 m que esquiva
   máquinas, zonas bloqueadas (oficina, baños...) y paredes en cualquier ángulo.
+  Si la planta tiene una forma propia (L, U, círculo...), no sale de ella.
 - Sin supuestos: solo metros que recorre una pieza y relaciones entre áreas.
 - Con supuestos: viajes al día, carga y capacidad por estación, cuello de
   botella, tiempo de fabricación (colas con Sakasegawa) y carga de camiones.
@@ -58,6 +59,65 @@ def seg_dist(px, pz, x1, z1, x2, z2):
     return math.hypot(px - (x1 + t * vx), pz - (z1 + t * vz))
 
 
+# ---------- Forma de la planta ----------
+
+def outline(plant):
+    """Contorno propio de la planta o None si es el rectángulo completo."""
+    o = plant.get("outline")
+    return tuple((float(p[0]), float(p[1])) for p in o) if o and len(o) >= 3 else None
+
+
+def rect_outline(plant):
+    W, D = plant["size"]["w"], plant["size"]["d"]
+    return ((0.0, 0.0), (W, 0.0), (W, D), (0.0, D))
+
+
+def poly_edges(poly):
+    return [(poly[i], poly[(i + 1) % len(poly)]) for i in range(len(poly))]
+
+
+def poly_area(poly):
+    return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in poly_edges(poly))) / 2
+
+
+def point_in_poly(poly, x, z):
+    inside = False
+    j = len(poly) - 1
+    for i in range(len(poly)):
+        xi, zi = poly[i]
+        xj, zj = poly[j]
+        if (zi > z) != (zj > z) and x < (xj - xi) * (z - zi) / (zj - zi) + xi:
+            inside = not inside
+        j = i
+    return inside
+
+
+def gate_pt(plant, gate_id, inset=None):
+    """Centro del portón sobre el contorno. Con inset se mete hacia adentro (para llegar a él sin cruzar el muro)."""
+    gates = plant.get("gates", [])
+    g = next((q for q in gates if q["id"] == gate_id), gates[0] if gates else None)
+    W, D = plant["size"]["w"], plant["size"]["d"]
+    if not g:
+        return (W / 2, D)
+    x, z = float(g["x"]), float(g.get("z", D) if g.get("z") is not None else D)
+    poly = outline(plant) or rect_outline(plant)
+    area2 = sum(a[0] * b[1] - b[0] * a[1] for a, b in poly_edges(poly))
+    sign = 1 if area2 >= 0 else -1
+    best = None
+    for a, b in poly_edges(poly):
+        L = math.hypot(b[0] - a[0], b[1] - a[1]) or 1e-9
+        dx, dz = (b[0] - a[0]) / L, (b[1] - a[1]) / L
+        t = L / 2 if L < 4.4 else min(L - 2.2, max(2.2, (x - a[0]) * dx + (z - a[1]) * dz))
+        px, pz = a[0] + dx * t, a[1] + dz * t
+        d = math.hypot(px - x, pz - z)
+        if best is None or d < best[0]:
+            best = (d, px, pz, (sign * dz, -sign * dx))
+    _, px, pz, n = best
+    if inset is None:
+        inset = 0.75 if outline(plant) else 0.0
+    return (px - n[0] * inset, pz - n[1] * inset)
+
+
 def obstacles(plant, positions, skip=()):
     st = station_map(plant)
     rects = []
@@ -68,6 +128,10 @@ def obstacles(plant, positions, skip=()):
     for zn in plant.get("zones", []):
         rects.append(tuple(round(v, 2) for v in zone_rect(zn)))
     segs = tuple((w["x1"], w["z1"], w["x2"], w["z2"]) for w in plant.get("walls", []))
+    poly = outline(plant)
+    if poly:
+        # El contorno funciona como un muro más.
+        segs += tuple((a[0], a[1], b[0], b[1]) for a, b in poly_edges(poly))
     return tuple(rects), segs
 
 
@@ -88,9 +152,14 @@ def _crosses(n1, n2, s):
 
 
 @lru_cache(maxsize=16384)
-def _route(W, D, rects, segs, a, b):
+def _route(W, D, rects, segs, a, b, poly=None):
     nx, ny = int(W / STEP), int(D / STEP)
     blocked = set()
+    if poly:
+        for i in range(nx + 1):
+            for j in range(ny + 1):
+                if not point_in_poly(poly, i * STEP, j * STEP):
+                    blocked.add((i, j))
     for x0, y0, x1, y1 in rects:
         for i in range(max(0, math.ceil((x0 - MARGIN) / STEP + 1e-9)), min(nx, math.floor((x1 + MARGIN) / STEP - 1e-9)) + 1):
             for j in range(max(0, math.ceil((y0 - MARGIN) / STEP + 1e-9)), min(ny, math.floor((y1 + MARGIN) / STEP - 1e-9)) + 1):
@@ -155,7 +224,7 @@ def _route(W, D, rects, segs, a, b):
 
 
 def _path(plant, rects, segs, a, b):
-    pts = _route(plant["size"]["w"], plant["size"]["d"], rects, segs, (a[0], a[1]), (b[0], b[1]))
+    pts = _route(plant["size"]["w"], plant["size"]["d"], rects, segs, (a[0], a[1]), (b[0], b[1]), outline(plant))
     ok = pts is not None
     if not ok:
         pts = ((a[0], a[1]), (b[0], a[1]), (b[0], b[1]))
@@ -203,11 +272,7 @@ def ends(plant):
 
 
 def gate_x(plant, gate_id):
-    for g in plant.get("gates", []):
-        if g["id"] == gate_id:
-            return g["x"]
-    gates = plant.get("gates", [])
-    return gates[0]["x"] if gates else plant["size"]["w"] / 2
+    return gate_pt(plant, gate_id)[0]
 
 
 def params(plant):
@@ -312,9 +377,8 @@ def evaluate(plant, positions, ops=None):
         out.update({"bottleneck": stations[0]["id"], "bottleneck_util": stations[0]["util"], "capacity": round(min(x["capacity"] for x in stations), 1)})
 
     first, last = ends(plant)
-    D = plant["size"]["d"]
     if last and last in positions:
-        dt, _, _ = route_to_point(plant, positions, last, (gate_x(plant, plant.get("dispatch_gate")), D))
+        dt, _, _ = route_to_point(plant, positions, last, gate_pt(plant, plant.get("dispatch_gate")))
         out["d_truck"] = round(dt, 1)
         out["loading_min"] = round(p["trucks"] * p["truck_setup"] + p["demand"] * (p["load_min"] + 2 * dt / p["speed"]), 0)
     return out

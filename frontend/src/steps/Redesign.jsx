@@ -60,6 +60,7 @@ function worksDiff(base, other) {
 
 	n += [...sa].filter((x) => !sb.has(x)).length + [...sb].filter((x) => !sa.has(x)).length
 	if (base.receive_gate !== other.receive_gate || base.dispatch_gate !== other.dispatch_gate) n += 1
+	if (JSON.stringify(base.outline || null) !== JSON.stringify(other.outline || null)) n += 1
 
 	return n
 }
