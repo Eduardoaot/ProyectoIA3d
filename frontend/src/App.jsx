@@ -109,6 +109,9 @@ export default function App() {
 
     const setRedesign = useCallback((patch) => update((p) => ({ redesign: { ...p.redesign, ...patch } })), [update])
 
+    // Alternativas que se calculan a pedido (la compacta con IA) se suman al análisis guardado.
+    const addAlternative = useCallback((alt) => update((p) => ({ analysis: { ...p.analysis, alternatives: [...p.analysis.alternatives.filter((a) => a.id !== alt.id), alt] } })), [update])
+
     const onPrinted = useCallback(() => {
         update({ printed: true })
         go(5)
@@ -143,7 +146,7 @@ export default function App() {
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
         if (step === 2) return <Diagnosis plant={plant} analysis={analysis} report={report} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} catalog={catalog} onNext={() => go(4)} />
+        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} onNext={() => go(4)} />
         if (step === 4) return <Report plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
         if (step === 5) return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onWorkshop={() => go(6)} onRestart={restart} />
 

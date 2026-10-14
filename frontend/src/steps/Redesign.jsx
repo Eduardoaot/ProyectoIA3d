@@ -65,7 +65,7 @@ function worksDiff(base, other) {
 	return n
 }
 
-export default function Redesign({ plant, analysis, redesign, setRedesign, catalog, onNext }) {
+export default function Redesign({ plant, analysis, redesign, setRedesign, onAddAlternative, catalog, onNext }) {
 	const cur = analysis.current
 	const alts = analysis.alternatives
 	const full = plant.use_assumptions && cur.daily_m != null
@@ -107,6 +107,23 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 			c.abort()
 		}
 	}, [choice, redesign.custom])
+
+	const [compact, setCompact] = useState({ loading: false, error: null })
+
+	// La quinta opción se pide a la IA solo cuando el usuario la quiere (tarda uno o dos minutos).
+	const askCompact = async () => {
+		setCompact({ loading: true, error: null })
+		try {
+			const alt = await api.compact(plant)
+			onAddAlternative(alt)
+			setCompact({ loading: false, error: null })
+			setRedesign({ choice: alt.id })
+			setShowOriginal(false)
+			view.current?.setLayout(alt.positions, { legs: alt.metrics.legs })
+		} catch {
+			setCompact({ loading: false, error: 'No pude calcularla. Intenta de nuevo.' })
+		}
+	}
 
 	const pick = (id) => {
 		const a = alts.find((x) => x.id === id)
@@ -155,8 +172,12 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 		return plant.stations.map((s) => ({ id: s.id, name: s.name, before: s.ops || 0, after: metrics.ops[s.id] ?? 0 })).filter((x) => x.before !== x.after)
 	}, [full, metrics, plant])
 
+	const aiAlt = alts.find((a) => a.id === 'ia')
 	const cards = [
-		...alts.map((a) => ({ id: a.id, name: a.name, summary: a.summary, works: a.works, m: a.metrics })),
+		...alts.filter((a) => a.id !== 'ia').map((a) => ({ id: a.id, name: a.name, summary: a.summary, works: a.works, m: a.metrics })),
+		aiAlt
+			? { id: 'ia', name: aiAlt.name, summary: aiAlt.summary, works: aiAlt.works, m: aiAlt.metrics, reasons: aiAlt.reasons, source: aiAlt.source, model: aiAlt.model }
+			: { id: 'ia', name: 'Compacta con IA', pending: true },
 		...(custom ? [{ id: 'propio', name: 'Tu rediseño', summary: 'Tu versión, ajustada a mano en el editor de abajo.', works: works ? `${works} cambios de obra (paredes, zonas, portones o máquinas).` : 'Solo mover máquinas.', m: redesign.metrics }] : []),
 	]
 
@@ -165,17 +186,32 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 			<header className="step-head">
 				<span className="step-index"><b>Paso 4 de 6</b><span>Rediseño</span></span>
 				<RevealTitle text="Elige cómo ordenar la planta." />
-				<p className="lede">Tres acomodos para tu flujo, respetando tu planta. Selecciona una opción para ver cómo se mueven las máquinas.</p>
+				<p className="lede">Tres acomodos calculados para tu flujo y uno que la IA busca para ocupar el menor espacio, siempre respetando tu planta. Selecciona una opción para ver cómo se mueven las máquinas.</p>
 			</header>
 
 			<Appear className="alts" style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }}>
 				{cards.map((a) => {
 					const p = a.m ? pct(cur.piece_m, a.m.piece_m) : null
 
+					if (a.pending)
+						return (
+							<div key={a.id} className="alt alt--ask">
+								<span className="alt-best">IA</span>
+								<h3>{a.name}</h3>
+								<p className="small">La IA lee tus estaciones, el flujo y las zonas, decide qué conviene juntar y desde qué esquina empezar. Luego se acomodan las máquinas en el menor espacio sin alargar el recorrido.</p>
+								<Btn size="small" onClick={askCompact} disabled={compact.loading}>
+									{compact.loading ? 'Pensando…' : 'Calcular con IA'}
+								</Btn>
+								{compact.loading && <p className="small">Tarda uno o dos minutos.</p>}
+								{compact.error && <p className="small">{compact.error}</p>}
+							</div>
+						)
+
 					return (
 						<button key={a.id} type="button" className="alt" aria-pressed={a.id === choice && !showOriginal} onClick={() => pick(a.id)}>
 							{a.id === analysis.recommended && <span className="alt-best">RECOMENDADA</span>}
 							{a.id === 'propio' && <span className="alt-best">TUYA</span>}
+							{a.id === 'ia' && <span className="alt-best">{a.source === 'ia' ? 'IA' : 'SIN IA: ORDEN DEL FLUJO'}</span>}
 
 							<h3>{a.name}</h3>
 
@@ -185,7 +221,19 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 							</div>
 
 							{p != null && <span className="small num">{p > 0 ? `+${p}` : p} % frente a hoy</span>}
+							{a.m?.footprint_m2 != null && (
+								<span className="small num">
+									Ocupa {fmt(a.m.footprint_m2)} m²{cur.footprint_m2 ? ` (hoy ${fmt(cur.footprint_m2)} m²)` : ''}
+								</span>
+							)}
 							<p className="small">{a.summary}</p>
+							{a.reasons?.length > 0 && (
+								<ul className="alt-reasons small">
+									{a.reasons.map((r, i) => (
+										<li key={i}>{r}</li>
+									))}
+								</ul>
+							)}
 							<p className="small">Obra: {a.works}</p>
 						</button>
 					)

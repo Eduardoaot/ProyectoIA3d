@@ -9,6 +9,7 @@ from cauce import catalog
 from cauce.engine import compare, evaluate, rebalance_ops, relations
 from cauce.layout import alternatives, ops_moves, score
 from cauce.agents import MIN_CUES, detail, read_spatial
+from cauce.compact import compact_alternative, footprint
 from cauce.providers import get_engineer, get_extractor, get_spatial
 from cauce.story import STORY_SCHEMA, STORY_SYSTEM, build_plant
 
@@ -106,10 +107,12 @@ async def evaluate_route(body: LayoutInterface):
 async def analyze_route(body: PlantInterface):
     plant = body.plant
     current = evaluate(plant, plant["layout"])
+    current["footprint_m2"] = footprint(plant, plant["layout"])
     alts = alternatives(plant)
     for a in alts:
         a["score"] = score(current, a["metrics"], a["works_cost"], plant.get("use_assumptions"))
         a["ops_moves"] = ops_moves(plant, a["metrics"].get("ops") if plant.get("use_assumptions") else None)
+        a["metrics"]["footprint_m2"] = footprint(plant, a["positions"])
     best = min(alts, key=lambda a: a["score"])
     return {
         "current": current,
@@ -118,6 +121,19 @@ async def analyze_route(body: PlantInterface):
         "relations": relations(plant),
         "comparison": compare(current, best["metrics"]),
     }
+
+
+@app.post("/api/compact")
+async def compact_route(body: PlantInterface):
+    """Quinta alternativa, a pedido: la IA da el criterio y el empacador junta las máquinas en el menor espacio."""
+    plant = body.plant
+    current = evaluate(plant, plant["layout"])
+    provider = await spatial_or_extractor()
+    alt = await compact_alternative(plant, provider)
+    alt["score"] = score(current, alt["metrics"], alt["works_cost"], plant.get("use_assumptions"))
+    alt["ops_moves"] = ops_moves(plant, alt["metrics"].get("ops") if plant.get("use_assumptions") else None)
+    alt["model"] = provider.model if alt["source"] == "ia" else None
+    return alt
 
 
 # ---------- Textos del ingeniero ----------

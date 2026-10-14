@@ -1414,6 +1414,19 @@ details.how ul {
   color: var(--white);
 }
 
+.alt--ask {
+  background: var(--g100);
+}
+
+.alt--ask .btn {
+  justify-self: start;
+}
+
+.alt-reasons {
+  margin: 0;
+  padding-left: 1.1em;
+}
+
 .alt-best {
   justify-self: start;
   padding: 3px 8px;

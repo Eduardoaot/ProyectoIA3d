@@ -23,6 +23,7 @@ export const api = {
     routes: (plant, positions, signal) => post('/api/routes', { plant, positions }, signal),
     evaluate: (plant, positions, rebalance = true, signal) => post('/api/evaluate', { plant, positions, rebalance }, signal),
     analyze: (plant) => post('/api/analyze', { plant }),
+    compact: (plant) => post('/api/compact', { plant }),
     missions: (context) => post('/api/missions', context),
 }
 
