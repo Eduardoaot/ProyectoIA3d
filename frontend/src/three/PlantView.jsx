@@ -2,7 +2,42 @@ import { useEffect, useImperativeHandle, useRef, useState } from 'react'
 import PlantScene from './PlantScene'
 import { setCursor } from '../fx/Cursor'
 
-export default function PlantView({ ref, plant, positions, extras, buildKey, onSelect, tools, legend = true, hint = 'Arrastra para girar. Rueda para acercar. Clic en una máquina para enfocarla.' }) {
+const HINTS = {
+  '3d': 'Arrastra para girar, clic derecho o Shift para mover. Rueda para acercar. WASD o flechas mueven, Q y E giran, R y F inclinan.',
+  top: 'Arrastra para mover la vista. Rueda para acercar. WASD o flechas también mueven.',
+}
+
+/* Mantener pulsado repite la acción (como mantener una tecla). */
+function HoldBtn({ onStep, label, children }) {
+  const timer = useRef(null)
+  const stop = () => {
+    clearInterval(timer.current)
+    timer.current = null
+  }
+  useEffect(() => stop, [])
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onPointerDown={(e) => {
+        e.preventDefault()
+        onStep()
+        stop()
+        timer.current = setInterval(onStep, 40)
+      }}
+      onPointerUp={stop}
+      onPointerLeave={stop}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onStep()}
+    >
+      {children}
+    </button>
+  )
+}
+
+const ICON = { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 2 }
+
+export default function PlantView({ ref, plant, positions, extras, buildKey, onSelect, tools, legend = true, hint }) {
   const host = useRef(null)
   const labels = useRef(null)
   const scene = useRef(null)
@@ -63,6 +98,33 @@ export default function PlantView({ ref, plant, positions, extras, buildKey, onS
         </div>
         {tools}
       </div>
+      <div className="scene-cam" role="group" aria-label="Cámara">
+        <HoldBtn label="Acercar" onStep={() => scene.current?.zoom(0.95)}>
+          <svg {...ICON}><path d="M8 3 V13 M3 8 H13" /></svg>
+        </HoldBtn>
+        <HoldBtn label="Alejar" onStep={() => scene.current?.zoom(1.05)}>
+          <svg {...ICON}><path d="M3 8 H13" /></svg>
+        </HoldBtn>
+        {view === '3d' && (
+          <>
+            <HoldBtn label="Girar a la izquierda" onStep={() => scene.current?.orbit(0.05)}>
+              <svg {...ICON}><path d="M12 5 A5 5 0 1 0 13 9 M12 1 V5 H8" /></svg>
+            </HoldBtn>
+            <HoldBtn label="Girar a la derecha" onStep={() => scene.current?.orbit(-0.05)}>
+              <svg {...ICON}><path d="M4 5 A5 5 0 1 1 3 9 M4 1 V5 H8" /></svg>
+            </HoldBtn>
+            <HoldBtn label="Inclinar hacia arriba" onStep={() => scene.current?.tilt(-0.035)}>
+              <svg {...ICON}><path d="M3 10 L8 5 L13 10" /></svg>
+            </HoldBtn>
+            <HoldBtn label="Inclinar hacia abajo" onStep={() => scene.current?.tilt(0.035)}>
+              <svg {...ICON}><path d="M3 6 L8 11 L13 6" /></svg>
+            </HoldBtn>
+          </>
+        )}
+        <button type="button" aria-label="Centrar la vista" title="Centrar la vista" onClick={() => scene.current?.setView(view)}>
+          <svg {...ICON}><rect x="3" y="3" width="10" height="10" /><circle cx="8" cy="8" r="1.5" fill="currentColor" /></svg>
+        </button>
+      </div>
       {legend && (
         <div className="scene-legend" aria-hidden="true">
           <div className="legend-row"><span className="legend-swatch" />Recorrido del material</div>
@@ -71,7 +133,7 @@ export default function PlantView({ ref, plant, positions, extras, buildKey, onS
           <div className="legend-row"><span className="legend-swatch--ring" />Cuello de botella</div>
         </div>
       )}
-      <span className="scene-hint">{hint}</span>
+      <span className="scene-hint">{hint || HINTS[view]}</span>
     </div>
   )
 }

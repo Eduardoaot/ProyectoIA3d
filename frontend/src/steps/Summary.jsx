@@ -19,7 +19,7 @@ export default function Summary({ plant, analysis, chosen, context, onPrint, onW
     return (
         <section className="step">
             <header className="step-head">
-                <span className="step-index">06 / Resumen</span>
+                <span className="step-index"><b>Paso 6 de 6</b><span>Resumen</span></span>
                 <RevealTitle text="Listo. Este es tu nuevo cauce." />
                 <p className="lede">Reporte generado. Resuelve tus dudas con "El ingeniero".</p>
             </header>

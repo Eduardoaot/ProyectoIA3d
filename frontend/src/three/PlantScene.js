@@ -71,10 +71,14 @@ export default class PlantScene {
     this.controls = new OrbitControls(this.camera, r.domElement)
     this.controls.enableDamping = true
     this.controls.dampingFactor = 0.07
-    this.controls.maxPolarAngle = 1.32
-    this.controls.minDistance = 14
-    this.controls.maxDistance = 120
+    this.controls.maxPolarAngle = 1.45
+    this.controls.minDistance = 4
+    this.controls.maxDistance = 160
+    this.controls.screenSpacePanning = false
+    this.controls.zoomToCursor = true
     this.controls.target.set(0, 0, 3)
+    this.view = '3d'
+    this.keys = new Set()
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0xb0b0b0, 1.5))
     const sun = new THREE.DirectionalLight(0xffffff, 2.4)
@@ -105,15 +109,37 @@ export default class PlantScene {
       this.pointerInside = false
       this.setHovered(null)
     }
-    this.onClick = () => {
+    // Un arrastre (girar o mover la vista) no cuenta como clic sobre una máquina.
+    this.onDown = (e) => {
+      this.downAt = [e.clientX, e.clientY]
+      r.domElement.focus({ preventScroll: true })
+    }
+    this.onClick = (e) => {
+      const d = this.downAt ? Math.hypot(e.clientX - this.downAt[0], e.clientY - this.downAt[1]) : 0
+      if (d > 5) return
       if (this.hovered) {
         this.focus(this.hovered)
         this.onSelect?.(this.hovered)
       }
     }
+    const MOVE_KEYS = ['w', 'a', 's', 'd', 'q', 'e', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', '+', '=', '-', 'r', 'f']
+    this.onKeyDown = (e) => {
+      const k = e.key.toLowerCase()
+      if (!MOVE_KEYS.includes(k) || e.ctrlKey || e.metaKey || e.altKey) return
+      e.preventDefault()
+      this.keys.add(k)
+    }
+    this.onKeyUp = (e) => this.keys.delete(e.key.toLowerCase())
+    this.onBlur = () => this.keys.clear()
+    r.domElement.tabIndex = 0
+    r.domElement.style.outline = 'none'
+    r.domElement.addEventListener('pointerdown', this.onDown)
     r.domElement.addEventListener('pointermove', this.onMove)
     r.domElement.addEventListener('pointerleave', this.onLeave)
     r.domElement.addEventListener('click', this.onClick)
+    r.domElement.addEventListener('keydown', this.onKeyDown)
+    r.domElement.addEventListener('keyup', this.onKeyUp)
+    r.domElement.addEventListener('blur', this.onBlur)
 
     this.ro = new ResizeObserver(() => this.resize())
     this.ro.observe(container)
@@ -492,7 +518,69 @@ export default class PlantScene {
       pos = new THREE.Vector3(this.W * 0.55, Math.max(this.W, this.D * 1.8) * 0.85, this.D * 1.4 + 16)
     }
     this.moveCamera(pos, target)
-    this.controls.enableRotate = view !== 'top'
+    this.view = view
+    const top = view === 'top'
+    this.controls.enableRotate = !top
+    // Desde arriba el clic izquierdo arrastra la vista; en 3D gira y el derecho (o Shift) la mueve.
+    this.controls.mouseButtons = top
+      ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+      : { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+    this.controls.touches = top ? { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN } : { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }
+  }
+
+  /* ---------- Movimiento libre de cámara ---------- */
+
+  // Desplaza cámara y objetivo sobre el piso, relativo a hacia dónde mira la cámara.
+  pan(forward, right) {
+    const fwd = new THREE.Vector3()
+    this.camera.getWorldDirection(fwd)
+    fwd.y = 0
+    if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1)
+    fwd.normalize()
+    const side = new THREE.Vector3().crossVectors(fwd, this.camera.up).normalize()
+    const move = fwd.multiplyScalar(forward).add(side.multiplyScalar(right))
+    this.camera.position.add(move)
+    this.controls.target.add(move)
+  }
+
+  orbit(angle) {
+    if (this.view === 'top') return
+    const off = this.camera.position.clone().sub(this.controls.target)
+    off.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle)
+    this.camera.position.copy(this.controls.target).add(off)
+  }
+
+  // Sube o baja la mirada alrededor del objetivo, dentro de los límites de los controles.
+  tilt(angle) {
+    if (this.view === 'top') return
+    const off = this.camera.position.clone().sub(this.controls.target)
+    const s = new THREE.Spherical().setFromVector3(off)
+    s.phi = Math.min(this.controls.maxPolarAngle, Math.max(0.12, s.phi + angle))
+    off.setFromSpherical(s)
+    this.camera.position.copy(this.controls.target).add(off)
+  }
+
+  zoom(factor) {
+    const off = this.camera.position.clone().sub(this.controls.target)
+    const len = Math.min(this.controls.maxDistance, Math.max(this.controls.minDistance, off.length() * factor))
+    off.setLength(len)
+    this.camera.position.copy(this.controls.target).add(off)
+  }
+
+  stepKeys(dt) {
+    if (!this.keys.size) return
+    const k = this.keys
+    const dist = this.camera.position.distanceTo(this.controls.target)
+    const sp = dt * Math.max(6, dist * 0.7)
+    const f = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0)
+    const r = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0)
+    if (f || r) this.pan(f * sp, r * sp)
+    if (k.has('q')) this.orbit(dt * 1.4)
+    if (k.has('e')) this.orbit(-dt * 1.4)
+    if (k.has('r')) this.tilt(-dt * 0.9)
+    if (k.has('f')) this.tilt(dt * 0.9)
+    if (k.has('+') || k.has('=')) this.zoom(1 - dt * 1.6)
+    if (k.has('-')) this.zoom(1 + dt * 1.6)
   }
 
   focus(id) {
@@ -539,6 +627,8 @@ export default class PlantScene {
     const dt = Math.min(this.clock.getDelta(), 0.05)
     if (!this.visible) return
     const time = this.clock.elapsedTime
+
+    this.stepKeys(dt)
 
     for (let i = this.tweens.length - 1; i >= 0; i--) {
       const t = this.tweens[i]
@@ -617,9 +707,13 @@ export default class PlantScene {
     this.ro.disconnect()
     this.io.disconnect()
     const c = this.renderer.domElement
+    c.removeEventListener('pointerdown', this.onDown)
     c.removeEventListener('pointermove', this.onMove)
     c.removeEventListener('pointerleave', this.onLeave)
     c.removeEventListener('click', this.onClick)
+    c.removeEventListener('keydown', this.onKeyDown)
+    c.removeEventListener('keyup', this.onKeyUp)
+    c.removeEventListener('blur', this.onBlur)
     this.controls.dispose()
     this.scene.traverse((o) => {
       o.geometry?.dispose?.()

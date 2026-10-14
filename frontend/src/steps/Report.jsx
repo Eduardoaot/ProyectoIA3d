@@ -21,7 +21,7 @@ export default function Report({ plant, analysis, chosen, notes, report, catalog
     return (
         <section className="step">
             <header className="step-head">
-                <span className="step-index">05 / Reporte</span>
+                <span className="step-index"><b>Paso 5 de 6</b><span>Reporte</span></span>
 
                 <RevealTitle text="Tu reporte, listo para compartir." />
                 <p className="lede">Antes y después, qué se mueve y por qué. Pulsa «Descargar PDF» y en el diálogo elige «Guardar como PDF».</p>

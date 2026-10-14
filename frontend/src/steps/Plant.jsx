@@ -22,7 +22,7 @@ export default function Plant({ plant, analysis, notes, onNext, onEdit }) {
     return (
         <section className="step">
             <header className="step-head">
-                <span className="step-index">02 / Tu planta hoy</span>
+                <span className="step-index"><b>Paso 2 de 6</b><span>Tu planta hoy</span></span>
                 <RevealTitle text="Así quedó tu planta." />
                 <p className="lede">El plano que guardaste, en 3D. Las flechas marcan hacia dónde va el material. Para cambiar algo, vuelve al paso 1.</p>
             </header>

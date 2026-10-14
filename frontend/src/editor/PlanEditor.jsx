@@ -31,7 +31,7 @@ function useLegs(plant, positions) {
   return out
 }
 
-export default function PlanEditor({ plant, positions, onChange, catalog, mode = 'full', onMetrics, title }) {
+export default function PlanEditor({ plant, positions, onChange, catalog, mode = 'full', onMetrics, title, actions }) {
   const full = mode === 'full'
   const svg = useRef(null)
   const box = useRef(null)
@@ -386,6 +386,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
             </svg>
           </button>
         </div>
+        {actions && <div className="editor-actions">{actions}</div>}
         <span className="editor-stat num">
           {live.loading ? 'Calculando…' : `Una pieza recorre ${fmt(live.piece_m, 1)} m`}
         </span>

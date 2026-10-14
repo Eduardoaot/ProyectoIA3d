@@ -45,7 +45,7 @@ export default function Diagnosis({ plant, analysis, report, onNext }) {
 	return (
 		<section className="step">
 			<header className="step-head">
-				<span className="step-index">03 / Diagnóstico</span>
+				<span className="step-index"><b>Paso 3 de 6</b><span>Diagnóstico</span></span>
 
 				{full && bottleneck ? <RevealTitle text={`El cuello de botella es ${bottleneck.toLowerCase()}.`} /> : <RevealTitle text="El flujo de tu material." />}
 

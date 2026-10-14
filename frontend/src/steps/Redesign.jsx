@@ -162,7 +162,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 	return (
 		<section className="step">
 			<header className="step-head">
-				<span className="step-index">04 / Rediseño</span>
+				<span className="step-index"><b>Paso 4 de 6</b><span>Rediseño</span></span>
 				<RevealTitle text="Elige cómo ordenar la planta." />
 				<p className="lede">Tres acomodos para tu flujo, respetando tu planta. Selecciona una opción para ver cómo se mueven las máquinas.</p>
 			</header>

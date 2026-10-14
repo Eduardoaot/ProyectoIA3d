@@ -96,7 +96,7 @@ export default function Workshop({ context, chosen, game, setGame, notify }) {
     return (
         <section className="step">
             <header className="step-head">
-                <span className="step-index">Extra / Taller de mejora</span>
+                <span className="step-index"><b>Extra</b><span>Taller de mejora</span></span>
                 <RevealTitle text="Que el equipo también juegue." />
                 <p className="lede">La mejora continua funciona cuando llega al piso de planta. Elegir un rediseño, acortar el recorrido y cumplir misiones por equipo suma puntos.</p>
             </header>
