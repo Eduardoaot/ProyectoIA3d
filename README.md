@@ -99,6 +99,7 @@ Modelo por defecto: `llama3.2:3b`.
 
 ```bash
 ollama pull llama3.2:3b
+ollama pull llama3.1:8b   # opcional: lectura del espacio con varios agentes (ver sección 4)
 ```
 
 Sin Ollama la aplicación **funciona igual**: la historia se lee solo con reglas, el informe y el chat usan textos de respaldo y las misiones del taller salen de una lista fija.
@@ -146,6 +147,7 @@ Cauce usa **dos IAs con papeles distintos**, configurables por separado:
 |---|---|---|---|---|
 | **Extractor** | Lee la historia y devuelve **solo JSON** (máquinas, flujo, cifras, supuestos). También genera las misiones del taller. No conversa. | 0.0 | `CAUCE_EXTRACT_MODEL` | `CAUCE_EXTRACT_PROVIDER` |
 | **Ingeniero** | Conversa, escribe el informe del diagnóstico y las conclusiones del reporte. | 0.5 | `CAUCE_CHAT_MODEL` | `CAUCE_CHAT_PROVIDER` |
+| **Espacial** | Agentes que leen el espacio cuando la historia lo describe: forma y portones, zonas, lugar de cada máquina y paredes. Lo que la historia no dice en la misma oración se descarta. Por defecto `llama3.1:8b` (Meta); si no está instalado, lo hace el extractor. | 0.0 | `CAUCE_SPATIAL_MODEL` | `CAUCE_SPATIAL_PROVIDER` |
 
 Variables generales:
 

@@ -80,7 +80,7 @@ export default function App() {
 
         try {
             const r = await api.story(project.text)
-            update({ draft: r.plant, info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error } })
+            update({ draft: r.plant, info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error, spatial: r.spatial } })
             setReading(false)
 
             return true

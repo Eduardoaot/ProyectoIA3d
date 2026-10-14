@@ -702,6 +702,13 @@ a {
   background: var(--white);
 }
 
+.spatial-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--black);
+  background: var(--g100);
+}
+
 .story-alt {
   display: grid;
   gap: 2px;

@@ -9,8 +9,9 @@ import httpx
 class OllamaProvider:
     name = "ollama"
 
-    def __init__(self, model: str, host: str = "http://localhost:11434", temperature: float = 0.3):
+    def __init__(self, model: str, host: str = "http://localhost:11434", temperature: float = 0.3, timeout: float = 180):
         self.model = model
+        self.timeout = timeout
         self.host = host.rstrip("/")
         self.temperature = temperature
 
@@ -32,7 +33,7 @@ class OllamaProvider:
             "options": {"temperature": self.temperature, "num_predict": 900},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
         }
-        async with httpx.AsyncClient(timeout=180) as c:
+        async with httpx.AsyncClient(timeout=self.timeout) as c:
             r = await c.post(f"{self.host}/api/chat", json=body)
             r.raise_for_status()
             return json.loads(r.json()["message"]["content"])

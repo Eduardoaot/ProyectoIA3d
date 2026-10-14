@@ -8,13 +8,21 @@ from pydantic import BaseModel
 from cauce import catalog
 from cauce.engine import compare, evaluate, rebalance_ops, relations
 from cauce.layout import alternatives, ops_moves, score
-from cauce.providers import get_engineer, get_extractor
+from cauce.agents import MIN_CUES, detail, read_spatial
+from cauce.providers import get_engineer, get_extractor, get_spatial
 from cauce.story import STORY_SCHEMA, STORY_SYSTEM, build_plant
 
 app = FastAPI(title="Cauce")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 extractor = get_extractor()   # devuelve JSON
 engineer = get_engineer()     # escribe informes
+spatial = get_spatial()       # agentes que leen el espacio (modelo más capaz)
+
+
+async def spatial_or_extractor():
+    """El modelo espacial si está instalado; si no, el extractor hace ese trabajo."""
+    st = await spatial.status()
+    return spatial if st.get("ready") else extractor
 
 
 class StoryInterface(BaseModel):
@@ -44,10 +52,11 @@ class ChatInterface(BaseModel):
 
 @app.get("/api/health")
 async def health():
-    ex, en = await extractor.status(), await engineer.status()
+    ex, en, sp = await extractor.status(), await engineer.status(), await spatial.status()
     return {
         "extractor": {"provider": extractor.name, "model": extractor.model, **ex},
         "engineer": {"provider": engineer.name, "model": engineer.model, **en},
+        "spatial": {"provider": spatial.name, "model": spatial.model, **sp},
     }
 
 
@@ -65,8 +74,18 @@ async def story(body: StoryInterface):
     except Exception as e:
         error = str(e)
 
-    result = build_plant(body.text, extracted)
-    return {**result, "error": error, "extracted": extracted}
+    # Si la historia describe el espacio, se consulta a un agente por cada tipo de interpretación.
+    score, _ = detail(body.text)
+    reading, model = None, None
+    if score >= MIN_CUES:
+        provider = await spatial_or_extractor()
+        model = provider.model
+        names = [str(x.get("nombre")) for x in (extracted or {}).get("estaciones", []) or [] if isinstance(x, dict) and x.get("nombre")]
+        reading = await read_spatial(provider, body.text, names)
+
+    result = build_plant(body.text, extracted, reading)
+    result["spatial"] = {**result["spatial"], "detail": score, "needed": MIN_CUES, "model": model, "errors": {k: v["error"] for k, v in (reading or {}).items() if v["error"]}}
+    return {**result, "error": error, "extracted": extracted, "agents_raw": {k: v["data"] for k, v in (reading or {}).items()}}
 
 
 @app.post("/api/routes")

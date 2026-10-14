@@ -251,6 +251,24 @@ function ProcessSummary({ draft, setDraft }) {
     )
 }
 
+const AGENT_NAMES = { edificio: 'forma y portones', zonas: 'zonas', acomodo: 'lugar de cada máquina', paredes: 'paredes' }
+
+/* Qué tanto del espacio pudo leer la IA y con qué agentes. */
+function SpatialNote({ spatial }) {
+    const used = spatial.agents || []
+    if (!used.length)
+        return (
+            <p className="small spatial-note">
+                Tu historia casi no describe el espacio, así que solo leí el proceso. Si cuentas medidas, lados, dónde está cada área o qué paredes hay, la IA también arma la forma, las zonas y las paredes.
+            </p>
+        )
+    return (
+        <p className="small spatial-note">
+            Lectura del espacio con {used.length} agentes ({used.map((k) => AGENT_NAMES[k] || k).join(', ')}){spatial.model ? ` usando ${spatial.model}` : ''}. Lo que tu historia no confirma se descarta.
+        </p>
+    )
+}
+
 export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving }) {
     const words = text.trim() ? text.trim().split(/\s+/).length : 0
     const [metrics, setMetrics] = useState(null)
@@ -346,6 +364,8 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                             </div>
 
                             {draft && <ProcessSummary draft={draft} setDraft={setDraft} />}
+
+                            {info.spatial && <SpatialNote spatial={info.spatial} />}
 
                             {info.notes?.length > 0 && (
                                 <ul className="note-list" style={{ marginTop: 16 }}>

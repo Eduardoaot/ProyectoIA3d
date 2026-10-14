@@ -1,9 +1,11 @@
 """De la historia contada a una planta editable.
 
-Dos lecturas que se combinan:
+Lecturas que se combinan:
 - Reglas: palabras clave del catálogo, números (también escritos con letra) y
   producción por día, semana o mes.
 - IA extractora: devuelve únicamente el JSON de STORY_SCHEMA. No conversa.
+- Agentes espaciales (agents.py), solo si la historia describe el espacio:
+  forma y portones, zonas, lugar de cada estación y paredes.
 
 Nada se impone: si la historia no menciona una máquina, no aparece.
 """
@@ -15,6 +17,7 @@ import re
 import unicodedata
 
 from .catalog import ASSUMPTIONS, DEFAULT_PARAMS, KIND, ZONE
+from .agents import apply_building, apply_walls, apply_zones, fit_zones, place_with_targets, station_targets
 from .layout import EDGE, flow_order, initial_layout
 
 KIND_IDS = list(KIND)
@@ -204,7 +207,19 @@ def _station(i, name, kind, t=None, ops=None):
     }
 
 
-def build_plant(text: str, ai: dict | None) -> dict:
+def place_zones_default(plant, zkinds):
+    """Zonas en fila contra el frente derecho, como punto de partida."""
+    W, D = plant["size"]["w"], plant["size"]["d"]
+    zones = []
+    x = W - EDGE
+    for i, (k, name) in enumerate(zkinds):
+        z = ZONE[k]
+        zones.append({"id": f"z{i + 1}", "name": name, "kind": k, "x": round(x - z["w"] / 2, 1), "z": round(D - EDGE - z["d"] / 2, 1), "w": z["w"], "d": z["d"]})
+        x -= z["w"] + 1
+    return zones
+
+
+def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict:
     rules = by_rules(text)
     t = words_to_digits(normalize(text))
     ai = ai or {}
@@ -325,13 +340,6 @@ def build_plant(text: str, ai: dict | None) -> dict:
     total = max(area * 3.2, 300)
     D = max(14, math.ceil(math.sqrt(total / 2) / 2) * 2)
     W = max(24, math.ceil(total / D / 2) * 2)
-    zones = []
-    x = W - EDGE
-    for i, (k, name) in enumerate(zkinds):
-        z = ZONE[k]
-        zones.append({"id": f"z{i + 1}", "name": name, "kind": k, "x": round(x - z["w"] / 2, 1), "z": round(D - EDGE - z["d"] / 2, 1), "w": z["w"], "d": z["d"]})
-        x -= z["w"] + 1
-
     plant = {
         "name": str(ai.get("negocio") or "Mi planta").strip()[:60],
         "industry": str(ai.get("producto") or "").strip()[:60],
@@ -340,14 +348,31 @@ def build_plant(text: str, ai: dict | None) -> dict:
         "receive_gate": "A",
         "dispatch_gate": "B",
         "stations": stations,
-        "zones": zones,
+        "zones": [],
         "walls": [],
         "routes": routes,
         "use_assumptions": False,
         "params": p,
         "layout": {},
     }
+    # --- Lectura espacial: cada agente aporta solo lo que la historia confirma ---
+    spatial_notes = []
+    used = []
+    if spatial:
+        apply_building(plant, t, (spatial.get("edificio") or {}).get("data"), spatial_notes)
+    plant["zones"] = place_zones_default(plant, zkinds)
+    if spatial:
+        apply_zones(plant, t, (spatial.get("zonas") or {}).get("data"), spatial_notes)
+        fit_zones(plant)
     plant["layout"] = initial_layout(plant)
+    if spatial:
+        targets, near = station_targets(plant, t, (spatial.get("acomodo") or {}).get("data"))
+        if targets or near:
+            plant["layout"] = place_with_targets(plant, targets, near)
+            where = [s["name"] for s in plant["stations"] if s["id"] in targets or s["id"] in near]
+            spatial_notes.append("Ubiqué según tu historia: " + ", ".join(where) + ".")
+        apply_walls(plant, t, (spatial.get("paredes") or {}).get("data"), spatial_notes)
+        used = [k for k, v in spatial.items() if v.get("data") is not None]
     # El acomodo inicial sigue el flujo; se guarda en ese orden.
     order = {sid: i for i, sid in enumerate(flow_order(plant))}
     plant["stations"].sort(key=lambda s: order.get(s["id"], 0))
@@ -357,7 +382,8 @@ def build_plant(text: str, ai: dict | None) -> dict:
         "plant": plant,
         "assumptions": assumptions,
         "source": source,
-        "notes": ai_notes + notes,
+        "notes": ai_notes + notes + spatial_notes,
+        "spatial": {"agents": used, "notes": spatial_notes},
         "ai_assumptions": [str(x) for x in ai.get("supuestos", []) or [] if str(x).strip()],
         "rules": rules,
     }
