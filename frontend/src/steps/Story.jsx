@@ -53,7 +53,7 @@ function Assumptions({ draft, setDraft, catalog, info }) {
                             <summary>Lo que supuso la IA al leer tu historia</summary>
                             <ul>
                                 {info.ai_assumptions.map((assumption, idx) => (
-                                    <li key={idx0}>{assumption}</li>
+                                    <li key={idx}>{assumption}</li>
                                 ))}
                             </ul>
                         </details>
