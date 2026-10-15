@@ -13,6 +13,7 @@ que el usuario dibujó. Las alternativas no abren portones ni mueven paredes.
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
 from .catalog import CLEAN, DIRTY
 from .engine import dims, evaluate, gate_pt, gate_x, manhattan, outline, params, point_in_poly, poly_area, poly_edges, rebalance_ops, seg_dist, station_map, zone_rect
@@ -33,17 +34,54 @@ def _overlap(a, b, gap):
     return a[0] < b[2] + gap and b[0] < a[2] + gap and a[1] < b[3] + gap and b[1] < a[3] + gap
 
 
+def _seg_in_rect(x1, z1, x2, z2, x0, y0, xa, ya):
+    """¿El segmento entra al rectángulo abierto? (recorte de Liang-Barsky)."""
+    t0, t1 = 0.0, 1.0
+    dx, dz = x2 - x1, z2 - z1
+    for p, q in ((-dx, x1 - x0), (dx, xa - x1), (-dz, z1 - y0), (dz, ya - z1)):
+        if p == 0:
+            if q <= 0:
+                return False
+        else:
+            t = q / p
+            if p < 0:
+                t0 = max(t0, t)
+            else:
+                t1 = min(t1, t)
+            if t0 >= t1:
+                return False
+    return True
+
+
 def _hits_wall(r, walls, gap=0.4):
+    x0, y0, xa, ya = r[0] - gap, r[1] - gap, r[2] + gap, r[3] + gap
     for w in walls:
         x1, z1, x2, z2 = w["x1"], w["z1"], w["x2"], w["z2"]
-        # Muestrea la pared y mira si algún punto cae dentro del rectángulo inflado.
-        n = max(2, int(math.hypot(x2 - x1, z2 - z1) / 0.25))
-        for i in range(n + 1):
-            t = i / n
-            px, pz = x1 + (x2 - x1) * t, z1 + (z2 - z1) * t
-            if r[0] - gap < px < r[2] + gap and r[1] - gap < pz < r[3] + gap:
-                return True
+        if max(x1, x2) <= x0 or min(x1, x2) >= xa or max(z1, z2) <= y0 or min(z1, z2) >= ya:
+            continue
+        if _seg_in_rect(x1, z1, x2, z2, x0, y0, xa, ya):
+            return True
     return False
+
+
+@lru_cache(maxsize=64)
+def _outline_walls(poly):
+    return tuple({"x1": a[0], "z1": a[1], "x2": b[0], "z2": b[1]} for a, b in poly_edges(poly))
+
+
+_last_outline = (None, None)
+
+
+def _poly(plant):
+    """outline() de la misma lista sin rehacer la tupla en cada prueba (se llama miles de veces)."""
+    global _last_outline
+    src = plant.get("outline")
+    last = _last_outline  # una sola lectura: las peticiones corren en varios hilos
+    if last[0] is src:
+        return last[1]
+    poly = outline(plant)
+    _last_outline = (src, poly)
+    return poly
 
 
 def feasible(plant, r, placed):
@@ -51,18 +89,21 @@ def feasible(plant, r, placed):
     e = EDGE - 1e-6
     if r[0] < e or r[1] < e or r[2] > W - e or r[3] > D - e:
         return False
+    # De la prueba más barata a la más cara.
+    if any(_overlap(r, q, GAP) for q in placed):
+        return False
     if any(_overlap(r, zone_rect(z), ZONE_GAP) for z in plant.get("zones", [])):
         return False
     if _hits_wall(r, plant.get("walls", [])):
         return False
-    poly = outline(plant)
+    poly = _poly(plant)
     if poly:
         # Dentro de la forma de la planta y lejos de su contorno.
         if not all(point_in_poly(poly, x, z) for x, z in ((r[0], r[1]), (r[2], r[1]), (r[0], r[3]), (r[2], r[3]))):
             return False
-        if _hits_wall(r, [{"x1": a[0], "z1": a[1], "x2": b[0], "z2": b[1]} for a, b in poly_edges(poly)], EDGE):
+        if _hits_wall(r, _outline_walls(poly), EDGE):
             return False
-    return not any(_overlap(r, q, GAP) for q in placed)
+    return True
 
 
 def nearest_free(plant, st, target, placed, prefer_rot=0):

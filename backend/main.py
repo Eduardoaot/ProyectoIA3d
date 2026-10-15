@@ -89,22 +89,23 @@ async def story(body: StoryInterface):
     return {**result, "error": error, "extracted": extracted, "agents_raw": {k: v["data"] for k, v in (reading or {}).items()}}
 
 
+# Cálculo puro (sin IA): funciones normales, FastAPI las corre en otro hilo y el servidor sigue atendiendo.
 @app.post("/api/routes")
-async def routes(body: LayoutInterface):
+def routes(body: LayoutInterface):
     plant = {**body.plant, "use_assumptions": False}
     m = evaluate(plant, body.positions)
     return {"legs": m["legs"], "piece_m": m["piece_m"], "blocked_legs": m["blocked_legs"], "avoid_hits": m["avoid_hits"]}
 
 
 @app.post("/api/evaluate")
-async def evaluate_route(body: LayoutInterface):
+def evaluate_route(body: LayoutInterface):
     ops = rebalance_ops(body.plant, body.positions) if body.rebalance and body.plant.get("use_assumptions") else None
     m = evaluate(body.plant, body.positions, ops)
     return {**m, "ops_moves": ops_moves(body.plant, ops)}
 
 
 @app.post("/api/analyze")
-async def analyze_route(body: PlantInterface):
+def analyze_route(body: PlantInterface):
     plant = body.plant
     current = evaluate(plant, plant["layout"])
     current["footprint_m2"] = footprint(plant, plant["layout"])

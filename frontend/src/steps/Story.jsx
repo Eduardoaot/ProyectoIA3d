@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { fmt } from '../api'
-import LoadingGame from '../components/LoadingGame'
+import WaitPanel from '../components/WaitPanel'
 import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
@@ -8,17 +8,6 @@ import { Appear, RevealTitle } from '../fx/Reveal'
 const EXAMPLE_STORY = `Mi padre tenía un taller de vidrios para sala y comedor. Era una transformadora de vidrio: recibía una lámina y tenía una mesa donde cortaban, una pulidora, sandblasting, una lavadora, la oficina y un pulpo para mover las láminas. Trabajaban unas 12 personas y salían unas 80 piezas al día en 3 camiones. Todo estaba en una bodega con portones sobre la calle. Ahí mismo se hacían las ventas, los pagos y la nómina.
 
 No tengo los detalles porque fue hace mucho tiempo. Lo que sí recuerdo es que lo terminado se amontonaba en despacho y que uno de los portones siempre estaba tapado con retazos.`
-
-function Timer() {
-    const [seconds, setSeconds] = useState(0)
-
-    useEffect(() => {
-        const time = setInterval(() => setSeconds((v) => v + 1), 1000)
-        return () => clearInterval(time)
-    }, [])
-
-    return <span className="small num">{seconds} s</span>
-}
 
 function Switch({ on, onChange, children }) {
     return (
@@ -322,21 +311,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                 </Appear>
 
                 <div className="stack">
-                    {reading && (
-                        <div className="block reading">
-                            <div className="reading-head">
-                                <div className="dots" aria-hidden="true">
-                                    <i />
-                                    <i data-off="true" />
-                                    <i data-off="true" />
-                                </div>
-                                <p>Interpretando el acomodo de tu planta…</p>
-                                <Timer />
-                            </div>
-                            <p className="small">Puede tardar uno o dos minutos.</p>
-                            <LoadingGame />
-                        </div>
-                    )}
+                    {reading && <WaitPanel kind="story" title="Interpretando el acomodo de tu planta…" game="Juega mientras la IA lee" />}
 
                     {!reading && !info && (
                         <div className="block">

@@ -5,6 +5,9 @@ from typing import AsyncIterator
 
 import httpx
 
+# Deja el modelo cargado entre llamadas: recargar uno de 8B tarda varios segundos.
+KEEP_ALIVE = "30m"
+
 
 class OllamaProvider:
     name = "ollama"
@@ -30,6 +33,7 @@ class OllamaProvider:
             "model": self.model,
             "stream": False,
             "format": schema or "json",
+            "keep_alive": KEEP_ALIVE,
             "options": {"temperature": self.temperature, "num_predict": 900},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
         }
@@ -39,7 +43,7 @@ class OllamaProvider:
             return json.loads(r.json()["message"]["content"])
 
     async def stream(self, messages: list[dict]) -> AsyncIterator[str]:
-        body = {"model": self.model, "stream": True, "options": {"temperature": self.temperature}, "messages": messages}
+        body = {"model": self.model, "stream": True, "keep_alive": KEEP_ALIVE, "options": {"temperature": self.temperature}, "messages": messages}
         async with httpx.AsyncClient(timeout=None) as c:
             async with c.stream("POST", f"{self.host}/api/chat", json=body) as r:
                 r.raise_for_status()

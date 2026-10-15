@@ -20,7 +20,7 @@ function saveBest(v) {
 
 /* Minijuego para la espera: el carro atrapa piezas buenas y esquiva los retazos.
    Se mueve con el mouse o con las flechas (también A y D). */
-export default function LoadingGame() {
+export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
     const host = useRef(null)
     const canvas = useRef(null)
     const [state, setState] = useState({ playing: false, score: 0, lives: 3, best: readBest(), over: false })
@@ -33,6 +33,8 @@ export default function LoadingGame() {
         let h = 0
         let raf = 0
         let last = performance.now()
+        // Sin partida en curso el dibujo no cambia: solo se repinta al cambiar de tamaño o al terminar.
+        let dirty = true
 
         const g = {
             playing: false,
@@ -58,6 +60,7 @@ export default function LoadingGame() {
             c.style.width = `${w}px`
             c.style.height = `${h}px`
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+            dirty = true
         }
         const ro = new ResizeObserver(resize)
         ro.observe(el)
@@ -146,7 +149,10 @@ export default function LoadingGame() {
                 }
                 if (g.lives <= 0) end()
             }
-            draw()
+            if (g.playing || dirty) {
+                draw()
+                dirty = false
+            }
         }
 
         const sync = () => setState((s) => ({ ...s, score: g.score, lives: g.lives }))
@@ -154,6 +160,7 @@ export default function LoadingGame() {
         const end = () => {
             g.playing = false
             g.items = []
+            dirty = true
             setState((s) => {
                 const best = Math.max(s.best, g.score)
                 if (best > s.best) saveBest(best)
@@ -212,7 +219,7 @@ export default function LoadingGame() {
                 <canvas ref={canvas} />
                 {!state.playing && (
                     <button type="button" className="wgame-start" onClick={start}>
-                        <strong>{state.over ? `Atrapaste ${state.score} piezas` : 'Juega mientras la IA lee'}</strong>
+                        <strong>{state.over ? `Atrapaste ${state.score} piezas` : label}</strong>
                         <span className="small">{state.over ? `Récord: ${state.best}. Clic para otra ronda.` : 'Mueve el carro con el mouse o con las flechas. Clic para empezar.'}</span>
                     </button>
                 )}

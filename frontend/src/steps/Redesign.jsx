@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, fmt, pct } from '../api'
 import FlowPlan from '../charts/FlowPlan'
 import LeadChart from '../charts/LeadChart'
+import WaitPanel from '../components/WaitPanel'
+import { startWait } from '../components/wait'
 import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
@@ -114,7 +116,9 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 	const askCompact = async () => {
 		setCompact({ loading: true, error: null })
 		try {
+			const done = startWait('compact')
 			const alt = await api.compact(plant)
+			done()
 			onAddAlternative(alt)
 			setCompact({ loading: false, error: null })
 			setRedesign({ choice: alt.id })
@@ -202,7 +206,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 								<Btn size="small" onClick={askCompact} disabled={compact.loading}>
 									{compact.loading ? 'Pensando…' : 'Calcular con IA'}
 								</Btn>
-								{compact.loading && <p className="small">Tarda uno o dos minutos.</p>}
+								{compact.loading && <p className="small">Mira el avance abajo.</p>}
 								{compact.error && <p className="small">{compact.error}</p>}
 							</div>
 						)
@@ -239,6 +243,8 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 					)
 				})}
 			</Appear>
+
+			{compact.loading && <WaitPanel kind="compact" className="reading--wide" title="La IA está buscando el acomodo más compacto…" game="Juega mientras la IA acomoda las máquinas" />}
 
 			<Appear style={{ marginTop: 32 }}>
 				<PlantView

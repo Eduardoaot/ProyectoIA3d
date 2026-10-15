@@ -24,9 +24,15 @@ Respaldo previo a la reestructura: commit `ea047c6`.
 
 **Verificado**: build y lint sin errores; recorrida completa en Edge sin pantalla (ejemplo y plano desde cero), PDF generado con la hoja de impresión; historias de prueba con la IA real.
 
+**Sesión 6**
+- IA: los tres papeles (extractor, ingeniero, espacial) usan `llama3.1:8b` por defecto (`ollama pull llama3.1:8b`), con `keep_alive` de 30 min.
+- Velocidad: rutas con A* y malla base precalculada por forma y paredes (mismos resultados; análisis con forma propia y paredes de ~10 s a <1 s); endpoints de cálculo en hilos para no bloquear el servidor; 3D libera memoria al reconstruir, señala solo máquinas y se reconstruye al soltar; los pasos con 3D se cargan al llegar (three.js fuera del paquete inicial).
+- Espera con IA (historia y «Compacta con IA»): reloj, barra con avance estimado y tiempo restante (aprendido de las esperas anteriores) y el minijuego.
+- Editor: herramienta Contorno (dibujar muros exteriores con largos exactos), precisión de 1 m a 10 cm, zoom y paneo, imán y guías, lados y esquinas con medidas exactas, paredes con extremos, largo y división en tramos, zonas con manijas, flechas para mover.
+
 ## Pendiente
-1. El modelo local `llama3.2:3b` tarda 50 a 120 s por historia y a veces nombra mal las cosas; un modelo mayor mejoraría la lectura.
+1. `llama3.1:8b` sin tarjeta de video tarda ~2 min por historia y 1–2 min la compacta; un modelo en la nube lo haría en segundos.
 2. La foto aérea se sube a mano; no se genera ni se lee con visión.
-3. Bundle de 1 MB (three.js sin dividir).
+3. three.js sigue siendo un archivo de ~630 KB, aunque ya se descarga solo al llegar al 3D.
 4. Decisiones abiertas de contexto-proyecto.md (stack final, modelo de negocio, MCP).
 

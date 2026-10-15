@@ -95,12 +95,13 @@ El documento [contexto-proyecto.md](contexto-proyecto.md) guarda la visión comp
 | Node.js | 20 o superior | Frontend (Vite + React) |
 | [Ollama](https://ollama.com) | cualquiera reciente | Correr el modelo de IA en local (opcional) |
 
-Modelo por defecto: `llama3.2:3b`.
+Modelo por defecto para **todos** los agentes: `llama3.1:8b` (Meta).
 
 ```bash
-ollama pull llama3.2:3b
-ollama pull llama3.1:8b   # opcional: lectura del espacio con varios agentes (ver sección 4)
+ollama pull llama3.1:8b
 ```
+
+Con un solo modelo Ollama no cambia de modelo en memoria entre un agente y otro, y Cauce le pide que lo deje cargado 30 minutos entre llamadas. En un equipo sin tarjeta de video la historia tarda alrededor de 2 minutos y la opción compacta de 1 a 2; mientras tanto la app muestra el tiempo transcurrido, una estimación de lo que falta (aprendida de tus esperas anteriores en ese navegador) y un minijuego.
 
 Sin Ollama la aplicación **funciona igual**: la historia se lee solo con reglas, el informe y el chat usan textos de respaldo y las misiones del taller salen de una lista fija.
 
@@ -141,28 +142,28 @@ No hay base de datos. Todo el proyecto (historia, plano, análisis, rediseño, m
 
 ## 4. Configuración (variables de entorno)
 
-Cauce usa **dos IAs con papeles distintos**, configurables por separado:
+Cauce usa **tres papeles de IA**, configurables por separado. Todos usan `llama3.1:8b` por defecto:
 
 | Papel | Qué hace | Temperatura | Variable del modelo | Variable del proveedor |
 |---|---|---|---|---|
 | **Extractor** | Lee la historia y devuelve **solo JSON** (máquinas, flujo, cifras, supuestos). También genera las misiones del taller. No conversa. | 0.0 | `CAUCE_EXTRACT_MODEL` | `CAUCE_EXTRACT_PROVIDER` |
 | **Ingeniero** | Conversa, escribe el informe del diagnóstico y las conclusiones del reporte. | 0.5 | `CAUCE_CHAT_MODEL` | `CAUCE_CHAT_PROVIDER` |
-| **Espacial** | Agentes que leen el espacio cuando la historia lo describe: forma y portones, zonas, lugar de cada máquina y paredes. Lo que la historia no dice en la misma oración se descarta. Por defecto `llama3.1:8b` (Meta); si no está instalado, lo hace el extractor. | 0.0 | `CAUCE_SPATIAL_MODEL` | `CAUCE_SPATIAL_PROVIDER` |
+| **Espacial** | Agentes que leen el espacio cuando la historia lo describe: forma y portones, zonas, lugar de cada máquina y paredes. Lo que la historia no dice en la misma oración se descarta. También da el criterio de la opción «Compacta con IA». Si su modelo no está instalado, lo hace el extractor. | 0.0 | `CAUCE_SPATIAL_MODEL` | `CAUCE_SPATIAL_PROVIDER` |
 
 Variables generales:
 
 | Variable | Valor por defecto | Efecto |
 |---|---|---|
-| `CAUCE_MODEL` | `llama3.2:3b` | Cambia el modelo de las dos IAs a la vez |
-| `CAUCE_PROVIDER` | `ollama` | Cambia el proveedor de las dos IAs a la vez |
+| `CAUCE_MODEL` | `llama3.1:8b` | Cambia el modelo de los tres papeles a la vez |
+| `CAUCE_PROVIDER` | `ollama` | Cambia el proveedor de los tres papeles a la vez |
 | `OLLAMA_HOST` | `http://localhost:11434` | Dirección del servidor de Ollama |
 
-Las variables específicas (`CAUCE_EXTRACT_*`, `CAUCE_CHAT_*`) tienen prioridad sobre las generales. Ejemplo para usar un modelo más grande solo para leer historias:
+Las variables específicas (`CAUCE_EXTRACT_*`, `CAUCE_CHAT_*`, `CAUCE_SPATIAL_*`) tienen prioridad sobre las generales. Ejemplo para volver al modelo pequeño (más rápido, menos preciso) solo en el chat:
 
 ```bash
-set CAUCE_EXTRACT_MODEL=llama3.1:8b        # Windows (cmd)
-$env:CAUCE_EXTRACT_MODEL = "llama3.1:8b"   # Windows (PowerShell)
-export CAUCE_EXTRACT_MODEL=llama3.1:8b     # Linux/macOS
+set CAUCE_CHAT_MODEL=llama3.2:3b        # Windows (cmd)
+$env:CAUCE_CHAT_MODEL = "llama3.2:3b"   # Windows (PowerShell)
+export CAUCE_CHAT_MODEL=llama3.2:3b     # Linux/macOS
 ```
 
 El indicador **"IA lista / Sin IA"** abajo a la izquierda de la app consulta `/api/health` y muestra, al pasar el mouse, qué modelo usa cada papel y si está disponible.
@@ -386,8 +387,8 @@ El **tipo** de una estación solo decide su maqueta 3D, su tamaño inicial y los
   - `status()` → ¿está en línea?, ¿el modelo está descargado?
   - `json(system, prompt, schema)` → respuesta estructurada (dict).
   - `stream(messages)` → generador asíncrono de fragmentos de texto.
-- **`ollama.py`** implementa esa interfaz contra la API local de Ollama (`/api/tags`, `/api/chat`). Para el JSON usa el parámetro `format` con el **esquema JSON** (Ollama obliga al modelo a respetarlo), límite de 900 tokens y 180 s de espera.
-- **`__init__.py`** es la fábrica: `get_extractor()` (temperatura 0) y `get_engineer()` (temperatura 0.5), según las variables de entorno.
+- **`ollama.py`** implementa esa interfaz contra la API local de Ollama (`/api/tags`, `/api/chat`). Para el JSON usa el parámetro `format` con el **esquema JSON** (Ollama obliga al modelo a respetarlo), límite de 900 tokens y `keep_alive` de 30 min para que el modelo no se descargue entre llamadas.
+- **`__init__.py`** es la fábrica: `get_extractor()` (temperatura 0, 300 s de espera), `get_engineer()` (temperatura 0.5) y `get_spatial()` (temperatura 0, 600 s), según las variables de entorno. Todos con `llama3.1:8b` por defecto.
 
 **Agregar otro proveedor** (una API en la nube, un servidor MCP, etc.): crear una clase con esos tres métodos y añadir una rama en `_make()`. Nada más del código cambia.
 
@@ -429,10 +430,12 @@ Todo es determinista y trazable.
 
 - La bodega se discretiza en una **malla de 0,5 m**.
 - Se bloquean las celdas ocupadas por máquinas y zonas (con 0,25 m de holgura) y las que tocan paredes (paredes de 0,3 m de grosor, en cualquier ángulo).
-- Se busca la ruta más corta con **Dijkstra** en 4 direcciones, con un **castigo de 1 m por cada giro** (prefiere pasillos rectos, como camina la gente con un carro).
+- Se busca la ruta más corta con **A*** (distancia rectilínea como guía, así sigue siendo la más corta) en 4 direcciones, con un **castigo de 1 m por cada giro** (prefiere pasillos rectos, como camina la gente con un carro).
 - Ningún paso puede **cruzar una pared**, ni siquiera saliendo de una máquina (prueba de intersección de segmentos).
 - La ruta se simplifica a sus esquinas. Si no hay paso, se usa una L recta y la ruta se marca como bloqueada (`ok: false`, se dibuja punteada fina).
+- Lo que no cambia entre rutas de la misma planta (celdas fuera del contorno o pegadas a paredes y los pasos que cruzan una pared) se calcula **una sola vez** por forma y paredes (`_base_grid`). Antes se revisaban todas las paredes en cada paso: con una forma propia y paredes el análisis tardaba ~10 s; ahora menos de 1 s.
 - Los resultados se guardan en caché (`lru_cache` de 16 384 entradas), así el editor recalcula rápido.
+- Los endpoints de cálculo (`/api/routes`, `/api/evaluate`, `/api/analyze`) son funciones normales: FastAPI los corre en otro hilo y el servidor sigue atendiendo el chat mientras calcula.
 
 **Métricas sin supuestos** (`evaluate` con `use_assumptions: false`):
 
@@ -643,7 +646,7 @@ La capa de gamificación, pensada para llevar la mejora al piso de planta:
 
 ## 11. El editor 2D
 
-`PlanEditor.jsx` es un lienzo SVG en metros (1 unidad = 1 m) con cuadrícula de 1 m. Todo se ajusta a pasos de 0,5 m.
+`PlanEditor.jsx` es un lienzo SVG en metros (1 unidad = 1 m) con cuadrícula de 1 m. Lo que se dibuja y se mueve se ajusta a la **precisión** elegida en la barra (1 m, 50 cm, 25 cm o 10 cm; 50 cm por defecto). La **rueda** del mouse acerca y aleja sobre el puntero; arrastrar el fondo (o el botón central) mueve la vista, y el botón de las cuatro esquinas vuelve a ver toda la planta. Abajo del lienzo se ven las coordenadas del puntero.
 
 ### Herramientas
 
@@ -652,9 +655,11 @@ La capa de gamificación, pensada para llevar la mejora al piso de planta:
 | **Mover** | `V` | Seleccionar y arrastrar máquinas, zonas, paredes y portones |
 | **Máquina** | `M` | Elegir el tipo y hacer clic en el plano para agregarla |
 | **Ruta** | `T` | Clic en la máquina de origen y luego en la de destino; se siguen encadenando. `Esc` termina |
-| **Pared** | `P` | Arrastrar para dibujar. Se ajusta a ángulos de 45°; con `Alt` queda libre |
+| **Pared** | `P` | Arrastrar para dibujar una pared interior. Se pega a esquinas, extremos de paredes y muros cercanos (imán) y se ajusta a 45°; con `Alt` queda libre. Muestra el largo mientras se dibuja |
 | **Zona** | `Z` | Elegir el tipo (oficina, baños, comedor, bloqueada) y arrastrar un rectángulo |
-| **Portón** | `O` | Clic cerca del muro de la calle para agregar un portón |
+| **Portón** | `O` | Clic cerca de cualquier muro exterior para agregar un portón |
+| **Contorno** | `C` | Dibujar **tus propios muros exteriores** esquina por esquina. Escribir un número y `Enter` pone la siguiente esquina a ese largo exacto en la dirección del puntero. Cierra con clic en el primer punto, doble clic o `Enter`; `Retroceso` borra la última esquina. Imán a puntos existentes y guías de alineación |
+| **Forma** | `F` | Arrastrar esquinas (con guías de alineación) y lados. Clic en un lado lo selecciona; doble clic sobre un lado agrega una esquina justo ahí; doble clic en una esquina la borra |
 
 ### Atajos generales
 
@@ -664,6 +669,7 @@ La capa de gamificación, pensada para llevar la mejora al piso de planta:
 | `Ctrl+Y` o `Ctrl+Shift+Z` | Rehacer |
 | `Supr` / `Retroceso` | Quitar lo seleccionado |
 | `R` | Girar la máquina seleccionada 90° |
+| Flechas | Mover lo seleccionado (máquina, zona, pared, esquina o lado) un paso de la precisión; con `Shift`, diez pasos |
 | `Esc` | Cancelar, deseleccionar y volver a Mover |
 
 El editor debe tener el foco (clic en él) para que funcionen las teclas.
@@ -672,12 +678,14 @@ El editor debe tener el foco (clic en él) para que funcionen las teclas.
 
 Cambia según lo seleccionado:
 
-- **Máquina**: nombre, tipo (cambia la maqueta 3D), ancho, fondo, girar, de dónde le llega material y a dónde lo manda (enlaces a esas rutas).
+- **Máquina**: nombre, tipo (cambia la maqueta 3D), ancho, fondo, **centro X y Z exactos**, girar, de dónde le llega material y a dónde lo manda (enlaces a esas rutas).
 - **Ruta**: origen, destino, **% de piezas** que pasan por ahí, **invertir dirección**, distancia real calculada.
-- **Zona**: nombre, tipo, ancho y fondo.
-- **Pared**: largo y quitar.
+- **Zona**: nombre, tipo, ancho, fondo y centro X y Z. Al seleccionarla aparecen manijas en las esquinas para cambiar su tamaño.
+- **Pared**: largo exacto, coordenadas de inicio y final, **dividir en dos** (para borrar solo un tramo) y quitar. Sus extremos se arrastran por separado.
+- **Esquina del contorno**: coordenadas X y Z exactas, los dos lados que se juntan ahí y quitar.
+- **Lado del contorno**: largo exacto (corre el lado siguiente, así un rectángulo sigue siendo rectángulo), mover hacia afuera o adentro una distancia exacta, dividir en dos, enderezar, poner un portón y **quitar el lado** (junta sus dos esquinas).
 - **Portón**: nombre y si es **de entrada**, **de salida** o ambos.
-- **Nada seleccionado**: nombre de la planta y tamaño de la bodega.
+- **Nada seleccionado**: nombre de la planta y tamaño de la bodega. Avisa si alguna máquina quedó fuera del contorno.
 
 ### Detalles de implementación
 
@@ -847,7 +855,7 @@ npm run build
 
 ## 16. Limitaciones conocidas y pendientes
 
-1. **Velocidad y precisión de la IA local**: `llama3.2:3b` tarda de 50 a 120 s por historia y a veces nombra mal las cosas. Un modelo mayor (o en la nube) mejoraría la lectura; basta cambiar `CAUCE_EXTRACT_MODEL`.
+1. **Velocidad de la IA local**: `llama3.1:8b` nombra mejor las cosas que el modelo de 3B, pero sin tarjeta de video tarda unos 2 minutos por historia. Un modelo en la nube lo haría en segundos; basta cambiar `CAUCE_EXTRACT_MODEL` y el proveedor.
 2. **Foto aérea manual**: se sube a mano para comparar; no se genera ni se lee con visión para medir máquinas.
 3. **Tamaño del bundle**: ~1 MB porque three.js no está dividido en partes que carguen bajo demanda.
 4. **Sin persistencia en servidor**: el proyecto vive en un navegador; no hay cuentas ni varias plantas por usuario.

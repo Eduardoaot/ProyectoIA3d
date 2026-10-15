@@ -14,6 +14,9 @@ export const M = {
 
 const EDGE = new THREE.LineBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.55 })
 
+/* Materiales que comparten todas las maquetas: no se liberan al reconstruir la escena. */
+export const SHARED = new Set([...Object.values(M), EDGE])
+
 let hatchTex = null
 export function hatchTexture() {
   if (hatchTex) return hatchTex

@@ -1,20 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { api } from './api'
 import FlowMark from './brand/FlowMark'
 import EngineerChat from './components/EngineerChat'
 import useReport from './components/useReport'
+import { startWait } from './components/wait'
 import ClickSplash from './fx/ClickSplash'
 import Cursor from './fx/Cursor'
 import Intro from './fx/Intro'
 import { blankPlant, chosen as chosenOf, EMPTY_GAME, useProject } from './project'
-import Diagnosis from './steps/Diagnosis'
-import Plant from './steps/Plant'
-import Redesign from './steps/Redesign'
-import Report from './steps/Report'
 import Story from './steps/Story'
-import Summary from './steps/Summary'
-import Workshop from './steps/Workshop'
+
+// Los pasos con 3D, gráficas o informe se cargan al llegar a ellos: la página abre sin descargar three.js.
+const Plant = lazy(() => import('./steps/Plant'))
+const Diagnosis = lazy(() => import('./steps/Diagnosis'))
+const Redesign = lazy(() => import('./steps/Redesign'))
+const Report = lazy(() => import('./steps/Report'))
+const Summary = lazy(() => import('./steps/Summary'))
+const Workshop = lazy(() => import('./steps/Workshop'))
+// En cuanto la página queda libre se baja el paso 2, así «Guardar y ver en 3D» no espera la descarga.
+const preload = () => import('./steps/Plant')
 
 const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen', 'Taller de mejora (extra)']
 
@@ -52,6 +57,8 @@ export default function App() {
     const report = useReport(context, version)
 
     useEffect(() => {
+        if (window.requestIdleCallback) window.requestIdleCallback(preload)
+        else setTimeout(preload, 2500)
         api.health().then(setAi).catch(() => setAi(null))
         api.catalog().then(setCatalog).catch(() => setError('Error conectando con el servidor.'))
     }, [])
@@ -79,7 +86,9 @@ export default function App() {
         setError(null)
 
         try {
+            const done = startWait('story')
             const r = await api.story(project.text)
+            done()
             update({ draft: r.plant, info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error, spatial: r.spatial } })
             setReading(false)
 
@@ -205,7 +214,7 @@ export default function App() {
                 <main className="stage" ref={stage}>
                     <AnimatePresence mode="wait">
                         <motion.div key={ready ? step : 0} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
-                          {view}
+                          <Suspense fallback={<p className="small" style={{ padding: 48 }}>Cargando…</p>}>{view}</Suspense>
                         </motion.div>
                     </AnimatePresence>
                 </main>

@@ -60,12 +60,23 @@ export default function PlantView({ ref, plant, positions, extras, buildKey, onS
     }
   }, [])
 
+  const extrasRef = useRef(extras)
+  useEffect(() => {
+    extrasRef.current = extras
+  })
+
   useEffect(() => {
     if (!scene.current || !plant) return
-    scene.current.build(plant, posRef.current, extras)
-    // La cámara se coloca solo la primera vez: al reconstruir (por ejemplo al editar) se queda donde estaba.
-    if (!placed.current) scene.current.setView(view)
-    placed.current = true
+    const run = () => {
+      scene.current?.build(plant, posRef.current, extrasRef.current)
+      // La cámara se coloca solo la primera vez: al reconstruir (por ejemplo al editar) se queda donde estaba.
+      if (!placed.current) scene.current?.setView(view)
+      placed.current = true
+    }
+    if (!placed.current) return run()
+    // Al editar paredes o zonas la planta cambia con cada movimiento del mouse: se reconstruye al soltar.
+    const t = setTimeout(run, 250)
+    return () => clearTimeout(t)
   }, [plant, buildKey])
 
   useEffect(() => {

@@ -218,6 +218,70 @@ export function fitToOutline(plant, positions, outline) {
   return { plant: np, positions: npos }
 }
 
+export const round2 = (v) => Math.round(v * 100) / 100
+
+/* Punto más cercano sobre el segmento a-b. */
+export function nearestOnSeg([x, z], a, b) {
+  const vx = b[0] - a[0]
+  const vz = b[1] - a[1]
+  const L = vx * vx + vz * vz
+  const t = L ? Math.min(1, Math.max(0, ((x - a[0]) * vx + (z - a[1]) * vz) / L)) : 0
+  const px = a[0] + vx * t
+  const pz = a[1] + vz * t
+  return { x: px, z: pz, t, dist: Math.hypot(px - x, pz - z) }
+}
+
+/* Ajuste al dibujar: imán a puntos existentes, luego a lados y paredes, luego ángulo
+   (múltiplos de 45° desde el punto anterior) y la malla elegida. Devuelve también las
+   guías de alineación con otros puntos. */
+export function smartPoint(raw, { points = [], segs = [], from = null, free = false, grid = 0.5, tol = 0.5 }) {
+  let best = null
+  for (const p of points) {
+    const d = Math.hypot(p[0] - raw[0], p[1] - raw[1])
+    if (d <= tol && (!best || d < best.d)) best = { d, p }
+  }
+  if (best) return { p: [round2(best.p[0]), round2(best.p[1])], magnet: 'punto', guides: [] }
+
+  for (const [a, b] of segs) {
+    const q = nearestOnSeg(raw, a, b)
+    if (q.dist <= tol * 0.7 && (!best || q.dist < best.d)) best = { d: q.dist, p: [q.x, q.z] }
+  }
+  if (best) return { p: [round2(best.p[0]), round2(best.p[1])], magnet: 'lado', guides: [] }
+
+  let p
+  let diagonal = false
+  if (from && !free) {
+    const ang = Math.atan2(raw[1] - from[1], raw[0] - from[0])
+    const k = Math.round(ang / (Math.PI / 4))
+    const a = k * (Math.PI / 4)
+    diagonal = k % 2 !== 0
+    const len = snap(Math.hypot(raw[0] - from[0], raw[1] - from[1]), grid)
+    p = [round2(from[0] + Math.cos(a) * len), round2(from[1] + Math.sin(a) * len)]
+  } else p = [round2(snap(raw[0], grid)), round2(snap(raw[1], grid))]
+
+  // Guías: si queda casi en la misma línea que otro punto, se alinea con él.
+  const guides = []
+  if (!diagonal && !free) {
+    const horizontalFrom = from && Math.abs(p[1] - from[1]) < 1e-6
+    const verticalFrom = from && Math.abs(p[0] - from[0]) < 1e-6
+    let gx = null
+    let gz = null
+    for (const q of points) {
+      if (!verticalFrom && Math.abs(q[0] - p[0]) <= tol && (gx == null || Math.abs(q[0] - p[0]) < Math.abs(gx - p[0]))) gx = q[0]
+      if (!horizontalFrom && Math.abs(q[1] - p[1]) <= tol && (gz == null || Math.abs(q[1] - p[1]) < Math.abs(gz - p[1]))) gz = q[1]
+    }
+    if (gx != null) {
+      p[0] = round2(gx)
+      guides.push({ axis: 'x', v: p[0] })
+    }
+    if (gz != null) {
+      p[1] = round2(gz)
+      guides.push({ axis: 'z', v: p[1] })
+    }
+  }
+  return { p, magnet: null, guides }
+}
+
 /* Escala el contorno desde su centro (expandir o encoger toda la planta). */
 export function scaleOutline(poly, k) {
   const b = bboxOf(poly)

@@ -151,8 +151,14 @@ def _crosses(n1, n2, s):
     return o1 != o2 and o3 != o4
 
 
-@lru_cache(maxsize=16384)
-def _route(W, D, rects, segs, a, b, poly=None):
+DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1))
+
+
+@lru_cache(maxsize=64)
+def _base_grid(W, D, segs, poly):
+    """Lo que no cambia entre un recorrido y otro de la misma planta: nodos fuera
+    del contorno o pegados a una pared, y los pasos que cruzan una pared.
+    Se calcula una sola vez por forma y paredes (antes se repetía en cada paso)."""
     nx, ny = int(W / STEP), int(D / STEP)
     blocked = set()
     if poly:
@@ -160,46 +166,70 @@ def _route(W, D, rects, segs, a, b, poly=None):
             for j in range(ny + 1):
                 if not point_in_poly(poly, i * STEP, j * STEP):
                     blocked.add((i, j))
+    r = WALL_T / 2 + MARGIN
+    cut = set()
+    for s in segs:
+        x1, z1, x2, z2 = s
+        i0, i1 = max(0, math.floor((min(x1, x2) - r) / STEP)), min(nx, math.ceil((max(x1, x2) + r) / STEP))
+        j0, j1 = max(0, math.floor((min(z1, z2) - r) / STEP)), min(ny, math.ceil((max(z1, z2) + r) / STEP))
+        for i in range(i0, i1 + 1):
+            for j in range(j0, j1 + 1):
+                if seg_dist(i * STEP, j * STEP, x1, z1, x2, z2) <= r:
+                    blocked.add((i, j))
+        # Solo los pasos cerca de la pared pueden cruzarla.
+        for i in range(max(0, math.floor(min(x1, x2) / STEP) - 1), min(nx, math.ceil(max(x1, x2) / STEP) + 1) + 1):
+            for j in range(max(0, math.floor(min(z1, z2) / STEP) - 1), min(ny, math.ceil(max(z1, z2) / STEP) + 1) + 1):
+                for dx, dy in ((1, 0), (0, 1)):
+                    n = (i + dx, j + dy)
+                    if n[0] <= nx and n[1] <= ny and _crosses((i, j), n, s):
+                        cut.add(((i, j), n))
+                        cut.add((n, (i, j)))
+    return nx, ny, frozenset(blocked), frozenset(cut)
+
+
+@lru_cache(maxsize=16384)
+def _route(W, D, rects, segs, a, b, poly=None):
+    nx, ny, base, cut = _base_grid(W, D, segs, poly)
+    blocked = set(base)
     for x0, y0, x1, y1 in rects:
         for i in range(max(0, math.ceil((x0 - MARGIN) / STEP + 1e-9)), min(nx, math.floor((x1 + MARGIN) / STEP - 1e-9)) + 1):
             for j in range(max(0, math.ceil((y0 - MARGIN) / STEP + 1e-9)), min(ny, math.floor((y1 + MARGIN) / STEP - 1e-9)) + 1):
                 blocked.add((i, j))
-    r = WALL_T / 2 + MARGIN
-    for x1, z1, x2, z2 in segs:
-        for i in range(max(0, math.floor((min(x1, x2) - r) / STEP)), min(nx, math.ceil((max(x1, x2) + r) / STEP)) + 1):
-            for j in range(max(0, math.floor((min(z1, z2) - r) / STEP)), min(ny, math.ceil((max(z1, z2) + r) / STEP)) + 1):
-                if seg_dist(i * STEP, j * STEP, x1, z1, x2, z2) <= r:
-                    blocked.add((i, j))
 
     def clip(v, n):
         return max(0, min(n, round(v / STEP)))
 
     start = (clip(a[0], nx), clip(a[1], ny))
     goal = (clip(b[0], nx), clip(b[1], ny))
-    dirs = ((1, 0), (-1, 0), (0, 1), (0, -1))
+    gx, gy = goal
+
+    # A*: la distancia rectilínea al destino nunca sobreestima, así el camino sigue siendo el más corto.
+    def h(n):
+        return (abs(n[0] - gx) + abs(n[1] - gy)) * STEP
+
     best = {(start, -1): 0.0}
     parent = {}
-    heap = [(0.0, start, -1)]
+    heap = [(h(start), 0.0, start, -1)]
     end = None
     while heap:
-        c, node, d = heapq.heappop(heap)
+        _, c, node, d = heapq.heappop(heap)
         if best.get((node, d), 1e18) < c:
             continue
         if node == goal:
             end = (node, d)
             break
-        for k, (dx, dy) in enumerate(dirs):
+        for k, (dx, dy) in enumerate(DIRS):
             n = (node[0] + dx, node[1] + dy)
             if not (0 <= n[0] <= nx and 0 <= n[1] <= ny) or (n in blocked and n != goal):
                 continue
             # Una pared no se cruza ni siquiera saliendo de una máquina.
-            if segs and any(_crosses(node, n, s) for s in segs):
+            if (node, n) in cut:
                 continue
             nc = c + STEP + (TURN if d not in (-1, k) else 0.0)
             if nc < best.get((n, k), 1e18):
                 best[(n, k)] = nc
                 parent[(n, k)] = (node, d)
-                heapq.heappush(heap, (nc, n, k))
+                heapq.heappush(heap, (nc + h(n), nc, n, k))
     if end is None:
         return None
     nodes = [end[0]]

@@ -1,10 +1,26 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { M, TALL, box, makeCart, makeMachine, makeOperator, makeTree, makeTruck } from './models'
+import { M, SHARED, TALL, box, makeCart, makeMachine, makeOperator, makeTree, makeTruck } from './models'
 import { edgesOf, gateInfo, outlineOf, pointInPoly } from '../editor/geometry'
 
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 const easeOut = (t) => 1 - Math.pow(1 - t, 4)
+
+/* Vacía un grupo liberando geometrías y materiales propios (los compartidos se quedan).
+   Sin esto cada reconstrucción dejaba la memoria de la tarjeta de video ocupada. */
+function empty(group) {
+  for (const child of group.children) {
+    child.traverse((o) => {
+      o.geometry?.dispose?.()
+      const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : []
+      for (const m of mats) if (!SHARED.has(m) && !m.userData.keep) m.dispose()
+    })
+  }
+  group.clear()
+}
+
+const FLOW_MAT = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85 })
+FLOW_MAT.userData.keep = true
 
 function floorTexture(w, d) {
   const s = 24
@@ -54,7 +70,8 @@ export default class PlantScene {
     this.clock = new THREE.Clock()
 
     const r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
-    r.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    // Más de 1,5 píxeles por punto casi no se nota y cuesta mucho en pantallas 4K.
+    r.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
     r.shadowMap.enabled = true
     r.shadowMap.type = THREE.PCFSoftShadowMap
     r.outputColorSpace = THREE.SRGBColorSpace
@@ -78,6 +95,8 @@ export default class PlantScene {
     this.controls.screenSpacePanning = false
     this.controls.zoomToCursor = true
     this.controls.target.set(0, 0, 3)
+    // Si la cámara se mueve, lo que hay bajo el puntero puede cambiar.
+    this.controls.addEventListener('change', () => (this.pickDirty = true))
     this.view = '3d'
     this.keys = new Set()
 
@@ -105,6 +124,7 @@ export default class PlantScene {
       const b = r.domElement.getBoundingClientRect()
       this.pointer.set(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1)
       this.pointerInside = true
+      this.pickDirty = true
     }
     this.onLeave = () => {
       this.pointerInside = false
@@ -158,7 +178,9 @@ export default class PlantScene {
     this.opts = opts
     this.W = plant.size.w
     this.D = plant.size.d
-    this.root.clear()
+    empty(this.root)
+    this.floorTex?.dispose()
+    this.ring = null
     this.stations.clear()
     this.labelNodes.forEach((n) => n.remove())
     this.labelNodes.clear()
@@ -192,6 +214,10 @@ export default class PlantScene {
       this.stations.set(f.id, g)
       this.addLabel(f.id, f.name)
     }
+
+    // Solo las máquinas y zonas se pueden señalar: el rayo no recorre árboles, calles ni carritos.
+    this.pickables = [...this.stations.values()]
+    this.pickDirty = true
 
     this.flow = new THREE.Group()
     this.root.add(this.flow)
@@ -248,6 +274,7 @@ export default class PlantScene {
     // Piso con la forma de la planta.
     const shape = new THREE.Shape(poly.map(([x, z]) => new THREE.Vector2(x, -z)))
     const tex = floorTexture(W, D)
+    this.floorTex = tex
     tex.repeat.set(1 / W, 1 / D)
     tex.offset.set(0, 1)
     const floor = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 0.2, bevelEnabled: false }), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92 }))
@@ -273,7 +300,7 @@ export default class PlantScene {
   }
 
   buildWalls(opts) {
-    this.walls.clear()
+    empty(this.walls)
     const h = 2.3
     const t = 0.3
     const mat = M.white
@@ -346,7 +373,11 @@ export default class PlantScene {
     this.opts = { ...this.opts, ...opts }
     const o = this.opts
     this.buildWalls(o)
-    this.extras.clear()
+    empty(this.extras)
+    for (const op of this.operators) {
+      op.parent?.remove(op)
+      empty(op)
+    }
     this.operators = []
 
     // Los camiones esperan en la calle frente a su portón, de reversa hacia la planta.
@@ -394,7 +425,10 @@ export default class PlantScene {
       }
     }
 
-    if (this.ring) this.ring.parent?.remove(this.ring)
+    if (this.ring) {
+      this.ring.parent?.remove(this.ring)
+      empty(this.ring)
+    }
     this.ring = null
     this.labelNodes.forEach((n) => {
       n.dataset.strong = 'false'
@@ -446,7 +480,7 @@ export default class PlantScene {
 
   updateFlow(positions, draw = false, legs = this.legs) {
     this.legs = legs
-    this.flow.clear()
+    empty(this.flow)
     this.particles = []
     const p = this.plant.params
     const use = this.plant.use_assumptions
@@ -471,7 +505,7 @@ export default class PlantScene {
         const pieces = dashed ? Math.max(1, Math.floor(len / 1.1)) : 1
         for (let q = 0; q < pieces; q++) {
           const pl = dashed ? 0.6 : len
-          const m = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? pl : width, 0.03, horizontal ? width : pl), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.85 }))
+          const m = new THREE.Mesh(new THREE.BoxGeometry(horizontal ? pl : width, 0.03, horizontal ? width : pl), FLOW_MAT)
           if (dashed) {
             const t = (q + 0.5) / pieces
             m.position.copy(pts[k].clone().lerp(pts[k + 1], t))
@@ -731,9 +765,11 @@ export default class PlantScene {
 
     for (const tr of this.extras.children) if (tr.userData.bob) tr.position.y = Math.sin(time * 1.3) * 0.015
 
-    if (this.pointerInside) {
+    // El rayo solo se lanza si el puntero o la cámara se movieron, y solo contra las máquinas.
+    if (this.pointerInside && this.pickDirty && this.pickables) {
+      this.pickDirty = false
       this.raycaster.setFromCamera(this.pointer, this.camera)
-      const hits = this.raycaster.intersectObjects(this.root.children, true)
+      const hits = this.raycaster.intersectObjects(this.pickables, true)
       const hit = hits.find((h) => h.object.userData.pick)
       this.setHovered(hit ? hit.object.userData.pick : null)
     }
@@ -741,15 +777,20 @@ export default class PlantScene {
     if (this.labelsEl && this.labelNodes.size) {
       const w = this.el.clientWidth
       const h = this.el.clientHeight
-      const v = new THREE.Vector3()
+      const v = this._v || (this._v = new THREE.Vector3())
       for (const [id, n] of this.labelNodes) {
         const g = this.stations.get(id)
         if (!g) continue
+        const show = n.dataset.strong === 'true' || id === this.hovered
+        // Las etiquetas ocultas no se recolocan: ahorra escribir estilos en cada cuadro.
+        if (n.dataset.show !== String(show)) {
+          n.dataset.show = String(show)
+          n.style.opacity = show ? 1 : 0
+        }
+        if (!show) continue
         g.getWorldPosition(v)
         v.y += g.userData.h + 0.8
         v.project(this.camera)
-        const strong = n.dataset.strong === 'true'
-        n.style.opacity = strong || id === this.hovered ? 1 : 0
         n.style.transform = `translate(-50%, -100%) translate(${((v.x + 1) / 2) * w}px, ${((1 - v.y) / 2) * h}px)`
       }
     }

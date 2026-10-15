@@ -898,6 +898,44 @@ a {
   font-weight: 650;
 }
 
+.wait-clock {
+  margin-left: auto;
+  font-weight: 750;
+  font-stretch: var(--wide);
+  color: var(--black);
+}
+
+.wait-meter {
+  display: grid;
+  gap: 6px;
+}
+
+.wait-bar {
+  height: 8px;
+  border: 2px solid var(--black);
+  background: var(--white);
+  overflow: hidden;
+}
+
+.wait-bar span {
+  display: block;
+  height: 100%;
+  background: var(--black);
+  transform-origin: left center;
+  transition: transform 300ms linear;
+}
+
+.wait-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.reading--wide {
+  margin-top: 24px;
+}
+
 .wgame {
   display: grid;
   grid-template-rows: auto 1fr;
@@ -1913,6 +1951,23 @@ details.how ul {
 .editor-history {
   display: flex;
   gap: 6px;
+}
+
+.editor-grid {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+
+.editor-coords {
+  font-weight: 700;
+  color: var(--black);
+  white-space: nowrap;
+}
+
+.editor-canvas[data-tool='outline'] svg {
+  cursor: crosshair;
 }
 
 .editor-actions + .editor-stat {
