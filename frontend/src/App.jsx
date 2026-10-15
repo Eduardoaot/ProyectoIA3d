@@ -54,6 +54,8 @@ export default function App() {
     useEffect(() => {
         api.health().then(setAi).catch(() => setAi(null))
         api.catalog().then(setCatalog).catch(() => setError('Error conectando con el servidor.'))
+        // Warm the shared cache. Unsupported features remain disabled.
+        void api.getCapabilities()
     }, [])
 
     const notify = useCallback((msg) => setToast({ msg, id: Date.now() }), [])
@@ -92,6 +94,12 @@ export default function App() {
     }
 
     const blank = () => update({ draft: blankPlant(defaultParams()), info: { source: 'Plano vacío', notes: [] } })
+
+    const importPlant = (imported, filename) => {
+        update({ draft: imported, info: { source: 'Archivo JSON', notes: [`Importado de ${filename}. Revisa el plano antes de analizarlo.`] } })
+        setError(null)
+        notify(`Proyecto importado: ${imported.name}`)
+    }
 
     const save = async () => {
         setSaving(true)
@@ -137,6 +145,7 @@ export default function App() {
             error={error}
             onRead={read}
             onBlank={blank}
+            onImport={importPlant}
             onSave={save}
             saving={saving}
             />

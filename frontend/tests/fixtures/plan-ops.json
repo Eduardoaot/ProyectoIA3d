@@ -1,0 +1,61 @@
+{
+  "ops": [
+    {
+      "op": "add",
+      "element": {
+        "id": "pulido-2",
+        "name": "Pulidora auxiliar",
+        "kind": "pulido",
+        "x": 10,
+        "z": 16,
+        "w": 3,
+        "d": 2,
+        "count": 1,
+        "unit_w": 3,
+        "unit_d": 2,
+        "arrangement": "fila",
+        "ops_per_unit": 1,
+        "ops": 1,
+        "t": 5,
+        "t_cycle_min": [
+          4,
+          6
+        ],
+        "t_source": "estimado",
+        "locked": false,
+        "lock_reason": ""
+      },
+      "reason": "Propuesta simulada para probar el asistente"
+    },
+    {
+      "op": "move",
+      "id": "embobinado",
+      "to": {
+        "x": 16,
+        "z": 5
+      },
+      "reason": "Posición de prueba"
+    },
+    {
+      "op": "connect",
+      "from": "corte",
+      "to": "pulido-2",
+      "frac": 1,
+      "flow": "material"
+    }
+  ],
+  "rejected": [
+    {
+      "op": {
+        "op": "move",
+        "id": "columna-1",
+        "to": {
+          "x": 26,
+          "z": 12
+        }
+      },
+      "reason": "Columna estructural: elemento bloqueado"
+    }
+  ],
+  "notes": "Respuesta simulada del contrato; revisar antes de aplicar. No proviene de la IA ni del motor."
+}

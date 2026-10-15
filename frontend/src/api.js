@@ -10,13 +10,34 @@ async function post(path, body, signal) {
     return r.json()
 }
 
-const get = (path) =>
-    fetch(path).then((r) => {
+const get = (path, signal) =>
+    fetch(path, { signal }).then((r) => {
         if (!r.ok) throw new Error(`${path} respondió ${r.status}`)
         return r.json()
     })
 
+// Share the in-flight request as well as its result (including old-server 404s).
+let capabilitiesRequest
+
+export function getCapabilities() {
+    if (!capabilitiesRequest) {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 5000)
+        capabilitiesRequest = get('/api/capabilities', controller.signal)
+            .then((data) => {
+                if (!data || !Array.isArray(data.features) || !data.features.every((feature) => typeof feature === 'string')) {
+                    return { features: [] }
+                }
+                return { ...data, vision: data.vision === true }
+            })
+            .catch(() => ({ features: [] }))
+            .finally(() => clearTimeout(timeout))
+    }
+    return capabilitiesRequest
+}
+
 export const api = {
+    getCapabilities,
     health: () => get('/api/health'),
     catalog: () => get('/api/catalog'),
     story: (text) => post('/api/story', { text }),
@@ -42,6 +63,8 @@ export async function stream(path, body, onToken, signal) {
         if (done) break
         onToken(dec.decode(value, { stream: true }))
     }
+    const tail = dec.decode()
+    if (tail) onToken(tail)
 }
 
 export const fmt = (n, d = 0) => (n == null || Number.isNaN(Number(n)) ? '—' : Number(n).toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d }))

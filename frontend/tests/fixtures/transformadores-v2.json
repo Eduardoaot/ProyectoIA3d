@@ -1,0 +1,321 @@
+{
+  "name": "Transformadores del Bajío",
+  "industry": "Transformadores de distribución",
+  "size": {
+    "w": 48,
+    "d": 24
+  },
+  "gates": [
+    {
+      "id": "A",
+      "x": 6,
+      "label": "Portón A"
+    },
+    {
+      "id": "B",
+      "x": 41,
+      "label": "Portón B"
+    }
+  ],
+  "receive_gate": "A",
+  "dispatch_gate": "B",
+  "stations": [
+    {
+      "id": "recepcion",
+      "name": "Recepción de lámina y alambre",
+      "kind": "recepcion",
+      "w": 6,
+      "d": 4.5,
+      "t": 0,
+      "ops": 0,
+      "t_source": "supuesto"
+    },
+    {
+      "id": "corte",
+      "name": "Corte de lámina de silicio",
+      "kind": "corte",
+      "w": 6,
+      "d": 4,
+      "t": 30,
+      "ops": 1,
+      "t_source": "supuesto"
+    },
+    {
+      "id": "nucleo",
+      "name": "Armado de núcleo",
+      "kind": "ensamble",
+      "w": 4.5,
+      "d": 3,
+      "t": 45,
+      "ops": 2,
+      "t_source": "supuesto"
+    },
+    {
+      "id": "embobinado",
+      "name": "Embobinado",
+      "kind": "otro",
+      "w": 8,
+      "d": 4,
+      "t": 120,
+      "ops": 6,
+      "t_source": "supuesto"
+    },
+    {
+      "id": "ensamble",
+      "name": "Ensamble de parte activa",
+      "kind": "ensamble",
+      "w": 6,
+      "d": 4,
+      "t": 60,
+      "ops": 2,
+      "t_source": "supuesto"
+    },
+    {
+      "id": "horno",
+      "name": "Horno de secado",
+      "kind": "horno",
+      "w": 6,
+      "d": 3,
+      "t": 30,
+      "ops": 0,
+      "t_source": "supuesto"
+    },
+    {
+      "id": "soldadura",
+      "name": "Soldadura de tanques",
+      "kind": "soldadura",
+      "w": 4,
+      "d": 4,
+      "t": 50,
+      "ops": 2,
+      "t_source": "supuesto"
+    },
+    {
+      "id": "pintura",
+      "name": "Pintura de tanques",
+      "kind": "pintura",
+      "w": 5,
+      "d": 4.5,
+      "t": 40,
+      "ops": 1,
+      "t_source": "supuesto"
+    },
+    {
+      "id": "config",
+      "name": "Encubado y llenado de aceite",
+      "kind": "mezcla",
+      "w": 5,
+      "d": 4,
+      "t": 50,
+      "ops": 2,
+      "t_source": "supuesto"
+    },
+    {
+      "id": "pruebas",
+      "name": "Pruebas eléctricas",
+      "kind": "inspeccion",
+      "w": 4,
+      "d": 3,
+      "t": 35,
+      "ops": 1,
+      "t_source": "supuesto"
+    },
+    {
+      "id": "despacho",
+      "name": "Despacho",
+      "kind": "despacho",
+      "w": 6,
+      "d": 4.5,
+      "t": 10,
+      "ops": 1,
+      "t_source": "supuesto"
+    }
+  ],
+  "zones": [
+    {
+      "id": "oficina",
+      "name": "Oficina",
+      "kind": "oficina",
+      "x": 42,
+      "z": 4,
+      "w": 8,
+      "d": 6
+    },
+    {
+      "id": "banos",
+      "name": "Baños",
+      "kind": "banos",
+      "x": 33,
+      "z": 4,
+      "w": 4,
+      "d": 4
+    },
+    {
+      "id": "columna-1",
+      "name": "Columna estructural",
+      "kind": "bloqueado",
+      "x": 24,
+      "z": 12,
+      "w": 1,
+      "d": 1
+    }
+  ],
+  "walls": [
+    {
+      "id": "muro-pintura",
+      "x1": 22,
+      "z1": 15,
+      "x2": 22,
+      "z2": 23
+    }
+  ],
+  "routes": [
+    {
+      "id": "r1",
+      "from": "recepcion",
+      "to": "corte",
+      "frac": 1
+    },
+    {
+      "id": "r2",
+      "from": "corte",
+      "to": "nucleo",
+      "frac": 1
+    },
+    {
+      "id": "r3",
+      "from": "recepcion",
+      "to": "embobinado",
+      "frac": 1
+    },
+    {
+      "id": "r4",
+      "from": "nucleo",
+      "to": "ensamble",
+      "frac": 1
+    },
+    {
+      "id": "r5",
+      "from": "embobinado",
+      "to": "ensamble",
+      "frac": 1
+    },
+    {
+      "id": "r6",
+      "from": "ensamble",
+      "to": "horno",
+      "frac": 1
+    },
+    {
+      "id": "r7",
+      "from": "recepcion",
+      "to": "soldadura",
+      "frac": 1
+    },
+    {
+      "id": "r8",
+      "from": "soldadura",
+      "to": "pintura",
+      "frac": 1
+    },
+    {
+      "id": "r9",
+      "from": "horno",
+      "to": "config",
+      "frac": 1
+    },
+    {
+      "id": "r10",
+      "from": "pintura",
+      "to": "config",
+      "frac": 1
+    },
+    {
+      "id": "r11",
+      "from": "config",
+      "to": "pruebas",
+      "frac": 1
+    },
+    {
+      "id": "r12",
+      "from": "pruebas",
+      "to": "despacho",
+      "frac": 0.95
+    },
+    {
+      "id": "r13",
+      "from": "pruebas",
+      "to": "config",
+      "frac": 0.05
+    }
+  ],
+  "use_assumptions": true,
+  "params": {
+    "demand": 8,
+    "shift_min": 480,
+    "efficiency": 0.8,
+    "batch": 1,
+    "speed": 25,
+    "load_min": 15,
+    "trucks": 2,
+    "truck_setup": 20,
+    "cv2": 1
+  },
+  "layout": {
+    "recepcion": [
+      5,
+      20,
+      0
+    ],
+    "corte": [
+      5,
+      12,
+      0
+    ],
+    "nucleo": [
+      5,
+      5,
+      0
+    ],
+    "embobinado": [
+      16,
+      4,
+      0
+    ],
+    "ensamble": [
+      16,
+      12,
+      0
+    ],
+    "horno": [
+      27,
+      4,
+      0
+    ],
+    "soldadura": [
+      16,
+      20,
+      0
+    ],
+    "pintura": [
+      27,
+      20,
+      0
+    ],
+    "config": [
+      34,
+      12,
+      0
+    ],
+    "pruebas": [
+      42,
+      12,
+      0
+    ],
+    "despacho": [
+      41,
+      20,
+      0
+    ]
+  }
+}
