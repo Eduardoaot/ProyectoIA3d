@@ -1,67 +1,9 @@
 import { useState } from 'react'
 import { fmt } from '../api'
-import { bboxOf, edgesOf, outlineOf, scaleOutline, shapePreset } from './geometry'
-
-const SHAPES = [
-  { id: 'rect', label: 'Rectángulo' },
-  { id: 'cuadrado', label: 'Cuadrado' },
-  { id: 'L', label: 'En L' },
-  { id: 'U', label: 'En U' },
-  { id: 'T', label: 'En T' },
-  { id: 'triangulo', label: 'Triángulo' },
-  { id: 'circulo', label: 'Círculo' },
-]
-
-/* Forma de la planta (un solo piso): formas base, expandir o encoger desde el centro y medidas. */
-function ShapeControls({ plant, reshape }) {
-  const { w: W, d: D } = plant.size
-  const outline = outlineOf(plant)
-  const pick = (id) => {
-    if (id === 'rect') return reshape(null)
-    if (id === 'cuadrado') {
-      const side = Math.max(W, D)
-      return reshape(null, { w: side, d: side })
-    }
-    reshape(shapePreset(id, W, D))
-  }
-  // Cambiar ancho o fondo estira la forma actual en esa dirección.
-  const resize = (w, d) => {
-    if (!plant.outline) return reshape(null, { w, d })
-    const b = bboxOf(outline)
-    const kx = w / (b.x1 - b.x0 || 1)
-    const kz = d / (b.z1 - b.z0 || 1)
-    reshape(outline.map(([x, z]) => [Math.round((b.x0 + (x - b.x0) * kx) * 100) / 100, Math.round((b.z0 + (z - b.z0) * kz) * 100) / 100]))
-  }
-  return (
-    <div className="shape-tools">
-      <span className="small">Forma de la planta (un solo piso)</span>
-      <div className="shape-grid">
-        {SHAPES.map((x) => (
-          <button key={x.id} type="button" className="shape-btn" onClick={() => pick(x.id)} title={x.label}>
-            <ShapeIcon id={x.id} />
-            <span>{x.label}</span>
-          </button>
-        ))}
-      </div>
-      <div className="row">
-        <button type="button" className="btn btn--ghost btn--small" onClick={() => reshape(scaleOutline(outline, 1 / 1.1))}>
-          Encoger 10 %
-        </button>
-        <button type="button" className="btn btn--ghost btn--small" onClick={() => reshape(scaleOutline(outline, 1.1))}>
-          Expandir 10 %
-        </button>
-      </div>
-      <div className="field-row">
-        <Field label="Ancho" type="number" step="1" min={8} value={W} suffix="m" onCommit={(v) => resize(v, D)} />
-        <Field label="Fondo" type="number" step="1" min={6} value={D} suffix="m" onCommit={(v) => resize(W, v)} />
-      </div>
-      <p className="small">Con Contorno (C) dibujas tus propios muros exteriores esquina por esquina. Con Forma (F) arrastras esquinas y lados, o los editas con medidas exactas.</p>
-    </div>
-  )
-}
+import { bboxOf, centerOf, PART_KINDS, partLabel, shapePreset } from './geometry'
 
 function ShapeIcon({ id }) {
-  const pts = id === 'rect' ? [[0, 0], [20, 0], [20, 14], [0, 14]] : id === 'cuadrado' ? [[3, 0], [17, 0], [17, 14], [3, 14]] : shapePreset(id, 20, 14)
+  const pts = id === 'poly' ? [[2, 12], [6, 1], [14, 4], [19, 0], [17, 13]] : id === 'rect' ? [[0, 0], [20, 0], [20, 14], [0, 14]] : id === 'cuadrado' ? [[3, 0], [17, 0], [17, 14], [3, 14]] : shapePreset(id, 20, 14)
   return (
     <svg viewBox="-1 -1 22 16" width="30" height="22" aria-hidden="true">
       <path d={'M' + pts.map((p) => p.join(' ')).join(' L') + ' Z'} fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -96,15 +38,39 @@ function FieldInner({ label, value, onCommit, type = 'text', step, min, suffix }
   )
 }
 
-/* Nombre del lado según hacia dónde mira (la calle de referencia queda abajo, en z = fondo). */
-function sideName(e) {
-  const [nx, nz] = e.n
-  if (Math.abs(nx) > 0.92) return nx > 0 ? 'derecho' : 'izquierdo'
-  if (Math.abs(nz) > 0.92) return nz > 0 ? 'de la calle (frente)' : 'del fondo'
-  return 'en diagonal'
+/* Avisos de la suma de piezas que no se pueden representar con un solo contorno. */
+function PartWarnings({ comp }) {
+  if (!comp || (!comp.islands && !comp.inner)) return null
+  return (
+    <ul className="note-list">
+      {comp.islands > 0 && <li>Hay piezas que no tocan al resto: solo cuenta la parte más grande. Júntalas para que formen un solo edificio.</li>}
+      {comp.inner > 0 && <li>Un hueco encerrado (patio interior) no se puede representar: llévalo hasta un borde para recortar el edificio.</li>}
+    </ul>
+  )
 }
 
-export default function Inspector({ plant, positions, sel, setSel, commit, rotate, remove, catalog, full, live, duplicate, reshape, removeVertex, ops, outside = 0 }) {
+const partSize = (p) => {
+  if (p.kind !== 'poly') return { w: p.w, d: p.d, x: p.x, z: p.z }
+  const b = bboxOf(p.pts)
+  const [x, z] = centerOf(p.pts)
+  return { w: Math.round((b.x1 - b.x0) * 100) / 100, d: Math.round((b.z1 - b.z0) * 100) / 100, x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100 }
+}
+
+/* Sólido suma al edificio; hueco le recorta un pedazo. */
+function SolidHole({ hole, onChange }) {
+  return (
+    <div className="seg seg--inline" role="group" aria-label="Sólido o hueco">
+      <button type="button" aria-pressed={!hole} onClick={() => onChange(false)}>
+        Sólido (suma)
+      </button>
+      <button type="button" aria-pressed={hole} onClick={() => onChange(true)}>
+        Hueco (recorta)
+      </button>
+    </div>
+  )
+}
+
+export default function Inspector({ plant, positions, sel, setSel, commit, rotate, remove, catalog, full, live, duplicate, ops, outside = 0, tool, parts = [], comp, shape }) {
   const names = Object.fromEntries(plant.stations.map((s) => [s.id, s.name]))
   const setStation = (id, patch) => commit({ ...plant, stations: plant.stations.map((s) => (s.id === id ? { ...s, ...patch } : s)) }, positions)
   const setZone = (id, patch) => commit({ ...plant, zones: plant.zones.map((z) => (z.id === id ? { ...z, ...patch } : z)) }, positions)
@@ -123,72 +89,92 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
     </button>
   )
 
-  if (sel?.type === 'vertex' && full) {
-    const poly = outlineOf(plant)
-    const q = poly[sel.i]
-    if (!q) return <aside className="inspector" />
-    const edges = edgesOf(poly)
-    const before = edges[(sel.i - 1 + poly.length) % poly.length]
-    const after = edges[sel.i]
+  /* ---------- Una pieza del edificio ---------- */
+  if ((sel?.type === 'part' || sel?.type === 'pvertex') && full) {
+    const p = parts.find((q) => q.id === sel.id)
+    if (!p) return <aside className="inspector" />
+    const m = partSize(p)
+    const vq = sel.type === 'pvertex' ? p.pts?.[sel.i] : null
     return (
       <aside className="inspector">
-        <span className="inspector-kicker">Esquina de la planta</span>
+        <span className="inspector-kicker">{p.hole ? 'Hueco · recorta el edificio' : 'Pieza del edificio'}</span>
+        <h3>{partLabel(p)}</h3>
+        <SolidHole hole={!!p.hole} onChange={(h) => h !== !!p.hole && ops.toggleHole(p.id)} />
         <div className="field-row">
-          <Field label="X (de izquierda a derecha)" type="number" step="0.1" value={q[0]} suffix="m" onCommit={(v) => ops.moveVertex(sel.i, v, q[1])} />
-          <Field label="Z (del fondo a la calle)" type="number" step="0.1" value={q[1]} suffix="m" onCommit={(v) => ops.moveVertex(sel.i, q[0], v)} />
+          <Field label="Ancho" type="number" step="0.1" min={0.5} value={m.w} suffix="m" onCommit={(v) => ops.sizePart(p.id, v, p.kind === 'cuadrado' ? v : m.d)} />
+          <Field label="Fondo" type="number" step="0.1" min={0.5} value={m.d} suffix="m" onCommit={(v) => ops.sizePart(p.id, p.kind === 'cuadrado' ? v : m.w, v)} />
         </div>
-        <p className="small num">
-          Lados que se juntan aquí:{' '}
-          <button type="button" className="link-btn" onClick={() => setSel({ type: 'edge', i: before.i })}>
-            {fmt(before.len, 2)} m
-          </button>{' '}
-          y{' '}
-          <button type="button" className="link-btn" onClick={() => setSel({ type: 'edge', i: after.i })}>
-            {fmt(after.len, 2)} m
-          </button>
-          . Las flechas la mueven un paso de la precisión elegida.
-        </p>
+        <div className="field-row">
+          <Field label="Centro X" type="number" step="0.1" value={m.x} suffix="m" onCommit={(v) => ops.centerPart(p.id, v, m.z)} />
+          <Field label="Centro Z" type="number" step="0.1" value={m.z} suffix="m" onCommit={(v) => ops.centerPart(p.id, m.x, v)} />
+        </div>
+        {p.kind !== 'poly' && <Field label="Giro" type="number" step="1" value={p.rot || 0} suffix="°" onCommit={(v) => ops.setPart(p.id, { rot: ((v % 360) + 360) % 360 })} />}
+        {vq && (
+          <>
+            <span className="small">Esquina seleccionada</span>
+            <div className="field-row">
+              <Field label="X" type="number" step="0.1" value={vq[0]} suffix="m" onCommit={(v) => ops.movePVertex(p.id, sel.i, v, vq[1])} />
+              <Field label="Z" type="number" step="0.1" value={vq[1]} suffix="m" onCommit={(v) => ops.movePVertex(p.id, sel.i, vq[0], v)} />
+            </div>
+          </>
+        )}
         <div className="row">
-          <button type="button" className="btn btn--ghost btn--small" onClick={() => removeVertex(sel.i)} disabled={poly.length <= 3}>
-            Quitar esquina
+          <button type="button" className="btn btn--small" onClick={() => ops.rotatePart(p.id, 90)}>
+            Girar 90° (R)
           </button>
+          <button type="button" className="btn btn--ghost btn--small" onClick={() => ops.duplicatePart(p.id)} title="Ctrl+D">
+            Duplicar
+          </button>
+          {vq ? (
+            <button type="button" className="btn btn--ghost btn--small" onClick={() => ops.removePVertex(p.id, sel.i)} disabled={p.pts.length <= 3}>
+              Quitar esquina
+            </button>
+          ) : (
+            <button type="button" className="btn btn--ghost btn--small" onClick={() => ops.removePart(p.id)} title="Supr">
+              Quitar pieza
+            </button>
+          )}
         </div>
-        <ShapeControls plant={plant} reshape={reshape} />
+        <p className="small">
+          Arrástrala para moverla; las manijas cambian el tamaño y el círculo de arriba la gira. Las flechas la mueven un paso de la precisión elegida.
+          {p.kind === 'poly' && ' Arrastra sus esquinas; doble clic en un lado agrega una, doble clic en una esquina la quita.'}
+        </p>
+        <PartWarnings comp={comp} />
       </aside>
     )
   }
 
-  if (sel?.type === 'edge' && full) {
-    const poly = outlineOf(plant)
-    const e = edgesOf(poly)[sel.i]
-    if (!e) return <aside className="inspector" />
-    const deg = Math.round((Math.atan2(e.b[1] - e.a[1], e.b[0] - e.a[0]) * 180) / Math.PI)
-    const square = Math.abs(e.a[0] - e.b[0]) < 0.01 || Math.abs(e.a[1] - e.b[1]) < 0.01
+  /* ---------- Forma: agregar piezas (como en TinkerCAD) ---------- */
+  if (tool === 'shape' && full) {
     return (
       <aside className="inspector">
-        <span className="inspector-kicker">Lado {sideName(e)} · muro exterior</span>
-        <Field label="Largo" type="number" step="0.1" min={0.5} value={Math.round(e.len * 100) / 100} suffix="m" onCommit={(v) => ops.setEdgeLength(sel.i, v)} />
-        <p className="small num">
-          De ({fmt(e.a[0], 2)}, {fmt(e.a[1], 2)}) a ({fmt(e.b[0], 2)}, {fmt(e.b[1], 2)}){square ? '' : `, inclinado ${Math.abs(deg % 90)}°`}. Al cambiar el largo se corre el lado siguiente.
-        </p>
-        <Field key={`push-${e.a}-${e.b}`} label="Mover hacia afuera (negativo: hacia adentro)" type="number" step="0.1" value={0} suffix="m" onCommit={(v) => v && ops.pushEdge(sel.i, v)} />
-        <div className="row">
-          <button type="button" className="btn btn--small" onClick={() => ops.splitEdge(sel.i)} title="Agrega una esquina a la mitad del lado">
-            Dividir en dos
-          </button>
-          {!square && (
-            <button type="button" className="btn btn--ghost btn--small" onClick={() => ops.straightenEdge(sel.i)} title="Lo deja horizontal o vertical">
-              Enderezar
+        <span className="inspector-kicker">Forma del edificio</span>
+        <p className="small">El edificio es la suma de sus piezas. Elige una forma y haz clic en el plano para colocarla: se agrega a lo que ya hay, sin reiniciar nada. Un hueco recorta una sección.</p>
+        <SolidHole hole={shape.addHole} onChange={shape.setHole} />
+        <div className="shape-grid">
+          {PART_KINDS.map((k) => (
+            <button key={k.id} type="button" className="shape-btn" aria-pressed={shape.arm?.kind === k.id} onClick={() => (shape.cancel(), shape.setArm({ kind: k.id, hole: shape.addHole }))} title={`${k.label}: clic aquí y luego en el plano`}>
+              <ShapeIcon id={k.id} />
+              <span>{k.label}</span>
             </button>
-          )}
-          <button type="button" className="btn btn--ghost btn--small" onClick={() => ops.gateOnEdge(sel.i)}>
-            Poner portón aquí
-          </button>
-          <button type="button" className="btn btn--ghost btn--small" onClick={() => ops.removeEdge(sel.i)} disabled={poly.length <= 3} title="Junta sus dos esquinas en una (Supr)">
-            Quitar lado
+          ))}
+          <button type="button" className="shape-btn" aria-pressed={!!shape.pen} onClick={() => shape.startPen(shape.addHole)} title="Dibuja una pieza esquina por esquina">
+            <ShapeIcon id="poly" />
+            <span>A mano</span>
           </button>
         </div>
-        <p className="small">Doble clic sobre el lado agrega una esquina justo ahí; arrástralo para moverlo entero.</p>
+        <div className="inspector-list">
+          <span className="small">Piezas ({parts.length})</span>
+          {parts.map((p, i) => {
+            const m = partSize(p)
+            return (
+              <button key={p.id} type="button" className="link-btn" onClick={() => setSel({ type: 'part', id: p.id })}>
+                {i + 1}. {p.hole ? 'Hueco' : partLabel(p)} · {fmt(m.w, 1)} × {fmt(m.d, 1)} m
+              </button>
+            )
+          })}
+        </div>
+        <PartWarnings comp={comp} />
       </aside>
     )
   }
@@ -387,7 +373,9 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
       {full && (
         <>
           <Field label="Nombre de la planta" value={plant.name} onCommit={(v) => commit({ ...plant, name: v })} />
-          <ShapeControls plant={plant} reshape={reshape} />
+          <p className="small num">
+            Bodega de {fmt(plant.size.w, 1)} × {fmt(plant.size.d, 1)} m, armada con {parts.length} {parts.length === 1 ? 'pieza' : 'piezas'}. Para cambiar la forma usa la herramienta Forma (F).
+          </p>
         </>
       )}
       <ul className="note-list">

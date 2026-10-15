@@ -25,7 +25,7 @@ export default function WaitPanel({ kind, title, game = 'Juega mientras la IA tr
     const left = est - elapsed
 
     return (
-        <div className={`block reading ${className}`} aria-label={title}>
+        <div className={`block reading ${game ? '' : 'reading--bare'} ${className}`} aria-label={title}>
             <div className="reading-head">
                 <div className="dots" aria-hidden="true">
                     <i />
@@ -48,7 +48,7 @@ export default function WaitPanel({ kind, title, game = 'Juega mientras la IA tr
                 </div>
             </div>
 
-            <LoadingGame label={game} />
+            {game && <LoadingGame label={game} />}
         </div>
     )
 }

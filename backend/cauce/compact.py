@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from .catalog import CLEAN, DIRTY
 from .engine import dims, evaluate, gate_pt, manhattan, rebalance_ops, station_map
+from .story import impersonal
 from .layout import EDGE, GAP, _rect, feasible, flow_order, nearest_free, plant_area
 
 CORNERS = ["frente-izquierda", "frente-derecha", "fondo-izquierda", "fondo-derecha"]
@@ -35,7 +36,7 @@ COMPACT_SYSTEM = (
     "- 'grupos': estaciones que deben quedar pegadas (mucho flujo entre ellas o trabajo parecido). Nunca juntes una estación "
     "sucia (polvo, ruido o calor) con una limpia.\n"
     "- 'esquina': desde qué esquina conviene empezar a llenar ('frente' es el lado de la calle), cerca del portón de entrada.\n"
-    "- 'razones': hasta 3 frases cortas en español que expliquen el criterio."
+    "- 'razones': hasta 3 frases cortas en español que expliquen el criterio, en voz impersonal: cada frase empieza con \"Se\" (se agrupa, se coloca, se deja). Nunca en primera persona."
 )
 
 
@@ -178,7 +179,7 @@ async def compact_alternative(plant, provider):
             source = "ia"
         groups = [g for g in (_resolve(x, plant["stations"]) for x in out.get("grupos") or []) if len(g) > 1]
         corner = out.get("esquina") if out.get("esquina") in CORNERS else None
-        reasons = [str(x) for x in out.get("razones") or [] if str(x).strip()][:3]
+        reasons = [impersonal(x) for x in out.get("razones") or [] if str(x).strip()][:3]
     except Exception as e:  # noqa: BLE001
         error = str(e)
 

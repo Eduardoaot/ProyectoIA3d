@@ -285,7 +285,7 @@ def _building(plant, t, data, notes):
         w, d = data.get("ancho_m"), data.get("fondo_m")
         if isinstance(w, (int, float)) and isinstance(d, (int, float)) and w in nums and d in nums and 8 <= w <= 300 and 6 <= d <= 300:
             plant["size"] = {"w": float(w), "d": float(d)}
-            notes.append(f"La bodega mide {w:g} x {d:g} m, según tu historia.")
+            notes.append(f"La bodega mide {w:g} x {d:g} m, según la descripción.")
         if forma == "cuadrado":
             side = max(plant["size"]["w"], plant["size"]["d"])
             plant["size"] = {"w": side, "d": side}
@@ -388,7 +388,7 @@ def apply_zones(plant, t, data, notes):
             z["_placed"] = True
             placed.append(f"{z['name'].lower()} ({item['ubicacion'].replace('-', ' ')})")
     if placed:
-        notes.append("Zonas ubicadas según tu historia: " + ", ".join(placed) + ".")
+        notes.append("Zonas ubicadas según la descripción: " + ", ".join(placed) + ".")
 
 
 def station_targets(plant, t, data):

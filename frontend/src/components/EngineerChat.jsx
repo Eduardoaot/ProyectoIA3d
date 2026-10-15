@@ -44,7 +44,7 @@ const suggestions = (ctx) => {
 		try {
 			await stream('/api/chat', { messages: history, context: context?.plant ? context : null }, (t) => setMsgs((m) => m.map((x, i) => (i === m.length - 1 ? { ...x, content: x.content + t } : x))), ctl.current.signal)
 		} catch (e) {
-			if (e.name !== 'AbortError') setMsgs((m) => m.map((x, i) => (i === m.length - 1 ? { ...x, content: 'No pude conectarme con el servidor.' } : x)))
+			if (e.name !== 'AbortError') setMsgs((m) => m.map((x, i) => (i === m.length - 1 ? { ...x, content: 'Sin conexión con el servidor.' } : x)))
 		}
 		setBusy(false)
 	}

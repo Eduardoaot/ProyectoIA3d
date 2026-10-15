@@ -936,6 +936,22 @@ a {
   margin-top: 24px;
 }
 
+/* Solo animación y barra, sin minijuego: alto según el contenido. */
+.reading--bare {
+  height: auto;
+  grid-template-rows: auto auto;
+  gap: 16px;
+}
+
+.alt-note {
+  margin-top: 16px;
+  max-width: none;
+}
+
+.alt-note .alt-reasons {
+  margin-top: 6px;
+}
+
 .wgame {
   display: grid;
   grid-template-rows: auto 1fr;
@@ -1966,8 +1982,57 @@ details.how ul {
   white-space: nowrap;
 }
 
-.editor-canvas[data-tool='outline'] svg {
-  cursor: crosshair;
+/* Botones dentro del plano, como en la vista 3D. */
+.editor-cam {
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+}
+
+.editor-cam button:disabled {
+  color: var(--g300);
+  background: transparent;
+  cursor: default;
+}
+
+.editor-float {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+}
+
+.editor-float .btn {
+  background: var(--white);
+}
+
+.editor-notice {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  z-index: 3;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 14px;
+  border: 2px solid var(--black);
+  background: var(--white);
+  font-weight: 650;
+}
+
+.seg--inline {
+  width: 100%;
+}
+
+.seg--inline button {
+  flex: 1;
+  padding: 0 8px;
+}
+
+.shape-btn[aria-pressed='true'] {
+  background: var(--black);
+  color: var(--white);
 }
 
 .editor-actions + .editor-stat {

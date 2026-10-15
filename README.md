@@ -578,14 +578,13 @@ Para el PDF, `Report.jsx` monta una copia del documento en `document.body` (con 
 
 ### Paso 1 · Historia y plano (`Story.jsx`)
 
-- **Área de texto** para contar la historia, con contador de palabras.
+- **Área de texto** para describir la planta y el proceso.
 - **Dictado por voz** (botón "Dictar") con la API de reconocimiento de voz del navegador en español (`es-CO`); solo aparece si el navegador la soporta (Chrome, Edge).
-- **Historia de ejemplo** para probar.
 - Tres formas de empezar:
-  - **Leer con IA** (necesita al menos 6 palabras). Muestra un contador de segundos: un modelo local puede tardar 1 a 2 minutos.
+  - **Analizar** (activo en cuanto hay texto). Muestra el tiempo transcurrido, una barra con el avance estimado y un minijuego mientras se espera.
   - **Dibujar desde cero**: bodega vacía.
   - **Cargar el taller de vidrio**: la planta de ejemplo.
-- **"Lo que entendí"**: chips con las estaciones y zonas encontradas, si se leyó con IA o por reglas, y notas (problemas que intuyó la IA, lo que se descartó, conversiones de producción semanal o mensual).
+- **"Tu proceso · Resultado del análisis"**: chips con las estaciones y zonas encontradas y notas redactadas como descripción del análisis, nunca en primera persona (hallazgos, lo que se descartó, conversiones de producción semanal o mensual). Las instrucciones a la IA piden voz impersonal y `impersonal()` en `story.py` corrige las frases en primera persona que se escapen.
 - **Editor 2D** completo (ver [sección 11](#11-el-editor-2d)).
 - **Supuestos para calcular** (interruptor):
   - *Apagado*: solo recorridos y cercanías.
@@ -646,7 +645,7 @@ La capa de gamificación, pensada para llevar la mejora al piso de planta:
 
 ## 11. El editor 2D
 
-`PlanEditor.jsx` es un lienzo SVG en metros (1 unidad = 1 m) con cuadrícula de 1 m. Lo que se dibuja y se mueve se ajusta a la **precisión** elegida en la barra (1 m, 50 cm, 25 cm o 10 cm; 50 cm por defecto). La **rueda** del mouse acerca y aleja sobre el puntero; arrastrar el fondo (o el botón central) mueve la vista, y el botón de las cuatro esquinas vuelve a ver toda la planta. Abajo del lienzo se ven las coordenadas del puntero.
+`PlanEditor.jsx` es un lienzo SVG en metros (1 unidad = 1 m) con cuadrícula de 1 m. Lo que se dibuja y se mueve se ajusta a la **precisión** elegida en la barra (1 m, 50 cm, 25 cm o 10 cm; 50 cm por defecto). La **rueda** del mouse acerca y aleja sobre el puntero; arrastrar el fondo (o el botón central) mueve la vista, y el botón de centrar vuelve a ver toda la planta. Deshacer, rehacer, acercar, alejar y centrar están **dentro del plano**, arriba a la derecha (como en la vista 3D), y «Reiniciar plano» arriba a la izquierda. Abajo del lienzo se ven las coordenadas del puntero.
 
 ### Herramientas
 
@@ -658,8 +657,7 @@ La capa de gamificación, pensada para llevar la mejora al piso de planta:
 | **Pared** | `P` | Arrastrar para dibujar una pared interior. Se pega a esquinas, extremos de paredes y muros cercanos (imán) y se ajusta a 45°; con `Alt` queda libre. Muestra el largo mientras se dibuja |
 | **Zona** | `Z` | Elegir el tipo (oficina, baños, comedor, bloqueada) y arrastrar un rectángulo |
 | **Portón** | `O` | Clic cerca de cualquier muro exterior para agregar un portón |
-| **Contorno** | `C` | Dibujar **tus propios muros exteriores** esquina por esquina. Escribir un número y `Enter` pone la siguiente esquina a ese largo exacto en la dirección del puntero. Cierra con clic en el primer punto, doble clic o `Enter`; `Retroceso` borra la última esquina. Imán a puntos existentes y guías de alineación |
-| **Forma** | `F` | Arrastrar esquinas (con guías de alineación) y lados. Clic en un lado lo selecciona; doble clic sobre un lado agrega una esquina justo ahí; doble clic en una esquina la borra |
+| **Forma** | `F` | El edificio se arma **con piezas, como en TinkerCAD**: rectángulo, cuadrado, L, U, T, triángulo, círculo o una pieza **a mano** (esquina por esquina, con largos exactos tecleados). Cada pieza es **sólida** (suma) o **hueco** (recorta una sección, también intermedia). Agregar una pieza no reinicia nada: se suma a lo que ya hay. Cada pieza se mueve, se estira con sus manijas (esquinas y lados) y se gira con el círculo de arriba (de 15 en 15°; con `Alt`, libre), sin tocar las demás |
 
 ### Atajos generales
 
@@ -669,7 +667,9 @@ La capa de gamificación, pensada para llevar la mejora al piso de planta:
 | `Ctrl+Y` o `Ctrl+Shift+Z` | Rehacer |
 | `Supr` / `Retroceso` | Quitar lo seleccionado |
 | `R` | Girar la máquina seleccionada 90° |
-| Flechas | Mover lo seleccionado (máquina, zona, pared, esquina o lado) un paso de la precisión; con `Shift`, diez pasos |
+| Flechas | Mover lo seleccionado (máquina, zona, pared o pieza del edificio) un paso de la precisión; con `Shift`, diez pasos |
+| `R` sobre una pieza | Girarla 90° |
+| `Ctrl+D` | Duplicar lo seleccionado (también piezas del edificio) |
 | `Esc` | Cancelar, deseleccionar y volver a Mover |
 
 El editor debe tener el foco (clic en él) para que funcionen las teclas.
@@ -682,10 +682,12 @@ Cambia según lo seleccionado:
 - **Ruta**: origen, destino, **% de piezas** que pasan por ahí, **invertir dirección**, distancia real calculada.
 - **Zona**: nombre, tipo, ancho, fondo y centro X y Z. Al seleccionarla aparecen manijas en las esquinas para cambiar su tamaño.
 - **Pared**: largo exacto, coordenadas de inicio y final, **dividir en dos** (para borrar solo un tramo) y quitar. Sus extremos se arrastran por separado.
-- **Esquina del contorno**: coordenadas X y Z exactas, los dos lados que se juntan ahí y quitar.
-- **Lado del contorno**: largo exacto (corre el lado siguiente, así un rectángulo sigue siendo rectángulo), mover hacia afuera o adentro una distancia exacta, dividir en dos, enderezar, poner un portón y **quitar el lado** (junta sus dos esquinas).
+- **Forma sin nada seleccionado**: elegir sólido o hueco, las formas para agregar (clic en la forma y luego en el plano) y la lista de piezas.
+- **Pieza del edificio**: sólido o hueco, ancho, fondo, centro X y Z, giro, girar 90°, duplicar y quitar. En las piezas a mano, cada esquina se arrastra o se escribe con X y Z; doble clic en un lado agrega una y doble clic en una esquina la quita. Avisa si una pieza quedó suelta (solo cuenta la parte más grande) o si un hueco quedó encerrado (no se puede representar).
 - **Portón**: nombre y si es **de entrada**, **de salida** o ambos.
-- **Nada seleccionado**: nombre de la planta y tamaño de la bodega. Avisa si alguna máquina quedó fuera del contorno.
+- **Nada seleccionado**: nombre de la planta y medidas de la bodega. Avisa si alguna máquina quedó fuera del contorno.
+
+Las piezas se guardan en `plant.parts`; el contorno (`plant.outline`) es su suma, calculada con [`polygon-clipping`](https://github.com/mfogel/polygon-clipping) en `composeParts()` de `geometry.js`. El backend solo usa el contorno. Una planta sin piezas (vieja o leída por la IA) se toma como una sola pieza.
 
 ### Detalles de implementación
 

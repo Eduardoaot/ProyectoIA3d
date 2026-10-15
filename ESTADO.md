@@ -30,6 +30,11 @@ Respaldo previo a la reestructura: commit `ea047c6`.
 - Espera con IA (historia y «Compacta con IA»): reloj, barra con avance estimado y tiempo restante (aprendido de las esperas anteriores) y el minijuego.
 - Editor: herramienta Contorno (dibujar muros exteriores con largos exactos), precisión de 1 m a 10 cm, zoom y paneo, imán y guías, lados y esquinas con medidas exactas, paredes con extremos, largo y división en tramos, zonas con manijas, flechas para mover.
 
+**Sesión 7**
+- Paso 1: sin conteo de palabras ni historia de ejemplo; el botón dice «Analizar». Notas y textos del análisis en voz impersonal (instrucciones a la IA y corrección de respaldo con `impersonal()`).
+- Editor: Contorno y Forma unidos en Forma, con piezas tipo TinkerCAD (sólidas y huecos que se suman y restan sin reiniciar el edificio; las formas predeterminadas se agregan). Botones de historial y vista, y «Reiniciar plano», dentro del plano. Sin encoger/expandir.
+- Paso 4: «Compacta con IA» espera sin minijuego (solo animación y barra); su descripción y el criterio de la IA van en una nota debajo de las tarjetas.
+
 ## Pendiente
 1. `llama3.1:8b` sin tarjeta de video tarda ~2 min por historia y 1–2 min la compacta; un modelo en la nube lo haría en segundos.
 2. La foto aérea se sube a mano; no se genera ni se lee con visión.

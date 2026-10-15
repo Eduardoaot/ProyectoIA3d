@@ -125,7 +125,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 			setShowOriginal(false)
 			view.current?.setLayout(alt.positions, { legs: alt.metrics.legs })
 		} catch {
-			setCompact({ loading: false, error: 'No pude calcularla. Intenta de nuevo.' })
+			setCompact({ loading: false, error: 'No se pudo calcular. Intenta de nuevo.' })
 		}
 	}
 
@@ -202,7 +202,6 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 							<div key={a.id} className="alt alt--ask">
 								<span className="alt-best">IA</span>
 								<h3>{a.name}</h3>
-								<p className="small">La IA lee tus estaciones, el flujo y las zonas, decide qué conviene juntar y desde qué esquina empezar. Luego se acomodan las máquinas en el menor espacio sin alargar el recorrido.</p>
 								<Btn size="small" onClick={askCompact} disabled={compact.loading}>
 									{compact.loading ? 'Pensando…' : 'Calcular con IA'}
 								</Btn>
@@ -231,20 +230,28 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 								</span>
 							)}
 							<p className="small">{a.summary}</p>
-							{a.reasons?.length > 0 && (
-								<ul className="alt-reasons small">
-									{a.reasons.map((r, i) => (
-										<li key={i}>{r}</li>
-									))}
-								</ul>
-							)}
 							<p className="small">Obra: {a.works}</p>
 						</button>
 					)
 				})}
 			</Appear>
 
-			{compact.loading && <WaitPanel kind="compact" className="reading--wide" title="La IA está buscando el acomodo más compacto…" game="Juega mientras la IA acomoda las máquinas" />}
+			{/* La explicación de la opción con IA va aparte, para que su tarjeta mida lo mismo que las demás. */}
+			<div className="alt-note small">
+				<strong>Compacta con IA.</strong> Se analizan las estaciones, el flujo y las zonas para decidir qué conviene juntar y desde qué esquina empezar. Después las máquinas se acomodan en el menor espacio sin alargar el recorrido.
+				{aiAlt?.reasons?.length > 0 && (
+					<>
+						{' '}Criterio aplicado:
+						<ul className="alt-reasons">
+							{aiAlt.reasons.map((r, i) => (
+								<li key={i}>{r}</li>
+							))}
+						</ul>
+					</>
+				)}
+			</div>
+
+			{compact.loading && <WaitPanel kind="compact" className="reading--wide" title="Buscando el acomodo más compacto…" game={null} />}
 
 			<Appear style={{ marginTop: 32 }}>
 				<PlantView

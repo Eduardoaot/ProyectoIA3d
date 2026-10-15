@@ -5,10 +5,6 @@ import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 
-const EXAMPLE_STORY = `Mi padre tenía un taller de vidrios para sala y comedor. Era una transformadora de vidrio: recibía una lámina y tenía una mesa donde cortaban, una pulidora, sandblasting, una lavadora, la oficina y un pulpo para mover las láminas. Trabajaban unas 12 personas y salían unas 80 piezas al día en 3 camiones. Todo estaba en una bodega con portones sobre la calle. Ahí mismo se hacían las ventas, los pagos y la nómina.
-
-No tengo los detalles porque fue hace mucho tiempo. Lo que sí recuerdo es que lo terminado se amontonaba en despacho y que uno de los portones siempre estaba tapado con retazos.`
-
 function Switch({ on, onChange, children }) {
     return (
         <button type="button" className="switch" role="switch" aria-checked={on} onClick={() => onChange(!on)}>
@@ -46,7 +42,7 @@ function Assumptions({ draft, setDraft, catalog, info }) {
             <div className="chart-head">
                 <div>
                     <h3>Supuestos para calcular</h3>
-                    <p className="small">Sin supuestos solo veo recorridos y qué tan cerca debe estar cada área. Con ellos calculo capacidad, cuello de botella y tiempos.</p>
+                    <p className="small">Sin supuestos solo se analizan recorridos y cercanía entre áreas. Con ellos también se calculan capacidad, cuello de botella y tiempos.</p>
                 </div>
 
                 <Switch on={on} onChange={(v) => setDraft({ ...draft, use_assumptions: v })}>
@@ -58,7 +54,7 @@ function Assumptions({ draft, setDraft, catalog, info }) {
                 <>
                     {info?.ai_assumptions?.length > 0 && (
                         <details className="how">
-                            <summary>Lo que supuso la IA al leer tu historia</summary>
+                            <summary>Supuestos tomados en el análisis</summary>
                             <ul>
                                 {info.ai_assumptions.map((assumption, idx) => (
                                     <li key={idx}>{assumption}</li>
@@ -268,24 +264,24 @@ function ProcessSummary({ draft, setDraft }) {
 
 const AGENT_NAMES = { edificio: 'forma y portones', zonas: 'zonas', acomodo: 'lugar de cada máquina', paredes: 'paredes' }
 
-/* Qué tanto del espacio pudo leer la IA y con qué agentes. */
+/* Qué tanto del espacio se pudo analizar y con qué agentes. */
 function SpatialNote({ spatial }) {
     const used = spatial.agents || []
     if (!used.length)
         return (
             <p className="small spatial-note">
-                Tu historia casi no describe el espacio, así que solo leí el proceso. Si cuentas medidas, lados, dónde está cada área o qué paredes hay, la IA también arma la forma, las zonas y las paredes.
+                La descripción casi no menciona el espacio, por lo que solo se analizó el proceso. Con medidas, lados, ubicación de cada área o paredes, el análisis también genera la forma, las zonas y las paredes.
             </p>
         )
     return (
         <p className="small spatial-note">
-            Lectura del espacio con {used.length} agentes ({used.map((k) => AGENT_NAMES[k] || k).join(', ')}){spatial.model ? ` usando ${spatial.model}` : ''}. Lo que tu historia no confirma se descarta.
+            Análisis del espacio con {used.length} agentes ({used.map((k) => AGENT_NAMES[k] || k).join(', ')}){spatial.model ? `, modelo ${spatial.model}` : ''}. Se descarta lo que la descripción no confirma.
         </p>
     )
 }
 
 export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving }) {
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0
+    const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
 
@@ -303,7 +299,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                     <b>Paso 1 de 6</b>
                     <span>Detalles y plano</span>
                 </span>
-                <RevealTitle text="Cuéntame cómo es tu planta." />
+                <RevealTitle text="Describe cómo es tu planta." />
                 <p className="lede">Describe tu planta y proceso. La IA arma un primer plano. Luego lo corriges tú: mueve máquinas, dibuja rutas, paredes y zonas hasta que quede como realmente es tu espacio.</p>
             </header>
 
@@ -313,31 +309,23 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         <div className="story-sheet" style={{ border: 0 }}>
                             <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Tengo mi planta productora…" aria-label="Detalles de tu planta" style={{ minHeight: 260 }} />
                         </div>
-                        <div className="story-bar">
-                            <span className="small num">{words < 6 ? `${words} palabras. Escribe al menos 6.` : `${words} palabras`}</span>
+                        <div className="story-bar" style={{ justifyContent: 'flex-end' }}>
                             <Btn
                                 onClick={async () => {
                                     if (await onRead()) scrollToEditor()
                                 }}
-                                disabled={reading || words < 6}
+                                disabled={reading || empty}
                             >
-                                {reading ? 'Leyendo…' : 'Leer con IA'}
+                                {reading ? 'Analizando…' : 'Analizar'}
                             </Btn>
                         </div>
-                    </div>
-
-                    <div className="story-alt">
-                        <button type="button" className="link-btn" onClick={() => setText(EXAMPLE_STORY)} disabled={reading}>
-                            Usar la historia de ejemplo
-                        </button>
-                        <span className="small">Llena el cuadro con un taller de vidrio. Luego pulsa «Leer con IA».</span>
                     </div>
 
                     {error && <p className="small">{error}</p>}
                 </Appear>
 
                 <div className="stack">
-                    {reading && <WaitPanel kind="story" title="Interpretando el acomodo de tu planta…" game="Juega mientras la IA lee" />}
+                    {reading && <WaitPanel kind="story" title="Interpretando el acomodo de tu planta…" game="Juega mientras se analiza tu planta" />}
 
                     {!reading && !info && (
                         <div className="block">
@@ -361,7 +349,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         <Appear className="block">
                             <div className="chart-head" style={{ marginBottom: 12 }}>
                                 <h3>Tu proceso</h3>
-                                <span className="small">Según la interpretación de la IA</span>
+                                <span className="small">Resultado del análisis</span>
                             </div>
 
                             {draft && <ProcessSummary draft={draft} setDraft={setDraft} />}
