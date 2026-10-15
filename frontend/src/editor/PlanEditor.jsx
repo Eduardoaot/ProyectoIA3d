@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { api, fmt } from '../api'
 import { arrowPoints, dims, midOf, pathD, rectOf, shortName, snap, straight, uid } from './geometry'
 import Inspector from './Inspector'
+import { applyOps, diffOps, locate } from './operations'
 
 const TOOLS_FULL = [
     { id: 'select', label: 'Mover', key: 'V', tip: 'Selecciona y arrastra máquinas, zonas, paredes y portones.' },
@@ -33,7 +34,7 @@ function useLegs(plant, positions) {
     return out
 }
 
-export default function PlanEditor({ plant, positions, onChange, catalog, mode = 'full', onMetrics, title }) {
+export default function PlanEditor({ plant, positions, onChange: emitChange, catalog, mode = 'full', onMetrics, title, controller }) {
     const full = mode === 'full'
     const svg = useRef(null)
     const box = useRef(null)
@@ -48,6 +49,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     const undo = useRef([])
     const redo = useRef([])
     const [, force] = useState(0)
+    const [notice, setNotice] = useState('')
     const live = useLegs(plant, positions)
     const { w: W, d: D } = plant.size
     const st = useMemo(() => Object.fromEntries(plant.stations.map((s) => [s.id, s])), [plant.stations])
@@ -57,33 +59,44 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
         onMetrics?.(live)
     }, [live])
 
-    const remember = () => {
-        undo.current.push({ plant, positions })
-        if (undo.current.length > 100) undo.current.shift()
-        redo.current = []
-        force((k) => k + 1)
+    const applyBatch = (ops, remember = true) => {
+        if (!ops.length) return
+        try {
+            const result = applyOps({ ...plant, layout: positions }, ops)
+            if (remember) {
+                undo.current.push(result.inverse)
+                if (undo.current.length > 100) undo.current.shift()
+                redo.current = []
+            }
+            if (drag.current) drag.current.last = result.plant
+            emitChange(result.plant, result.plant.layout)
+            setNotice('')
+            force((k) => k + 1)
+            return result
+        } catch (error) { setNotice(error.message); return null }
     }
-
-    const commit = (np = plant, npos = positions) => {
-        remember()
-        onChange(np, npos)
-    }
+    const onChange = (np, npos) => applyBatch(diffOps({ ...plant, layout: positions }, { ...np, layout: npos }), false)
+    const commit = (np = plant, npos = positions) => applyBatch(diffOps({ ...plant, layout: positions }, { ...np, layout: npos }))
 
     const doUndo = () => {
         const prev = undo.current.pop()
         if (!prev) return
-        redo.current.push({ plant, positions })
-        onChange(prev.plant, prev.positions)
+        const result = applyBatch(prev, false)
+        if (result) redo.current.push(result.inverse)
+        else undo.current.push(prev)
         force((k) => k + 1)
     }
 
     const doRedo = () => {
         const next = redo.current.pop()
         if (!next) return
-        undo.current.push({ plant, positions })
-        onChange(next.plant, next.positions)
+        const result = applyBatch(next, false)
+        if (result) undo.current.push(result.inverse)
+        else redo.current.push(next)
         force((k) => k + 1)
     }
+
+    useImperativeHandle(controller, () => ({ apply: applyBatch, undo: doUndo }))
 
     const toPt = (e) => {
         const pt = svg.current.createSVGPoint()
@@ -192,6 +205,8 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     })
 
     const startDrag = (e, info) => {
+        const element = locate(plant, info.id)?.element
+        if (element?.locked) { setNotice(element.lock_reason || 'Elemento bloqueado: desbloquéalo para moverlo.'); return }
         drag.current = { ...info, snap: { plant, positions }, moved: false }
         svg.current.setPointerCapture?.(e.pointerId)
     }
@@ -199,10 +214,6 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     const markMoved = (d) => {
         if (d.moved) return
         d.moved = true
-        undo.current.push(d.snap)
-        if (undo.current.length > 100) undo.current.shift()
-        redo.current = []
-        force((k) => k + 1)
     }
 
     const onDownStation = (e, s) => {
@@ -318,6 +329,11 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     }
 
     const onUp = () => {
+        const moved = drag.current
+        if (moved?.moved && moved.last) {
+            const inverse = diffOps(moved.last, { ...moved.snap.plant, layout: moved.snap.positions }, true)
+            if (inverse.length) { undo.current.push(inverse); redo.current = []; force((k) => k + 1) }
+        }
         if (draft) {
             const { type, x1, z1, x2, z2 } = draft
 
@@ -349,6 +365,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
 
     return (
         <div className="editor" ref={box} tabIndex={0} aria-label={title || 'Editor del plano'}>
+            {notice && <p className="editor-notice" role="status">{notice}</p>}
             <div className="editor-bar">
                 <div className="seg" role="group" aria-label="Herramientas">
                     {tools.map((t) => (
@@ -438,7 +455,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
                                 <g key={zn.id} onPointerDown={(e) => onDownZone(e, zn)} style={{ cursor: full && tool === 'select' ? 'move' : undefined }}>
                                 <rect x={zn.x - zn.w / 2} y={zn.z - zn.d / 2} width={zn.w} height={zn.d} fill={zn.kind === 'bloqueado' ? 'url(#hatch)' : '#eeeeee'} fillOpacity={zn.kind === 'bloqueado' ? 0.5 : 1} stroke="#000" strokeWidth={on ? 0.3 : 0.12} strokeDasharray={on ? undefined : '0.5 0.35'} />
                                 <text x={zn.x} y={zn.z + 0.35} textAnchor="middle" fontSize="0.95" fill="#3b3b3b" pointerEvents="none">
-                                    {shortName(zn.name, 18)}
+                                    {zn.locked ? '🔒 ' : ''}{shortName(zn.name, 18)}
                                 </text>
                                 </g>
                             )
@@ -450,6 +467,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
                                 <g key={w.id} onPointerDown={(e) => onDownWall(e, w)} style={{ cursor: full && tool === 'select' ? 'move' : undefined }}>
                                 <line x1={w.x1} y1={w.z1} x2={w.x2} y2={w.z2} stroke="transparent" strokeWidth={1.4} />
                                 <line x1={w.x1} y1={w.z1} x2={w.x2} y2={w.z2} stroke="#000" strokeWidth={on ? 0.5 : 0.3} strokeLinecap="square" />
+                                {w.locked && <text x={w.x1} y={w.z1} fontSize="0.7">🔒</text>}
                                 </g>
                             )
                         })}
@@ -482,7 +500,8 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
 
                             return (
                                 <g key={s.id} onPointerDown={(e) => onDownStation(e, s)} style={{ cursor: tool === 'select' ? 'grab' : tool === 'route' ? 'crosshair' : undefined }}>
-                                <rect x={r.x} y={r.z} width={r.w} height={r.d} fill={on || start ? '#000' : '#fff'} stroke="#000" strokeWidth={on ? 0.3 : 0.18} />
+                                <rect x={r.x} y={r.z} width={r.w} height={r.d} fill={on || start ? '#000' : '#fff'} stroke="#000" strokeWidth={on ? 0.3 : 0.18} strokeDasharray={s.locked ? '0.4 0.25' : undefined} />
+                                {s.locked && <text x={r.x + 0.15} y={r.z + 0.7} fontSize="0.65" pointerEvents="none">🔒</text>}
                                 <text x={p[0]} y={p[1] - 0.05} textAnchor="middle" fontSize="0.9" fontWeight="700" fill={on || start ? '#fff' : '#000'} pointerEvents="none">
                                     {shortName(s.name, Math.max(6, Math.floor(r.w * 1.9)))}
                                 </text>
@@ -501,7 +520,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
                                 <g key={g.id} onPointerDown={(e) => onDownGate(e, g)} style={{ cursor: full && tool === 'select' ? 'ew-resize' : undefined }}>
                                 <rect x={g.x - 2.2} y={D - 0.35} width={4.4} height={1} fill={role ? '#000' : '#fff'} stroke="#000" strokeWidth={on ? 0.3 : 0.15} />
                                 <text x={g.x} y={D + 1.9} textAnchor="middle" fontSize="0.9" fontWeight={role ? 800 : 500} fill="#000" pointerEvents="none">
-                                    {g.id} {role}
+                                    {g.locked ? '🔒 ' : ''}{g.id} {role}
                                 </text>
                                 </g>
                             )
@@ -518,7 +537,17 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
                     <p className="editor-tip small">{tool === 'route' && routeFrom ? `Desde «${st[routeFrom]?.name}»: clic en la máquina de destino.` : activeTip}</p>
                 </div>
 
-                <Inspector plant={plant} positions={positions} sel={sel} setSel={setSel} commit={commit} rotate={rotate} remove={remove} catalog={catalog} full={full} live={live} />
+                <div>
+                    {sel && sel.type !== 'route' && locate(plant, sel.id) && <div className="inspector-lock">
+                        <button type="button" className="btn btn--small" onClick={() => {
+                            const e = locate(plant, sel.id).element
+                            const reason = e.locked ? '' : window.prompt('Motivo del bloqueo', 'Posición fijada por el usuario')
+                            if (reason !== null) applyBatch([{ op: e.locked ? 'unlock' : 'lock', id: e.id, reason }])
+                        }}>{locate(plant, sel.id).element.locked ? '🔒 Desbloquear' : 'Bloquear'}</button>
+                        <p className="small">{locate(plant, sel.id).element.lock_reason}</p>
+                    </div>}
+                    <Inspector plant={plant} positions={positions} sel={sel} setSel={setSel} commit={commit} rotate={rotate} remove={remove} catalog={catalog} full={full} live={live} />
+                </div>
             </div>
         </div>
     )

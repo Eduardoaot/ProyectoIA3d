@@ -1,5 +1,15 @@
 # Editor de Cauce · Fase A0
 
+## A2: operaciones, fijos y guardado
+
+El proyecto se guarda en `cauce-proyecto-v3`. La primera apertura copia los datos
+de v2 sin escribir ni eliminar su clave. Los obstáculos existentes conservan su
+forma de zona y se marcan fijos. Selecciona un elemento y pulsa «Bloquear» para
+añadir un motivo; los fijos rechazan movimiento, borrado y cambio de dimensiones.
+Deshacer (`Ctrl+Z`) y rehacer (`Ctrl+Y` / `Ctrl+Shift+Z`) funcionan por lotes de
+operaciones; un arrastre o una propuesta aplicada es un solo paso. Los cambios
+de supuestos también entran en ese historial.
+
 ## A1: analizar y aplicar propuestas
 
 «Interpretar historia» genera un borrador. «Analizar» guarda la revisión enviada al

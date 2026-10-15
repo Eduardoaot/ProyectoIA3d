@@ -1,5 +1,19 @@
 # Estado del frontend (Astra)
 
+## A2 · Operaciones y almacenamiento v3
+
+- `applyOps` es la vía de edición: operaciones atómicas con inversas, incluso
+  arrastres completos y cambios de supuestos. Deshacer/rehacer usa lotes.
+- Adaptador `diffOps` conserva `layout[id]`, paredes, zonas y portones actuales.
+  Metadatos locales `_collection`, `_position`, `_index`, `_unset` preservan forma
+  y orden en las inversas; `$plant` identifica propiedades de la bodega. No se
+  envían al backend ni alteran el contrato de operaciones del asistente.
+- Bloqueo y desbloqueo con motivo. Rechazo de mover, borrar o redimensionar fijos.
+- Migración por copia a `cauce-proyecto-v3`; v2 nunca se escribe ni se elimina.
+  El frontend conserva campos originales y envía plantas v3 completas.
+- Pruebas: inversas de cada operación, lotes atómicos, fijos, adaptación y migración.
+- Verificación A2: 55 pruebas aprobadas; lint sin errores y compilación correcta.
+
 ## A1 · Trabajo manual y propuestas
 
 - A0 publicada en `ae47881`. Se continúa en `feature/ParteB` con un commit y push por fase.

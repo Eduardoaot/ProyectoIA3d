@@ -71,6 +71,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 	const full = plant.use_assumptions && cur.daily_m != null
 
 	const view = useRef(null)
+	const editor = useRef(null)
 
 	const [showOriginal, setShowOriginal] = useState(!redesign.choice)
 	const [preview, setPreview] = useState(null)
@@ -112,15 +113,16 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 		const proposal = alts.find((a) => a.id === id)
 		if (!proposal) return
 		const result = protectProposal(selPlant, positions || plant.layout, proposal.positions)
-		setHistory((items) => [...items, redesign])
-		setRedesign({ choice: 'propio', custom: { plant: selPlant, positions: result.positions }, metrics: null })
+		const ops = Object.entries(result.positions).filter(([id, p]) => JSON.stringify(p) !== JSON.stringify(positions[id])).map(([id, p]) => ({ op: 'move', id, to: { x: p[0], z: p[1], rot: p[2] || 0 } }))
+		editor.current?.apply(ops)
+		setHistory((items) => [...items, true])
 		setPreview(null)
 		setShowOriginal(false)
 		setNotice(result.rejected.length ? `Se conservaron los fijos: ${result.rejected.join('; ')}` : 'Propuesta aplicada. Analiza el rediseño para obtener sus métricas.')
 	}
 	const undoApply = () => {
 		if (!history.length) return
-		setRedesign(history.at(-1))
+		editor.current?.undo()
 		setHistory((items) => items.slice(0, -1))
 		setPreview(null)
 		setNotice('Aplicación deshecha.')
@@ -241,7 +243,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 						</div>
 					</div>
 
-					<PlanEditor plant={selPlant} positions={positions} onChange={onEdit} catalog={catalog} mode="full" onMetrics={onLive} title="Editor del rediseño" />
+					<PlanEditor controller={editor} plant={selPlant} positions={positions} onChange={onEdit} catalog={catalog} mode="full" onMetrics={onLive} title="Editor del rediseño" />
 
 					<Appear className="kpis" style={{ marginTop: 32, gridTemplateColumns: `repeat(${full ? 4 : 1}, minmax(0, 1fr))` }}>
 						{metrics ? (

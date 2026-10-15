@@ -4,6 +4,7 @@ import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 import { readPlantFile } from '../importProject'
+import { diffOps } from '../editor/operations'
 
 function Timer() {
     const [seconds, setSeconds] = useState(0)
@@ -149,6 +150,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
     const words = text.trim() ? text.trim().split(/\s+/).length : 0
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
+    const planController = useRef(null)
     const importInput = useRef(null)
     const [importing, setImporting] = useState(false)
     const [importError, setImportError] = useState(null)
@@ -283,10 +285,10 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         <h2>Tu plano</h2>
                     </div>
 
-                    <PlanEditor key={editorVersion} plant={draft} positions={draft.layout} onChange={(p, pos) => setDraft({ ...p, layout: pos })} catalog={catalog} mode="full" onMetrics={setMetrics} />
+                    <PlanEditor controller={planController} key={editorVersion} plant={draft} positions={draft.layout} onChange={(p, pos) => setDraft({ ...p, layout: pos })} catalog={catalog} mode="full" onMetrics={setMetrics} />
 
                     <div style={{ marginTop: 24 }}>
-                        <Assumptions draft={draft} setDraft={setDraft} catalog={catalog} info={info} />
+                        <Assumptions draft={draft} setDraft={(next) => planController.current?.apply(diffOps(draft, next))} catalog={catalog} info={info} />
                     </div>
 
                     <div className="row" style={{ marginTop: 32 }}>

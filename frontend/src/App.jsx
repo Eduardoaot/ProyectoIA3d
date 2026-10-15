@@ -16,6 +16,8 @@ import Story from './steps/Story'
 import Summary from './steps/Summary'
 import Workshop from './steps/Workshop'
 import { isStale } from './revisions'
+import { migratePlant } from './storage'
+import { applyOps, diffOps } from './editor/operations'
 
 const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen', 'Taller de mejora (extra)']
 
@@ -83,7 +85,7 @@ export default function App() {
 
         try {
             const r = await api.story(project.text)
-            update({ draft: r.plant, info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error } })
+            update({ draft: migratePlant(r.plant), info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error } })
             setReading(false)
 
             return true
@@ -97,7 +99,7 @@ export default function App() {
     const blank = () => update({ draft: blankPlant(defaultParams()), info: { source: 'Plano vacío', notes: [] } })
 
     const importPlant = (imported, filename) => {
-        update({ draft: imported, info: { source: 'Archivo JSON', notes: [`Importado de ${filename}. Revisa el plano antes de analizarlo.`] } })
+        update({ draft: migratePlant(imported), info: { source: 'Archivo JSON', notes: [`Importado de ${filename}. Revisa el plano antes de analizarlo.`] } })
         setError(null)
         notify(`Proyecto importado: ${imported.name}`)
     }
@@ -143,7 +145,10 @@ export default function App() {
             setText={(t) => update((p) => ({ text: typeof t === 'function' ? t(p.text) : t }))}
             info={info}
             draft={draft}
-            setDraft={(d) => update({ draft: d })}
+            setDraft={(d) => {
+                try { update({ draft: draft ? applyOps(draft, diffOps(draft, d)).plant : d }) }
+                catch (failure) { notify(failure.message) }
+            }}
             catalog={catalog}
             reading={reading}
             error={error}

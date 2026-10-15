@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { updateProject } from './revisions'
+import { loadProject, migratePlant, PROJECT_KEY } from './storage'
 
-const KEY = 'cauce-proyecto-v2'
+const KEY = PROJECT_KEY
 
 export const EMPTY_GAME = { missions: [], done: {} }
 
@@ -20,7 +21,7 @@ export const EMPTY = {
 }
 
 export function blankPlant(params = {}) {
-    return {
+    return migratePlant({
         name: 'Mi planta',
         industry: '',
         size: { w: 30, d: 16 },
@@ -37,13 +38,12 @@ export function blankPlant(params = {}) {
         use_assumptions: false,
         params,
         layout: {},
-    }
+    })
 }
 
 function load() {
     try {
-        const raw = localStorage.getItem(KEY)
-        return raw ? { ...EMPTY, ...JSON.parse(raw) } : EMPTY
+        return loadProject(localStorage, EMPTY)
     } catch {
         return EMPTY
     }
