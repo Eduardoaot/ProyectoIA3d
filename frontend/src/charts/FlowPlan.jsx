@@ -2,6 +2,8 @@ import { motion } from 'motion/react'
 import { fmt } from '../api'
 import { arrowPoints, midOf, pathD, rectOf, shortName, straight } from '../editor/geometry'
 import { useTip } from './Tip'
+import StationGlyph from '../editor/StationGlyph'
+import { parallelPath } from '../editor/display'
 
 export default function FlowPlan({ plant, positions, legs, title, total, unit = 'm por pieza', bottleneck, compact = false, still = false }) {
     const { node, bind } = useTip()
@@ -60,17 +62,15 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
                         </g>
                     )
                 })}
-                {plant.stations.map((s) => {
+                {plant.stations.map((s, index) => {
                 const p = positions[s.id]
                 if (!p) return null
                 const r = rectOf(s, p)
                 const hot = s.id === bottleneck
                 return (
                     <g key={s.id} {...bind(<b>{s.name}</b>)}>
-                    <motion.rect initial={false} animate={{ x: r.x, y: r.z, width: r.w, height: r.d }} transition={{ type: 'spring', stiffness: 90, damping: 18 }} fill={hot ? '#000' : '#fff'} stroke="#000" strokeWidth={0.22} />
-                    <motion.text initial={false} animate={{ x: p[0], y: p[1] + 0.35 }} transition={{ type: 'spring', stiffness: 90, damping: 18 }} textAnchor="middle" fontSize={compact ? 0.85 : 1} fontWeight="700" fill={hot ? '#fff' : '#000'}>
-                        {shortName(s.name, Math.max(5, Math.floor(r.w * 1.8)))}
-                    </motion.text>
+                    <rect x={r.x} y={r.z} width={r.w} height={r.d} fill="transparent" />
+                    <StationGlyph station={s} position={p} index={index} selected={hot} />
                     </g>
                 )
                 })}
@@ -80,7 +80,7 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
                     const b = positions[rt.to]
                     if (!a || !b) return null
                     const l = legBy[rt.id]
-                    const pts = l?.path?.length > 1 ? l.path : straight(a, b)
+                    const pts = parallelPath(rt, plant.routes, l?.path?.length > 1 ? l.path : straight(a, b))
                     const m = midOf(pts)
                     return (
                         <g
@@ -115,6 +115,7 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
                     )
                 })}
             </svg>
+            <ol className="plan-legend">{plant.stations.map((s) => <li key={s.id}>{s.name}{(s.count || 1) > 1 ? ` ×${s.count}` : ''}</li>)}</ol>
 
             {node}
         </div>

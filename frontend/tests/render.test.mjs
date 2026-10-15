@@ -31,7 +31,8 @@ before(async () => {
 after(async () => { await server?.close() })
 
 for (const version of ['v2', 'v3']) {
-    test(`the editor renders every station and the JSON import button with ${version}`, async () => {
+    test(`the editor renders every station and the JSON import button with ${version}`, async (t) => {
+        const errors = t.mock.method(console, 'error', () => {})
         const plant = await fixture(`transformadores-${version}`)
         const html = renderToStaticMarkup(createElement(Story, {
             text: '', draft: plant, info: { source: 'Archivo JSON', notes: [] },
@@ -42,6 +43,7 @@ for (const version of ['v2', 'v3']) {
         assert.match(html, /Archivo de proyecto JSON/)
         for (const station of plant.stations) assert.ok(html.includes(station.name), station.name)
         assert.doesNotMatch(html, /Según la interpretación de la IA/)
+        assert.equal(errors.mock.callCount(), 0)
     })
 
     test(`the printable report supports ${version} analysis and legacy saved projects`, async () => {

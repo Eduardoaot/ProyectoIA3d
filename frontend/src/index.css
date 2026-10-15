@@ -2258,3 +2258,8 @@ details.how ul {
 }
 .analysis-status { padding: 12px 24px; background: #f3f1e8; border-bottom: 1px solid #b7ac81; overflow-wrap: anywhere; }
 .editor-notice, .inspector-lock { padding: 12px; background: #f3f1e8; }
+.plan-legend { columns: 2; padding: 8px 8px 8px 28px; font-size: 12px; line-height: 1.7; }
+.plan-legend li { break-inside: avoid; overflow-wrap: anywhere; }
+.station-quantity { margin: 12px 0; }
+.editor-canvas svg { touch-action: none; overscroll-behavior: contain; }
+@media print { .plan-legend { font-size: 8pt; } }

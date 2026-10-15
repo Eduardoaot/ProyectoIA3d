@@ -1,5 +1,16 @@
 # Estado del frontend (Astra)
 
+## A3 · Cantidades y plano legible
+
+- Inspector: `count`, `unit_w`, `unit_d`, `arrangement`, `ops_per_unit`, rango
+  `t_cycle_min`, `t_source` y `batch`. Los cambios de cantidad ajustan el tamaño
+  del bloque en una operación explícita; nunca redistribuyen otras estaciones.
+- Expandir/agrupar solo cambia la vista. Etiquetas adaptativas, título completo
+  y leyenda numerada compartidos por editor y plano imprimible. Etiqueta ×N en 3D.
+- Rueda para zoom; Alt/central para paneo; restablecer vista. Las rutas paralelas
+  se separan visualmente sin cambiar las métricas recibidas del motor.
+- Pruebas: cuadrículas fila/columna/bloque, caso ×10, etiquetas y rutas opuestas.
+
 ## A2 · Operaciones y almacenamiento v3
 
 - `applyOps` es la vía de edición: operaciones atómicas con inversas, incluso

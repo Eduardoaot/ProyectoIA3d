@@ -1,5 +1,14 @@
 # Editor de Cauce · Fase A0
 
+## A3: cantidades y navegación
+
+Selecciona una estación para editar unidades, dimensiones por unidad, disposición,
+operarios, rango de ciclo, fuente y lote. Cambiar cantidad/disposición ajusta solo
+el bloque seleccionado; los fijos rechazan ese cambio. «Expandir unidades» muestra
+sus divisiones sin modificar datos. Rueda para zoom, Alt + arrastrar o botón central
+para paneo; «Ajustar vista» restaura el encuadre. Los nombres completos aparecen
+en la leyenda del plano y del documento imprimible, aunque el bloque use un número.
+
 ## A2: operaciones, fijos y guardado
 
 El proyecto se guarda en `cauce-proyecto-v3`. La primera apertura copia los datos

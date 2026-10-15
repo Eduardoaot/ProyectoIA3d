@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { fmt } from '../api'
+import { quantityPatch } from './display'
 
 function Field(props) {
     return <FieldInner key={String(props.value)} {...props} />
@@ -29,7 +30,7 @@ function FieldInner({ label, value, onCommit, type = 'text', step, min, suffix }
     )
 }
 
-export default function Inspector({ plant, positions, sel, setSel, commit, rotate, remove, catalog, full, live }) {
+export default function Inspector({ plant, positions, sel, setSel, commit, rotate, remove, catalog, full, live, expanded = false, onToggleExpanded }) {
     const names = Object.fromEntries(plant.stations.map((s) => [s.id, s.name]))
     const setStation = (id, patch) => commit({ ...plant, stations: plant.stations.map((s) => (s.id === id ? { ...s, ...patch } : s)) }, positions)
     const setZone = (id, patch) => commit({ ...plant, zones: plant.zones.map((z) => (z.id === id ? { ...z, ...patch } : z)) }, positions)
@@ -53,6 +54,30 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
         return (
             <aside className="inspector">
                 <span className="inspector-kicker">Máquina o área</span>
+                {full && <details open className="station-quantity"><summary>Unidades y tiempos</summary>
+                    <Field label="Cantidad" type="number" min={1} step={1} value={s.count || 1} onCommit={(count) => setStation(s.id, quantityPatch(s, { count: Math.floor(count) }))} />
+                    <div className="field-row">
+                        <Field label="Ancho por unidad" type="number" min={0.1} step={0.1} value={s.unit_w || s.w} suffix="m" onCommit={(unit_w) => setStation(s.id, quantityPatch(s, { unit_w }))} />
+                        <Field label="Fondo por unidad" type="number" min={0.1} step={0.1} value={s.unit_d || s.d} suffix="m" onCommit={(unit_d) => setStation(s.id, quantityPatch(s, { unit_d }))} />
+                    </div>
+                    <label className="field">Disposición<select value={s.arrangement || 'fila'} onChange={(e) => setStation(s.id, quantityPatch(s, { arrangement: e.target.value }))}>
+                        {['fila', 'columna', 'bloque'].map((kind) => <option key={kind}>{kind}</option>)}
+                    </select></label>
+                    <Field label="Operarios por unidad" type="number" min={0} step={1} value={s.ops_per_unit ?? s.ops ?? 0} onCommit={(ops_per_unit) => setStation(s.id, { ops_per_unit: Math.floor(ops_per_unit) })} />
+                    <div className="field-row">
+                        <Field label="Ciclo mínimo" type="number" min={0} step={0.1} value={Array.isArray(s.t_cycle_min) ? s.t_cycle_min[0] : s.t_cycle_min ?? s.t ?? 0} suffix="min" onCommit={(min) => setStation(s.id, { t_cycle_min: [min, Math.max(min, Array.isArray(s.t_cycle_min) ? s.t_cycle_min[1] : s.t_cycle_min ?? s.t ?? min)] })} />
+                        <Field label="Ciclo máximo" type="number" min={0} step={0.1} value={Array.isArray(s.t_cycle_min) ? s.t_cycle_min[1] : s.t_cycle_min ?? s.t ?? 0} suffix="min" onCommit={(max) => setStation(s.id, { t_cycle_min: [Math.min(max, Array.isArray(s.t_cycle_min) ? s.t_cycle_min[0] : s.t_cycle_min ?? s.t ?? max), max] })} />
+                    </div>
+                    <label className="field">Fuente del tiempo<select value={s.t_source || 'supuesto'} onChange={(e) => setStation(s.id, { t_source: e.target.value })}>
+                        {['medido', 'estimado', 'supuesto', 'usuario'].map((source) => <option key={source}>{source}</option>)}
+                    </select></label>
+                    <label><input type="checkbox" checked={!!s.batch} onChange={(e) => setStation(s.id, { batch: e.target.checked ? { size: 1, t_min: 0 } : null })} /> Proceso por lote</label>
+                    {s.batch && <div className="field-row">
+                        <Field label="Piezas por lote" type="number" min={1} step={1} value={s.batch.size} onCommit={(size) => setStation(s.id, { batch: { ...s.batch, size: Math.floor(size) } })} />
+                        <Field label="Minutos por lote" type="number" min={0} step={0.1} value={s.batch.t_min} onCommit={(t_min) => setStation(s.id, { batch: { ...s.batch, t_min } })} />
+                    </div>}
+                    {(s.count || 1) > 1 && <button type="button" className="btn btn--ghost btn--small" onClick={onToggleExpanded}>{expanded ? 'Agrupar unidades' : 'Expandir unidades'}</button>}
+                </details>}
 
                 {full ? <Field label="Nombre" value={s.name} onCommit={(v) => setStation(s.id, { name: v.trim() || s.name })} /> : <h3>{s.name}</h3>}
 

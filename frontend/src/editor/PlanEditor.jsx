@@ -3,6 +3,8 @@ import { api, fmt } from '../api'
 import { arrowPoints, dims, midOf, pathD, rectOf, shortName, snap, straight, uid } from './geometry'
 import Inspector from './Inspector'
 import { applyOps, diffOps, locate } from './operations'
+import StationGlyph from './StationGlyph'
+import { parallelPath } from './display'
 
 const TOOLS_FULL = [
     { id: 'select', label: 'Mover', key: 'V', tip: 'Selecciona y arrastra máquinas, zonas, paredes y portones.' },
@@ -50,10 +52,19 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
     const redo = useRef([])
     const [, force] = useState(0)
     const [notice, setNotice] = useState('')
+    const [expanded, setExpanded] = useState({})
+    const [viewport, setViewport] = useState(null)
+    const pan = useRef(null)
     const live = useLegs(plant, positions)
     const { w: W, d: D } = plant.size
+    const frame = viewport || { x: -1.5, z: -1.5, w: W + 3, d: D + 5 }
     const st = useMemo(() => Object.fromEntries(plant.stations.map((s) => [s.id, s])), [plant.stations])
-    const kindName = useMemo(() => Object.fromEntries((catalog?.kinds || []).map((k) => [k.id, k.name])), [catalog])
+    useEffect(() => {
+        const node = svg.current
+        const preventScroll = (event) => event.preventDefault()
+        node.addEventListener('wheel', preventScroll, { passive: false })
+        return () => node.removeEventListener('wheel', preventScroll)
+    }, [])
 
     useEffect(() => {
         onMetrics?.(live)
@@ -277,6 +288,13 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
     }
 
     const onMove = (e) => {
+        if (pan.current) {
+            const b = svg.current.getBoundingClientRect()
+            const p = pan.current
+            const scale = Math.max(p.frame.w / b.width, p.frame.d / b.height)
+            setViewport({ ...p.frame, x: p.frame.x - (e.clientX - p.x) * scale, z: p.frame.z - (e.clientY - p.y) * scale })
+            return
+        }
         const [x, z] = toPt(e)
         if (tool === 'route' && routeFrom) setCursorPt([x, z])
         if (draft) {
@@ -329,6 +347,7 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
     }
 
     const onUp = () => {
+        pan.current = null
         const moved = drag.current
         if (moved?.moved && moved.last) {
             const inverse = diffOps(moved.last, { ...moved.snap.plant, layout: moved.snap.positions }, true)
@@ -367,6 +386,7 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
         <div className="editor" ref={box} tabIndex={0} aria-label={title || 'Editor del plano'}>
             {notice && <p className="editor-notice" role="status">{notice}</p>}
             <div className="editor-bar">
+                <button type="button" className="btn btn--ghost btn--small" onClick={() => setViewport(null)}>Ajustar vista</button>
                 <div className="seg" role="group" aria-label="Herramientas">
                     {tools.map((t) => (
                         <button
@@ -427,7 +447,21 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
                 <div className="editor-canvas" data-tool={tool}>
                     <svg
                         ref={svg}
-                        viewBox={`-1.5 -1.5 ${W + 3} ${D + 5}`}
+                        viewBox={`${frame.x} ${frame.z} ${frame.w} ${frame.d}`}
+                        onWheel={(e) => {
+                            const [x, z] = toPt(e)
+                            const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12
+                            const width = Math.max(3, Math.min((W + 3) * 3, frame.w * factor))
+                            const scale = width / frame.w
+                            setViewport({ x: x - (x - frame.x) * scale, z: z - (z - frame.z) * scale, w: width, d: frame.d * scale })
+                        }}
+                        onPointerDownCapture={(e) => {
+                            if (e.button === 1 || e.altKey) {
+                                e.stopPropagation(); e.preventDefault()
+                                pan.current = { x: e.clientX, y: e.clientY, frame }
+                                svg.current.setPointerCapture(e.pointerId)
+                            }
+                        }}
                         onPointerMove={onMove}
                         onPointerUp={onUp}
                         onPointerLeave={() => setCursorPt(null)}
@@ -477,7 +511,7 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
                             const b = positions[r.to]
                             if (!a || !b) return null
                             const leg = legBy[r.id]
-                            const pts = leg?.path?.length > 1 ? leg.path : straight(a, b)
+                            const pts = parallelPath(r, plant.routes, leg?.path?.length > 1 ? leg.path : straight(a, b))
                             const m = midOf(pts)
                             const on = sel?.type === 'route' && sel.id === r.id
                             const width = 0.12 + Math.min(1, r.frac ?? 1) * 0.22
@@ -491,7 +525,7 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
                             )
                         })}
 
-                        {plant.stations.map((s) => {
+                        {plant.stations.map((s, index) => {
                             const p = positions[s.id]
                             if (!p) return null
                             const r = rectOf(s, p)
@@ -500,14 +534,9 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
 
                             return (
                                 <g key={s.id} onPointerDown={(e) => onDownStation(e, s)} style={{ cursor: tool === 'select' ? 'grab' : tool === 'route' ? 'crosshair' : undefined }}>
-                                <rect x={r.x} y={r.z} width={r.w} height={r.d} fill={on || start ? '#000' : '#fff'} stroke="#000" strokeWidth={on ? 0.3 : 0.18} strokeDasharray={s.locked ? '0.4 0.25' : undefined} />
-                                {s.locked && <text x={r.x + 0.15} y={r.z + 0.7} fontSize="0.65" pointerEvents="none">🔒</text>}
-                                <text x={p[0]} y={p[1] - 0.05} textAnchor="middle" fontSize="0.9" fontWeight="700" fill={on || start ? '#fff' : '#000'} pointerEvents="none">
-                                    {shortName(s.name, Math.max(6, Math.floor(r.w * 1.9)))}
-                                </text>
-                                <text x={p[0]} y={p[1] + 0.95} textAnchor="middle" fontSize="0.6" fill={on || start ? '#c2c2c2' : '#767676'} pointerEvents="none">
-                                    {shortName(kindName[s.kind] || s.kind, Math.max(6, Math.floor(r.w * 2.6)))}
-                                </text>
+                                <title>{`${s.name} ×${s.count || 1}`}</title>
+                                <rect x={r.x} y={r.z} width={r.w} height={r.d} fill="transparent" />
+                                <StationGlyph station={s} position={p} index={index} selected={on || start} expanded={!!expanded[s.id]} />
                                 </g>
                             )
                         })}
@@ -534,7 +563,8 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
                             <rect x={Math.min(draft.x1, draft.x2)} y={Math.min(draft.z1, draft.z2)} width={Math.abs(draft.x2 - draft.x1)} height={Math.abs(draft.z2 - draft.z1)} fill="#000" fillOpacity={0.12} stroke="#000" strokeWidth={0.15} strokeDasharray="0.4 0.3" pointerEvents="none" />
                         )}
                     </svg>
-                    <p className="editor-tip small">{tool === 'route' && routeFrom ? `Desde «${st[routeFrom]?.name}»: clic en la máquina de destino.` : activeTip}</p>
+                    <p className="editor-tip small">{tool === 'route' && routeFrom ? `Desde «${st[routeFrom]?.name}»: clic en la máquina de destino.` : activeTip} Rueda: zoom. Alt + arrastrar o botón central: desplazar vista.</p>
+                    <ol className="plan-legend">{plant.stations.map((s) => <li key={s.id}>{s.name}{(s.count || 1) > 1 ? ` ×${s.count}` : ''}</li>)}</ol>
                 </div>
 
                 <div>
@@ -546,7 +576,7 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
                         }}>{locate(plant, sel.id).element.locked ? '🔒 Desbloquear' : 'Bloquear'}</button>
                         <p className="small">{locate(plant, sel.id).element.lock_reason}</p>
                     </div>}
-                    <Inspector plant={plant} positions={positions} sel={sel} setSel={setSel} commit={commit} rotate={rotate} remove={remove} catalog={catalog} full={full} live={live} />
+                    <Inspector plant={plant} positions={positions} sel={sel} setSel={setSel} commit={commit} rotate={rotate} remove={remove} catalog={catalog} full={full} live={live} expanded={!!expanded[sel?.id]} onToggleExpanded={() => setExpanded((values) => ({ ...values, [sel.id]: !values[sel.id] }))} />
                 </div>
             </div>
         </div>
