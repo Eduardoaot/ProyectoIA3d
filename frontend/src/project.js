@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { updateProject } from './revisions'
 
 const KEY = 'cauce-proyecto-v2'
 
@@ -14,6 +15,8 @@ export const EMPTY = {
     printed: false,
     game: EMPTY_GAME,
     maxStep: 0,
+    plant_revision: 0,
+    analysis_revision: 0,
 }
 
 export function blankPlant(params = {}) {
@@ -59,7 +62,7 @@ export function useProject() {
         return () => clearTimeout(t)
     }, [p])
 
-    const update = (patch) => setP((prev) => ({ ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) }))
+    const update = (patch) => setP((prev) => updateProject(prev, typeof patch === 'function' ? patch(prev) : patch))
     const reset = () => setP(EMPTY)
 
     return [p, update, reset]

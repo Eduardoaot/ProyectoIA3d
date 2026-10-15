@@ -6,6 +6,7 @@ import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 import PlantView from '../three/PlantView'
+import { protectProposal } from '../revisions'
 
 export function Delta({ label, unit, before, after, decimals = 0, goodWhenUp }) {
 	const p = pct(before, after)
@@ -72,53 +73,69 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 	const view = useRef(null)
 
 	const [showOriginal, setShowOriginal] = useState(!redesign.choice)
+	const [preview, setPreview] = useState(null)
+	const [history, setHistory] = useState([])
+	const [notice, setNotice] = useState('')
+	const [evaluating, setEvaluating] = useState(false)
 	const choice = redesign.choice
 
 	const alt = alts.find((a) => a.id === choice)
 	const custom = redesign.custom ? (redesign.custom.positions ? redesign.custom : { plant, positions: redesign.custom }) : null
 
-	const sel = choice === 'propio' ? custom : alt ? { plant, positions: alt.positions } : null
+	const sel = choice === 'propio' ? custom : alt ? { plant, positions: alt.positions } : { plant, positions: plant.layout }
 	const positions = sel?.positions
 	const selPlant = sel?.plant || plant
 
 	const metrics = choice === 'propio' ? redesign.metrics : alt?.metrics
-	const name = choice === 'propio' ? 'Tu rediseño' : alt?.name
+	const name = choice === 'propio' ? 'Tu rediseño' : alt?.name || 'Plano actual'
 
 	const showing = showOriginal || !sel
 	const shownPlant = showing ? plant : selPlant
-	const shownPositions = showing ? plant.layout : positions
+	const shownPositions = preview?.positions || (showing ? plant.layout : positions)
 
 	const works = worksDiff(plant, custom?.plant)
 
-	useEffect(() => {
-		if (choice !== 'propio' || !custom) return
+	const currentCustom = useRef(custom)
+	useEffect(() => { currentCustom.current = custom }, [custom])
+	const evaluate = async () => {
+		if (!custom || evaluating) return
+		const snapshot = custom
+		setEvaluating(true)
+		try {
+			const metrics = await api.evaluate(snapshot.plant, snapshot.positions, true)
+			if (currentCustom.current === snapshot) setRedesign({ metrics })
+		} catch { setNotice('No se pudo analizar el rediseño.') }
+		finally { setEvaluating(false) }
+	}
 
-		const c = new AbortController()
-		const t = setTimeout(() => {
-			api
-				.evaluate(custom.plant, custom.positions, true, c.signal)
-				.then((m) => setRedesign({ metrics: m }))
-				.catch(() => {})
-		}, 400)
-
-		return () => {
-			clearTimeout(t)
-			c.abort()
-		}
-	}, [choice, redesign.custom])
+	const apply = (id) => {
+		const proposal = alts.find((a) => a.id === id)
+		if (!proposal) return
+		const result = protectProposal(selPlant, positions || plant.layout, proposal.positions)
+		setHistory((items) => [...items, redesign])
+		setRedesign({ choice: 'propio', custom: { plant: selPlant, positions: result.positions }, metrics: null })
+		setPreview(null)
+		setShowOriginal(false)
+		setNotice(result.rejected.length ? `Se conservaron los fijos: ${result.rejected.join('; ')}` : 'Propuesta aplicada. Analiza el rediseño para obtener sus métricas.')
+	}
+	const undoApply = () => {
+		if (!history.length) return
+		setRedesign(history.at(-1))
+		setHistory((items) => items.slice(0, -1))
+		setPreview(null)
+		setNotice('Aplicación deshecha.')
+	}
 
 	const pick = (id) => {
 		const a = alts.find((x) => x.id === id)
 		const pos = id === 'propio' ? custom.positions : a.positions
 		const legs = id === 'propio' ? redesign.metrics?.legs : a.metrics.legs
 
-		setRedesign({ choice: id })
-		setShowOriginal(false)
-
-		view.current?.setLayout(pos, { legs })
+		setPreview({ id, positions: pos, legs })
 	}
 
 	const toggleOriginal = () => {
+		setPreview(null)
 		if (showOriginal && positions) {
 			setShowOriginal(false)
 			view.current?.setLayout(positions, { legs: metrics?.legs })
@@ -129,7 +146,9 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 	}
 
 	const onEdit = (np, pos) => {
-		setRedesign({ choice: 'propio', custom: { plant: np, positions: pos }, metrics: choice === 'propio' ? redesign.metrics : null })
+		setRedesign({ choice: 'propio', custom: { plant: np, positions: pos }, metrics: null })
+		setHistory([])
+		setPreview(null)
 		setShowOriginal(false)
 	}
 
@@ -164,7 +183,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 			<header className="step-head">
 				<span className="step-index">04 / Rediseño</span>
 				<RevealTitle text="Elige cómo ordenar la planta." />
-				<p className="lede">Tres acomodos para tu flujo, respetando tu planta. Selecciona una opción para ver cómo se mueven las máquinas.</p>
+				<p className="lede">Explora las propuestas con «Ver». «Aplicar» cambia tu rediseño y permite deshacer la acción.</p>
 			</header>
 
 			<Appear className="alts" style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }}>
@@ -172,7 +191,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 					const p = a.m ? pct(cur.piece_m, a.m.piece_m) : null
 
 					return (
-						<button key={a.id} type="button" className="alt" aria-pressed={a.id === choice && !showOriginal} onClick={() => pick(a.id)}>
+						<div key={a.id} className="alt">
 							{a.id === analysis.recommended && <span className="alt-best">RECOMENDADA</span>}
 							{a.id === 'propio' && <span className="alt-best">TUYA</span>}
 
@@ -186,10 +205,16 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 							{p != null && <span className="small num">{p > 0 ? `+${p}` : p} % frente a hoy</span>}
 							<p className="small">{a.summary}</p>
 							<p className="small">Obra: {a.works}</p>
-						</button>
+							<div className="row"><button type="button" className="btn btn--ghost btn--small" onClick={() => pick(a.id)}>Ver</button>
+							{a.id !== 'propio' && <button type="button" className="btn btn--small" onClick={() => apply(a.id)}>Aplicar</button>}</div>
+						</div>
 					)
 				})}
 			</Appear>
+			{preview && <p role="status">Vista previa de propuesta. El plano no ha cambiado.</p>}
+			{notice && <p role="status">{notice}</p>}
+			<button type="button" className="btn btn--ghost btn--small" disabled={!history.length} onClick={undoApply}>Deshacer aplicación</button>
+			{custom && <button type="button" className="btn btn--small" disabled={evaluating} onClick={evaluate}>{evaluating ? 'Analizando…' : 'Analizar rediseño'}</button>}
 
 			<Appear style={{ marginTop: 32 }}>
 				<PlantView
@@ -232,7 +257,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 							)
 						) : (
 							<div className="kpi">
-								<p className="small">Calculando…</p>
+								<p className="small">Pendiente de analizar. Las métricas anteriores no describen este plano.</p>
 							</div>
 						)}
 					</Appear>

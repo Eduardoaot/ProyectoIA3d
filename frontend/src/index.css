@@ -2256,3 +2256,4 @@ details.how ul {
     transition-duration: 0.001ms !important;
   }
 }
+.analysis-status { padding: 12px 24px; background: #f3f1e8; border-bottom: 1px solid #b7ac81; overflow-wrap: anywhere; }

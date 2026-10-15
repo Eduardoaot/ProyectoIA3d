@@ -15,6 +15,7 @@ import Report from './steps/Report'
 import Story from './steps/Story'
 import Summary from './steps/Summary'
 import Workshop from './steps/Workshop'
+import { isStale } from './revisions'
 
 const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen', 'Taller de mejora (extra)']
 
@@ -48,7 +49,7 @@ export default function App() {
     const { plant, analysis, draft, info } = project
     const ch = useMemo(() => chosenOf(project), [project])
     const context = useMemo(() => slim(project, ch), [project, ch])
-    const version = `${analysis?.current?.piece_m}-${ch?.id}-${ch?.metrics?.piece_m}`
+    const version = `${project.analysis_revision}-${project.plant_revision}-${ch?.id}`
     const report = useReport(context, version)
 
     useEffect(() => {
@@ -102,12 +103,15 @@ export default function App() {
     }
 
     const save = async () => {
+        const revision = project.plant_revision || 0
+        const snapshot = structuredClone(draft)
         setSaving(true)
         setError(null)
 
         try {
-            const out = await api.analyze(draft)
-            update({ plant: draft, analysis: out, redesign: { choice: null, custom: null, metrics: null }, printed: false, game: EMPTY_GAME })
+            const out = await api.analyze(snapshot)
+            update((current) => ({ plant: snapshot, analysis: out, analysis_revision: revision,
+                ...(current.plant_revision === revision ? { redesign: { choice: null, custom: null, metrics: null } } : {}), printed: false, game: EMPTY_GAME }))
             go(1)
         } catch {
             setError('Error al analizar el plano.')
@@ -209,6 +213,11 @@ export default function App() {
                 </nav>
 
                 <main className="stage" ref={stage}>
+                    {analysis && <div className="analysis-status" role="status">
+                        {isStale(project) ? 'Desactualizado: el plano cambió' : 'Análisis del plano guardado'}
+                        <span className="small"> · Revisión {project.analysis_revision ?? 0} / actual {project.plant_revision || 0}</span>
+                        {analysis.plant_version && <details><summary>Versión del motor</summary><code>{analysis.plant_version}</code></details>}
+                    </div>}
                     <AnimatePresence mode="wait">
                         <motion.div key={ready ? step : 0} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
                           {view}

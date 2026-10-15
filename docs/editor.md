@@ -1,5 +1,14 @@
 # Editor de Cauce · Fase A0
 
+## A1: analizar y aplicar propuestas
+
+«Interpretar historia» genera un borrador. «Analizar» guarda la revisión enviada al
+motor. Si editas después, aparece «Desactualizado: el plano cambió»; una respuesta
+tardía no borra tus cambios. «Ver» una alternativa solo cambia la vista previa;
+«Aplicar» la copia al rediseño respetando estaciones fijas. «Deshacer aplicación»
+restaura el estado previo. Tras editar o aplicar, pulsa «Analizar rediseño» para
+obtener métricas nuevas. El cálculo ligero de rutas no mueve estaciones.
+
 ## Importar una planta
 
 En **Proceso y plano**, pulsa **Importar proyecto (JSON)** y selecciona

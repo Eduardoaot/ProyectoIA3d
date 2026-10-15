@@ -1,5 +1,17 @@
 # Estado del frontend (Astra)
 
+## A1 · Trabajo manual y propuestas
+
+- A0 publicada en `ae47881`. Se continúa en `feature/ParteB` con un commit y push por fase.
+- «Interpretar historia» obtiene el borrador; «Analizar» es la acción explícita de análisis.
+- `plant_revision` aumenta con cambios del borrador/rediseño; `analysis_revision`
+  conserva la revisión enviada, incluso si la respuesta llega después de una edición.
+- Propuestas con «Ver» y «Aplicar», aplicación reversible y protección defensiva de
+  posiciones `locked`. Se muestra el motivo y se invalidan métricas tras aplicar/editar.
+- El rediseño se evalúa únicamente con «Analizar rediseño». Se conserva la consulta
+  ligera de rutas del editor permitida por criterios §8; no redistribuye elementos.
+- Pruebas: revisiones, respuestas tardías, fijos e inversa de posiciones; suite v2/v3.
+
 ## 2026-10-15 · Fase A0 completada
 
 Rama de trabajo: `feature/ParteB`, por indicación del usuario; base de integración:

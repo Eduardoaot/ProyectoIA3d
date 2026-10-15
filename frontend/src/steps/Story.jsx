@@ -198,7 +198,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                                     }}
                                     disabled={reading || saving || importing || words < 6}
                                 >
-                                {reading ? 'Analizando…' : 'Analizar'}
+                                {reading ? 'Leyendo…' : 'Interpretar historia'}
                                 </Btn>
                                 <button type="button" className="btn btn--ghost btn--small" disabled={reading || saving || importing} onClick={() => (onBlank(), scrollToEditor())}>
                                 Dibujar desde cero
@@ -291,7 +291,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
 
                     <div className="row" style={{ marginTop: 32 }}>
                         <Btn onClick={onSave} disabled={reading || saving || importing || draft.stations.length === 0}>
-                            {saving ? 'Analizando…' : 'Guardar y ver en 3D'}
+                            {saving ? 'Analizando…' : 'Analizar'}
                         </Btn>
 
                         {metrics && <span className="small num">Una pieza recorre {fmt(metrics.piece_m, 1)} m en este plano.</span>}
