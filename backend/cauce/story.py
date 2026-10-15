@@ -1,13 +1,3 @@
-"""De la historia contada a una planta editable.
-
-Dos lecturas que se combinan:
-- Reglas: palabras clave del catálogo, números (también escritos con letra) y
-  producción por día, semana o mes.
-- IA extractora: devuelve únicamente el JSON de STORY_SCHEMA. No conversa.
-
-Nada se impone: si la historia no menciona una máquina, no aparece.
-"""
-
 from __future__ import annotations
 
 import math
@@ -18,7 +8,6 @@ from .catalog import ASSUMPTIONS, DEFAULT_PARAMS, KIND, ZONE
 from .layout import EDGE, flow_order, initial_layout
 
 KIND_IDS = list(KIND)
-
 
 STORY_SCHEMA = {
     "type": "object",
@@ -114,6 +103,7 @@ def by_rules(text: str) -> dict:
     ops = re.search(r"(\d+)\s+(?:[a-z]+\s+){0,2}?" + PEOPLE, t) or re.search(r"(?:eramos|somos|eran|son)\s+(?:como\s+|unos?\s+|unas?\s+)?(\d+)", t)
     trucks = re.search(r"(\d+)\s+(?:[a-z]+\s+){0,1}?" + VEHICLES, t)
     prod, period = None, None
+    
     for m in re.finditer(r"(\d+(?:[.,]\d+)?)\s+((?:[a-z]+\s+){0,4}?)" + PERIOD, t):
         if re.search(PEOPLE, m.group(2)) or re.search(VEHICLES, m.group(2)):
             continue
@@ -123,10 +113,12 @@ def by_rules(text: str) -> dict:
         p = m.group(3)
         period = "semana" if "semana" in p else "mes" if ("mes" in p and "semana" not in p) else "dia"
         break
+
     if prod is None:
         m = re.search(r"(\d+)\s+(pieza|unidad|vidrio|producto)", t)
         if m and int(m.group(1)) >= 2:
             prod, period = float(m.group(1)), "dia"
+
     return {
         "kinds": [k for _, k in found],
         "zones": zones,

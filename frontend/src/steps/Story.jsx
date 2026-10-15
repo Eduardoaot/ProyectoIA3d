@@ -27,11 +27,25 @@ function Switch({ on, onChange, children }) {
 }
 
 function Assumptions({ draft, setDraft, catalog, info }) {
+    const [clearedZeros, setClearedZeros] = useState({})
     const on = !!draft.use_assumptions
     const src = Object.fromEntries((info?.assumptions || []).map((a) => [a.key, a.source]))
     const setParam = (k, v) => setDraft({ ...draft, params: { ...draft.params, [k]: v } })
     const setSt = (id, patch) => setDraft({ ...draft, stations: draft.stations.map((s) => (s.id === id ? { ...s, ...patch } : s)) })
     const people = draft.stations.reduce((a, s) => a + (Number(s.ops) || 0), 0)
+    const clearZeroOnFocus = (key, e) => {
+        if (e.currentTarget.value !== '' && Number(e.currentTarget.value) === 0) {
+            setClearedZeros((current) => ({ ...current, [key]: true }))
+        }
+    }
+    const restoreZeroOnBlur = (key) => {
+        setClearedZeros((current) => {
+            const next = { ...current }
+            delete next[key]
+            return next
+        })
+    }
+    const showValue = (key, value) => clearedZeros[key] ? '' : value
 
     return (
         <div className="block stack">
@@ -69,7 +83,11 @@ function Assumptions({ draft, setDraft, catalog, info }) {
                                     </span>
                                 </div>
 
-                                <input id={`a-${assumption.key}`} type="number" step="any" min="0" value={draft.params?.[assumption.key] ?? assumption.value} onChange={(e) => setParam(assumption.key, Number(e.target.value))} />
+                                <input id={`a-${assumption.key}`} type="number" step="any" min="0" value={showValue(`param-${assumption.key}`, draft.params?.[assumption.key] ?? assumption.value)} onFocus={(e) => clearZeroOnFocus(`param-${assumption.key}`, e)} onBlur={() => restoreZeroOnBlur(`param-${assumption.key}`)} onChange={(e) => {
+                                    if (e.target.value === '') return
+                                    setParam(assumption.key, Number(e.target.value))
+                                    restoreZeroOnBlur(`param-${assumption.key}`)
+                                }} />
                             </div>
                         ))}
                     </div>
@@ -97,11 +115,19 @@ function Assumptions({ draft, setDraft, catalog, info }) {
                                         </td>
 
                                         <td className="num">
-                                            <input className="cell-input" type="number" min="0" step="0.1" value={station.t ?? 0} onChange={(e) => setSt(station.id, { t: Number(e.target.value), t_source: 'usuario' })} aria-label={`Minutos por pieza en ${station.name}`} />
+                                            <input className="cell-input" type="number" min="0" step="0.1" value={showValue(`time-${station.id}`, station.t ?? 0)} onFocus={(e) => clearZeroOnFocus(`time-${station.id}`, e)} onBlur={() => restoreZeroOnBlur(`time-${station.id}`)} onChange={(e) => {
+                                                if (e.target.value === '') return
+                                                setSt(station.id, { t: Number(e.target.value), t_source: 'usuario' })
+                                                restoreZeroOnBlur(`time-${station.id}`)
+                                            }} aria-label={`Minutos por pieza en ${station.name}`} />
                                         </td>
 
                                         <td className="num">
-                                            <input className="cell-input" type="number" min="0" step="1" value={station.ops ?? 0} onChange={(e) => setSt(station.id, { ops: Math.max(0, Math.round(Number(e.target.value))) })} aria-label={`Operarios en ${station.name}`} />
+                                            <input className="cell-input" type="number" min="0" step="1" value={showValue(`ops-${station.id}`, station.ops ?? 0)} onFocus={(e) => clearZeroOnFocus(`ops-${station.id}`, e)} onBlur={() => restoreZeroOnBlur(`ops-${station.id}`)} onChange={(e) => {
+                                                if (e.target.value === '') return
+                                                setSt(station.id, { ops: Math.max(0, Math.round(Number(e.target.value))) })
+                                                restoreZeroOnBlur(`ops-${station.id}`)
+                                            }} aria-label={`Operarios en ${station.name}`} />
                                         </td>
                                     </tr>
                                 ))}
