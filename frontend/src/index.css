@@ -2277,4 +2277,8 @@ details.how ul {
 .metric-values dd { margin: 0; overflow-wrap: anywhere; }
 .result-details p, .result-details details, .discarded-claims { margin: 12px 0; }
 .flow-legend { font-size: 12px; margin: 10px 0; }
+.reference-panel { margin-top: 24px; }
+.reference-panel img { display: block; max-width: 100%; max-height: 240px; object-fit: contain; margin: 12px 0; }
+.reference-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 16px 0; }
+.reference-gallery figure { margin: 0; border: 1px solid #dedede; padding: 12px; overflow-wrap: anywhere; }
 @media print { .plan-legend { font-size: 8pt; } }

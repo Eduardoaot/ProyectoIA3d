@@ -2,7 +2,7 @@
 // to a Chromium executable. Uses an isolated temporary profile and mocked API.
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'vite'
@@ -13,6 +13,8 @@ const browserPath = process.env.CAUCE_BROWSER || 'C:/Program Files/Google/Chrome
 const server = await createServer({ server: { host: '127.0.0.1', port: 5187, strictPort: true }, logLevel: 'error' })
 await server.listen()
 const profile = await mkdtemp(join(tmpdir(), 'cauce-browser-'))
+const referenceFile = join(profile, 'reference.png')
+await writeFile(referenceFile, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN1cAAAAASUVORK5CYII=', 'base64'))
 const browser = spawn(browserPath, ['--headless=new', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--window-size=1440,1100', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', 'about:blank'], { windowsHide: true, stdio: 'ignore' })
 let socket
 try {
@@ -28,7 +30,11 @@ try {
     const pending = new Map(), exceptions = []
     socket.addEventListener('message', (event) => {
         const message = JSON.parse(event.data)
-        if (message.id && pending.has(message.id)) { const p = pending.get(message.id); pending.delete(message.id); clearTimeout(p.timer); message.error ? p.reject(Error(message.error.message)) : p.resolve(message.result) }
+        if (message.id && pending.has(message.id)) {
+            const p = pending.get(message.id); pending.delete(message.id); clearTimeout(p.timer)
+            if (message.error) p.reject(Error(message.error.message))
+            else p.resolve(message.result)
+        }
         if (message.method === 'Runtime.exceptionThrown') exceptions.push(message.params.exceptionDetails.text + ': ' + (message.params.exceptionDetails.exception?.description || ''))
     })
     const call = (method, params = {}) => new Promise((resolve, reject) => { const key = ++id; const timer = setTimeout(() => { pending.delete(key); reject(Error(`Timeout: ${method}`)) }, 15000); pending.set(key, { resolve, reject, timer }); socket.send(JSON.stringify({ id: key, method, params })) })
@@ -97,8 +103,22 @@ try {
             await evaluate("document.querySelector('button[aria-label=Deshacer]').click()"); await pause(400)
             assert.deepEqual(await evaluate("JSON.parse(localStorage.getItem('cauce-proyecto-v3')).draft.layout.corte"), [15, 5, 0])
         }
+        await evaluate("document.querySelector('.context-panel').open=true")
+        await call('DOM.enable')
+        const documentNode = await call('DOM.getDocument')
+        const input = await call('DOM.querySelector', { nodeId: documentNode.root.nodeId, selector: '.reference-panel input[type=file]' })
+        await call('DOM.setFileInputFiles', { nodeId: input.nodeId, files: [referenceFile] })
+        await until("!!document.querySelector('.reference-panel > img')")
+        await evaluate(`${button('Guardar referencia')}.click()`); await pause(400)
+        assert.ok(await evaluate("document.querySelector('.reference-gallery').textContent.includes('No interpretada')"))
+        assert.match(await evaluate("JSON.stringify(JSON.parse(localStorage.getItem('cauce-proyecto-v3')).draft.context)"), /data:image/)
+        assert.equal(await evaluate(`${button('Analizar')}.disabled`), true)
+        await evaluate(`${button('Confirmar Contexto 2')}.click()`); await pause(80)
+        await evaluate(`${button('Analizar')}.click()`)
+        await until("window.__calls.some(c=>c.path==='/api/analyze')")
+        assert.doesNotMatch(await evaluate("window.__calls.find(c=>c.path==='/api/analyze').body"), /data:image/)
         await call('Page.removeScriptToEvaluateOnNewDocument', { identifier: init.identifier })
-        console.log(`Browser smoke ${enabled ? 'v3' : 'v2'}: selection, copy/paste/undo, confirmation and feature gating passed`)
+        console.log(`Browser smoke ${enabled ? 'v3' : 'v2'}: selection, copy/paste/undo, confirmation, feature gating and image references passed`)
     }
     assert.deepEqual(exceptions, [], 'No uncaught browser errors')
 } finally {

@@ -39,7 +39,7 @@ function slim(project, ch) {
 
 export default function App() {
     const [intro, setIntro] = useState(true)
-    const [project, update, reset] = useProject()
+    const [project, update, reset, saveError] = useProject()
     const [step, setStep] = useState(() => (project.plant ? 1 : 0))
     const [catalog, setCatalog] = useState(null)
     const [capabilities, setCapabilities] = useState({ features: [] })
@@ -151,7 +151,7 @@ export default function App() {
             info={info}
             draft={draft}
             setDraft={(d) => {
-                try { update({ draft: draft ? applyOps(draft, diffOps(draft, d)).plant : d }) }
+                try { update({ draft: draft ? applyOps(draft, diffOps(draft, d)).plant : d }); setConfirmation(null) }
                 catch (failure) { notify(failure.message) }
             }}
             catalog={catalog}
@@ -229,10 +229,16 @@ export default function App() {
                 </nav>
 
                 <main className="stage" ref={stage}>
+                    {saveError && <div role="alert" className="editor-notice">{saveError} <button type="button" className="btn btn--small" onClick={() => {
+                        const url = URL.createObjectURL(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }))
+                        const link = document.createElement('a'); link.href = url; link.download = 'cauce-proyecto.json'; link.click()
+                        setTimeout(() => URL.revokeObjectURL(url), 1000)
+                    }}>Descargar copia JSON</button></div>}
                     {analysis && <div className="analysis-status" role="status">
                         {isStale(project) ? 'Desactualizado: el plano cambió' : 'Análisis del plano guardado'}
                         <span className="small"> · Revisión {project.analysis_revision ?? 0} / actual {project.plant_revision || 0}</span>
                         {analysis.plant_version && <details><summary>Versión del motor</summary><code>{analysis.plant_version}</code></details>}
+                        {analysis.context_version && <details><summary>Versión del contexto analizado</summary><code>{analysis.context_version}</code></details>}
                     </div>}
                     <AnimatePresence mode="wait">
                         <motion.div key={ready ? step : 0} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>

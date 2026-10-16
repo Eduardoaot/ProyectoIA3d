@@ -1,8 +1,10 @@
 import { plantForCapabilities } from './context.js'
 import { hasFeature, validWeights } from './features.js'
 async function prepareBody(body) {
-    if (!body?.plant?.context?.segments) return body
-    return { ...body, plant: plantForCapabilities(body.plant, await getCapabilities()) }
+    if (!body?.plant?.context?.segments && !body?.context?.plant?.context?.segments) return body
+    const capabilities = await getCapabilities()
+    return { ...body, ...(body.plant ? { plant: plantForCapabilities(body.plant, capabilities) } : {}),
+        ...(body.context?.plant ? { context: { ...body.context, plant: plantForCapabilities(body.context.plant, capabilities) } } : {}) }
 }
 async function post(path, body, signal) {
     body = await prepareBody(body)

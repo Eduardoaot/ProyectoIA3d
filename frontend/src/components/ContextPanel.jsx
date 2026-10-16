@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { appendEntry, currentEntries, displayValue, SEGMENTS, segmented } from '../context'
+import ReferencePanel from './ReferencePanel'
+import { isImageReference } from '../references'
 
-export default function ContextPanel({ context, onChange, children }) {
+export default function ContextPanel({ context, onChange, children, vision }) {
     const [segment, setSegment] = useState('negocio')
     const [key, setKey] = useState('')
     const [value, setValue] = useState('')
@@ -41,9 +43,10 @@ export default function ContextPanel({ context, onChange, children }) {
             <strong>{e.segment} · {e.key}</strong>: {displayValue(e.value)} {e.unit}
             {e.confidence === 'baja' && <span> · Confianza baja{Array.isArray(e.value) ? ' · rango' : ' · rango no indicado'}</span>}
             <small> · {e.source} · {e.owner} · {e.date || 'sin fecha'}</small>
-            <button type="button" className="link-btn" onClick={() => edit(e)}>Corregir</button>
+            {!isImageReference(e.value) && <button type="button" className="link-btn" onClick={() => edit(e)}>Corregir</button>}
         </li>)}</ul>
         {children}
+        <ReferencePanel context={context} onChange={onChange} vision={vision} />
         <details><summary>Historial de entradas</summary><ul>{Object.values(segmented(context).segments).flat().map((e) => <li key={e.id}>{e.key} · v{e.version}: {displayValue(e.value)} {e.unit} · {e.date || 'sin fecha'} · {e.source} · {e.confidence} · {e.owner}{e.supersedes && ` · reemplaza ${e.supersedes}`}</li>)}</ul></details>
     </details>
 }

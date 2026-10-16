@@ -85,7 +85,6 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 	const [notice, setNotice] = useState('')
 	const [evaluating, setEvaluating] = useState(false)
 	const [confirmation, setConfirmation] = useState(null)
-	const [lastAnalyzed, setLastAnalyzed] = useState(null)
 	const choice = redesign.choice
 
 	const alt = alts.find((a) => a.id === choice)
@@ -113,7 +112,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 		setEvaluating(true)
 		try {
 			const metrics = await analyzeConfirmed(reviewPlant, confirmation, (p) => api.evaluate(p, snapshot.positions, true))
-			if (currentCustom.current === snapshot) { setRedesign({ metrics }); setLastAnalyzed(reviewPlant) }
+			if (currentCustom.current === snapshot) setRedesign({ metrics, analysis_plant: reviewPlant })
 		} catch { setNotice('No se pudo analizar el rediseño.') }
 		finally { setEvaluating(false) }
 	}
@@ -157,6 +156,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 	}
 
 	const onEdit = (np, pos) => {
+		setConfirmation(null)
 		setRedesign({ choice: 'propio', custom: { plant: np, positions: pos }, metrics: null })
 		setHistory([])
 		setPreview(null)
@@ -255,8 +255,8 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 					</div>
 
 					{hasFeature(capabilities, 'simulate') && <SimulationPanel plant={reviewPlant} alternative={choice || analysis.recommended} confirmed={isConfirmed(reviewPlant, confirmation)} />}
-                    <ContextPanel context={selPlant.context} onChange={(context) => onEdit({ ...selPlant, context }, positions)} />
-                    <ContextReview plant={reviewPlant} baseline={lastAnalyzed || plant} confirmed={isConfirmed(reviewPlant, confirmation)} onConfirm={() => setConfirmation(contextSignature(reviewPlant))} />
+                    <ContextPanel vision={capabilities.vision} context={selPlant.context} onChange={(context) => onEdit({ ...selPlant, context }, positions)} />
+                    <ContextReview plant={reviewPlant} baseline={redesign.analysis_plant || plant} confirmed={isConfirmed(reviewPlant, confirmation)} onConfirm={() => setConfirmation(contextSignature(reviewPlant))} />
                     <PlanEditor capabilities={capabilities} controller={editor} plant={selPlant} positions={positions} onChange={onEdit} catalog={catalog} mode="full" onMetrics={onLive} title="Editor del rediseño" />
 
 					<Appear className="kpis" style={{ marginTop: 32, gridTemplateColumns: `repeat(${full ? 4 : 1}, minmax(0, 1fr))` }}>

@@ -1,4 +1,5 @@
 import { same } from './revisions.js'
+import { isImageReference, referenceForAPI } from './references.js'
 
 export const SEGMENTS = ['negocio', 'operaciones', 'tiempos', 'maquinas', 'flujo', 'personal', 'calidad', 'restricciones', 'referencias']
 export function segmented(context) {
@@ -22,6 +23,7 @@ export function appendEntry(context, data) {
     return next
 }
 export function displayValue(value) {
+    if (isImageReference(value)) return `Imagen: ${value.name}. ${value.notes || 'Sin notas'}. No interpretada.`
     return Array.isArray(value) ? value.map(displayValue).join(' – ') : value == null ? 'sin datos' : typeof value === 'object' ? JSON.stringify(value) : String(value)
 }
 export function contextText(context) {
@@ -29,7 +31,11 @@ export function contextText(context) {
     return currentEntries(context).map((e) => `[${e.segment}] ${e.key}: ${displayValue(e.value)} ${e.unit || ''} (fuente: ${e.source}; confianza: ${e.confidence}; fecha: ${e.date || 'sin fecha'}; responsable: ${e.owner})`).join('\n')
 }
 export function plantForCapabilities(plant, capabilities) {
-    return plant?.context?.segments && !capabilities.features?.includes('segmented_context') ? { ...plant, context: contextText(plant.context) } : plant
+    if (!plant?.context?.segments) return plant
+    if (!capabilities.features?.includes('segmented_context')) return { ...plant, context: contextText(plant.context) }
+    if (!Object.values(plant.context.segments).flat().some((e) => isImageReference(e.value))) return plant
+    const segments = Object.fromEntries(Object.entries(plant.context.segments).map(([key, entries]) => [key, entries.map((e) => ({ ...e, value: referenceForAPI(e.value, capabilities.vision) }))]))
+    return { ...plant, context: { ...plant.context, segments } }
 }
 
 // Undoing a time edit appends a new value too: provenance is never removed.
@@ -39,7 +45,7 @@ export function recordTimeChanges(before, after) {
         const previous = before.stations.find((s) => s.id === station.id)
         if (!previous) continue
         for (const field of ['t', 't_cycle_min', 'batch']) {
-            if (same(previous[field], station[field])) continue
+            if (same(previous[field], station[field]) && (previous.t_source === station.t_source || station[field] == null)) continue
             const key = `${station.id}.${field}`
             if (!currentEntries(context).some((e) => e.segment === 'tiempos' && e.key === key)) {
                 context = appendEntry(context, { segment: 'tiempos', key, value: previous[field] ?? null, unit: 'min', source: previous.t_source || 'supuesto', confidence: previous.t_source === 'medido' ? 'alta' : 'baja', owner: 'usuario' })

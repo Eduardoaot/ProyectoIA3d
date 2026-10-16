@@ -51,12 +51,15 @@ function load() {
 
 export function useProject() {
     const [p, setP] = useState(load)
+    const [saveError, setSaveError] = useState('')
 
     useEffect(() => {
         const t = setTimeout(() => {
         try {
             localStorage.setItem(KEY, JSON.stringify(p))
+            setSaveError('')
         } catch {
+            setSaveError('No se pudo guardar el proyecto en este navegador. Descarga una copia antes de cerrar; el último guardado se conserva.')
         }
         }, 300)
         return () => clearTimeout(t)
@@ -65,7 +68,7 @@ export function useProject() {
     const update = (patch) => setP((prev) => updateProject(prev, typeof patch === 'function' ? patch(prev) : patch))
     const reset = () => setP(EMPTY)
 
-    return [p, update, reset]
+    return [p, update, reset, saveError]
 }
 
 export function customOf(project) {

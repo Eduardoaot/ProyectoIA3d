@@ -123,11 +123,18 @@ export function applyOps(original, ops) {
                 element.points = element.points.map(([x, z]) => [x + dx, z + dz])
             } else { element.x = op.to.x; if (key !== 'gates') element.z = op.to.z }
         } else if (op.op === 'update') {
-            if (op.set.id && op.set.id !== op.id) fail('No se puede cambiar el id.')
+            if (Object.hasOwn(op.set, 'id') && op.set.id !== op.id) fail('No se puede cambiar el id.')
             Object.assign(element, op.set)
             for (const field of op._unset || []) delete element[field]
         } else fail(`Operación desconocida: ${op.op}`)
     }
+    const ids = COLLECTIONS.flatMap((key) => (plant[key] || []).map((e) => e.id))
+    if (ids.some((id) => typeof id !== 'string' || !id) || new Set(ids).size !== ids.length) fail('Cada elemento necesita un id único.')
+    for (const zone of plant.zones || []) {
+        if (!(zone.w > 0 && zone.d > 0) || !validPoint([zone.x, zone.z, zone.w, zone.d])) fail('Dimensiones o posición de zona inválidas.')
+    }
+    for (const wall of plant.walls || []) if (!validPoint([wall.x1, wall.z1, wall.x2, wall.z2])) fail('Coordenadas de pared inválidas.')
+    for (const gate of plant.gates || []) if (!Number.isFinite(gate.x)) fail('Coordenada de portón inválida.')
     for (const station of plant.stations) {
         if (!(station.w > 0 && station.d > 0) || !Array.isArray(plant.layout[station.id]) || plant.layout[station.id].length < 2 || !validPoint([station.w, station.d, ...plant.layout[station.id]])) fail('Dimensiones o posición inválidas.')
         if (station.count != null && (!Number.isInteger(station.count) || station.count < 1)) fail('La cantidad debe ser un entero positivo.')

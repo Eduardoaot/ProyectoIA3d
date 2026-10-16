@@ -1,4 +1,21 @@
-# Editor de Cauce · Fase A0
+# Editor de Cauce · A0–A7
+
+## A7: imágenes de referencia
+
+Dentro de «Contexto por segmentos e historial», carga una imagen PNG/JPEG/WebP
+de hasta 256 KB y añade notas. La imagen queda en el segmento `referencias`;
+corregir notas crea una versión sin borrar la anterior. Hay un límite conjunto
+para las imágenes y su historial, dado que el proyecto vive en localStorage.
+
+Si `vision` es falso o desconocido se muestra «No interpretada: el proveedor
+actual no tiene visión». El servidor recibe solo la nota, sin los datos binarios,
+incluso en el historial o en el chat. Solo se envía la imagen si se anuncian
+visión y contexto segmentado. Aun así, la interfaz la considera pendiente de
+interpretación: no atribuye resultados visuales a un proveedor que no los entregó.
+Conservar solo la nota permite guardar la referencia sin imagen.
+
+Si falla el guardado local aparece un aviso con «Descargar copia JSON»; la última
+copia guardada permanece intacta. Editar una referencia invalida Contexto 2.
 
 ## A6: flujos, bandas, propuestas y resultados
 
@@ -83,7 +100,7 @@ obtener métricas nuevas. El cálculo ligero de rutas no mueve estaciones.
 En **Proceso y plano**, pulsa **Importar proyecto (JSON)** y selecciona
 `pruebas/transformadores.json`. Se abre el borrador con las posiciones del archivo.
 La importación no solicita un análisis. El editor conserva su consulta existente
-de rutas; para analizar usa **Guardar y ver en 3D**.
+de rutas; para analizar confirma **Contexto 2** y pulsa **Analizar**.
 
 También se acepta un proyecto guardado con `draft` o `plant`. Si hay un borrador
 se importa ese, por ser el trabajo más reciente. Solo se importa la planta: no se
@@ -105,8 +122,8 @@ como `true`. La caché se renueva al recargar la página.
 
 El informe v2 sigue siendo un stream de texto. Su fixture usa un contenedor de
 prueba con `status`, `content_type` y `body`; ese contenedor **no** es un formato
-nuevo de la API. La validación estructurada del informe de A6 requiere acordar
-el transporte con backend (ver `coordinacion/de-astra-para-claude.md`).
+nuevo de la API. El transporte adicional `{ text, validation }` se acordó con el
+usuario en A6 (ver `coordinacion/de-astra-para-claude.md`).
 
 ## Pruebas
 
@@ -153,9 +170,11 @@ Las métricas de `analyze-v3.json` se heredaron de la captura v2: no representan
 cálculos del motor para las cantidades v3. Los campos adicionales de puntaje y
 sensibilidad son ejemplos de formato, no recomendaciones de ingeniería.
 
-## Siguientes fases
+## Estado de integración
 
-A0 prepara la importación, el inventario y las pruebas. A1 protege el trabajo
-manual, separa «Ver» de «Aplicar» y marca resultados desactualizados. A2 incorpora
-operaciones, bloqueo y migración a `cauce-proyecto-v3`. La persistencia actual
-continúa en v2 hasta esa migración.
+Las fases frontend A0–A7 están implementadas. Las funciones dependientes del
+backend se prueban con respuestas simuladas y solo aparecen cuando el servidor
+las anuncia. La suite de navegador cubre importación del estado guardado,
+selección, pegado y deshacer, bandas, asistente, referencias y la ausencia de
+datos de imagen en solicitudes a proveedores sin visión. No valida cálculos
+ni calidad de interpretación de un backend v3 real.

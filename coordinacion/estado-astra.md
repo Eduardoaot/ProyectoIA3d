@@ -1,5 +1,30 @@
 # Estado del frontend (Astra)
 
+## 2026-10-16 · A7 · Referencias y cierre
+
+- Imágenes PNG/JPEG/WebP con notas en entradas inmutables de `referencias`.
+  `value` contiene `{ type: "image_reference", name, mime, data_url, notes,
+  interpreted: false }`; `supersedes` conserva correcciones y procedencia.
+- Límite de 256 KB por archivo y 700000 caracteres de datos de imágenes en el
+  historial para acotar localStorage. Se verifica formato y decodificación.
+  Fallos reales de guardado se muestran con descarga de copia JSON; no se borra
+  la última copia guardada. No se modifica `cauce-proyecto-v2`.
+- Sin `vision: true` no sale ningún dato de imagen al servidor, ni siquiera en
+  contexto histórico/chat. Solo viajan datos visuales con visión y contexto
+  segmentado anunciados; la UI nunca afirma que fueron interpretados.
+- Cada edición invalida Contexto 2, incluso deshacer hasta el plano previamente
+  confirmado. Se descartan tokens tardíos de informes abortados.
+- Revisión final: también se valida geometría de obstáculos e ids antes de aplicar
+  propuestas, se registra cambiar solo la fuente de un tiempo y se conserva el
+  plano del último análisis de rediseño al salir de ese paso.
+- A6 publicada en `3c011a1`. Verificación A7: 80 pruebas aprobadas; lint sin errores
+  y build correcto (avisos anteriores de hooks/refs y bundle grande).
+- Chrome headless v2/v3: aprobada carga real de PNG, guardado y exclusión de datos
+  de imagen al analizar sin visión; sin excepciones del navegador.
+- A4–A7 completadas en frontend. Integración real de servicios v3 depende de
+  capacidades del backend; fixtures y pruebas no certifican cálculos del motor.
+
+
 ## 2026-10-16 · A6 · Funciones anunciadas por el backend
 
 - Flujos `material`, `personas`, `vehiculos`, `carga`, colores/trazos distintos,

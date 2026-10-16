@@ -24,9 +24,11 @@ test('assistant rejects fixed movement and local history fields before presentin
         { op: 'update', id: '$plant', set: { name: 'Changed' } },
         { op: 'delete', id: 'horno', _collection: 'routes' },
         { op: 'add', element: { id: 'missing-position', w: 1, d: 1 } },
+        { op: 'add', element: { id: 'bad-obstacle', kind: 'obstaculo', x: 5, z: 5 } },
+        { op: 'connect', from: 'corte', to: 'nucleo', id: 'corte' },
     ] })
     assert.equal(result.ops.length, 0)
-    assert.equal(result.rejected.length, 5)
+    assert.equal(result.rejected.length, 7)
 })
 test('weights are finite, nonnegative, complete and sum to one', () => {
     assert.ok(validWeights(DEFAULT_WEIGHTS))

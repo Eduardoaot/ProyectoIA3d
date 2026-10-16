@@ -19,7 +19,7 @@ export default function useReport(context, version) {
         setText('')
         setValidation(null)
         setState('running')
-        stream('/api/report', ctx.current, (t) => setText((p) => p + t), c.signal)
+        stream('/api/report', ctx.current, (t) => { if (!c.signal.aborted) setText((p) => p + t) }, c.signal)
         .then((result) => { if (!c.signal.aborted) { setValidation(result?.validation || null); setState('done') } })
         .catch((e) => {
             if (e.name !== 'AbortError') setState('error')

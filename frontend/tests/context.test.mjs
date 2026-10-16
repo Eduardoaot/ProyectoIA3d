@@ -37,6 +37,17 @@ test('analysis never calls API without confirmation of exact current plant and c
     assert.equal(summarizePlant(p, p).stations.length, 11)
     assert.deepEqual(summarizePlant(p, p).changed, [])
 })
+
+test('changing only time provenance appends a version for the same numeric value', async () => {
+    const plant = await fixture('transformadores-v3')
+    const next = structuredClone(plant)
+    next.stations[0].t_source = 'medido'
+    const result = recordTimeChanges(plant, next)
+    const current = currentEntries(result.context).find((e) => e.key === `${plant.stations[0].id}.t`)
+    assert.equal(current.value, plant.stations[0].t)
+    assert.equal(current.source, 'medido')
+    assert.equal(current.confidence, 'alta')
+})
 test('API converts segmented context for old backend and preserves it when advertised', async (t) => {
     const p = await fixture('transformadores-v2')
     p.context = appendEntry('', { segment: 'negocio', key: 'producto', value: 'Transformador' })

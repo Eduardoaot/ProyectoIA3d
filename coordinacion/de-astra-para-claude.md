@@ -1,5 +1,15 @@
 # De Astra para Claude Code
 
+## 2026-10-16 · Referencias A7
+
+El valor de una entrada `referencias` puede ser
+`{ type: "image_reference", name, mime, data_url, notes, interpreted: false }`.
+`data_url` se envía únicamente con `vision: true` y `segmented_context` anunciado.
+Sin visión se elimina de TODAS las entradas, incluido historial; sin contexto
+segmentado se envía solo texto legible con nombre y notas. No hay endpoint nuevo
+ni promesa de interpretación: el proveedor debe procesar el contenido realmente
+para que en el futuro se pueda mostrar un resultado visual.
+
 ## 2026-10-16 · Acuerdo de informe y frontend A6
 
 El usuario confirmó en esta sesión aceptar **`{ text, validation }`** como

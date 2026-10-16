@@ -296,7 +296,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                     </div>
 
                     {hasFeature(capabilities, 'weights') && <WeightsEditor weights={weights} onChange={onWeights} />}
-                    <ContextPanel context={draft.context} onChange={(context) => setDraft({ ...draft, context })} />
+                    <ContextPanel vision={capabilities.vision} context={draft.context} onChange={(context) => setDraft({ ...draft, context })} />
                     <ContextReview plant={draft} baseline={baseline} confirmed={contextConfirmed} onConfirm={onConfirmContext} />
                     <div className="row" style={{ marginTop: 32 }}>
                         <Btn onClick={onSave} disabled={!contextConfirmed || (hasFeature(capabilities, 'weights') && !validWeights(weights)) || reading || saving || importing || draft.stations.length === 0}>
