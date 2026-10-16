@@ -1,5 +1,18 @@
 # Editor de Cauce · Fase A0
 
+## A5: contexto con historial
+
+«Contexto por segmentos e historial» permite registrar datos con fuente,
+confianza, unidad y responsable. «Corregir» agrega una versión con la misma
+clave, conservando la anterior. Los tiempos operativos se editan en el inspector
+de la estación: sus cambios y deshacer quedan registrados automáticamente.
+Los rangos se escriben como `[mínimo, máximo]`; no se inventan rangos faltantes.
+
+Antes de «Analizar» o «Analizar rediseño», revisa y confirma el Contexto 2.
+Editar el plano, los supuestos o el contexto exige confirmarlo otra vez.
+El resumen solo cuenta y describe datos; las métricas siguen viniendo del motor.
+Sin soporte de contexto segmentado, la API recibe texto con las entradas vigentes.
+
 ## A4: selección y portapapeles
 
 Arrastra sobre el fondo para encerrar elementos completos. Shift/Ctrl (o Cmd)

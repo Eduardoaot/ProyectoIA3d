@@ -1,5 +1,22 @@
 # Estado del frontend (Astra)
 
+## 2026-10-16 · A5 · Contexto y confirmación
+
+- Entradas inmutables con `segment`, `id`, `key`, `version`, `date`, `value`,
+  `unit`, `source`, `confidence`, `owner` y `supersedes`. Historial visible;
+  cambios de tiempo desde el inspector, incluido deshacer, agregan versiones.
+- Contexto 2 determinista: cantidades, fijos, rutas por flujo, bandas y cambios
+  desde el último análisis. Tanto análisis inicial como rediseño requieren
+  confirmar el contenido exacto; editar contexto también invalida la confirmación.
+- El cliente convierte contexto segmentado a texto para servidores sin
+  `segmented_context` en análisis, rutas, evaluación e informe. Conserva el
+  objeto y todo su historial cuando el servidor anuncia esa función.
+- Datos de confianza baja marcados; rangos visibles, sin inventar intervalos
+  para valores puntuales que no los tienen. La historia v2 se conserva.
+- A4 publicada en `244b56f` (62 pruebas). A5: pruebas de historial inmutable,
+  edición/deshacer de tiempos, bloqueo de llamadas sin confirmación y fallback
+  v2 frente al envío segmentado v3; lint y build conservan avisos previos.
+
 ## 2026-10-16 · A4 · Edición por grupos
 
 - Reanudación desde `f065794` en `feature/ParteB`; el usuario solicita completar

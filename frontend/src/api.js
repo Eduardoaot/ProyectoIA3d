@@ -1,4 +1,10 @@
+import { plantForCapabilities } from './context.js'
+async function prepareBody(body) {
+    if (!body?.plant?.context?.segments) return body
+    return { ...body, plant: plantForCapabilities(body.plant, await getCapabilities()) }
+}
 async function post(path, body, signal) {
+    body = await prepareBody(body)
     const r = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -48,6 +54,7 @@ export const api = {
 }
 
 export async function stream(path, body, onToken, signal) {
+    body = await prepareBody(body)
     const r = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -2262,4 +2262,10 @@ details.how ul {
 .plan-legend li { break-inside: avoid; overflow-wrap: anywhere; }
 .station-quantity { margin: 12px 0; }
 .editor-canvas svg { touch-action: none; overscroll-behavior: contain; }
+.context-panel, .context-review { margin-top: 24px; }
+.context-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; }
+.context-entries { padding-left: 20px; }
+.context-entries li { margin: 10px 0; overflow-wrap: anywhere; }
+.context-entries [data-confidence='baja'] { border-left: 3px dashed #767676; padding-left: 8px; }
+.context-review p { margin: 12px 0; }
 @media print { .plan-legend { font-size: 8pt; } }

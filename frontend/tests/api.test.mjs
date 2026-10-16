@@ -62,10 +62,10 @@ for (const version of ['v2', 'v3']) {
     test(`analyze sends the complete ${version} plant and preserves response fields`, async (t) => {
         const plant = await fixture(`transformadores-${version}`)
         const analysis = await fixture(`analyze-${version}`)
-        const fetch = t.mock.method(globalThis, 'fetch', async () => Response.json(analysis))
+        const fetch = t.mock.method(globalThis, 'fetch', async (path) => Response.json(path === '/api/capabilities' ? { features: ['segmented_context'] } : analysis))
         const { api } = await freshAPI()
         assert.deepEqual(await api.analyze(plant), analysis)
-        const [path, options] = fetch.mock.calls[0].arguments
+        const [path, options] = fetch.mock.calls.find((call) => call.arguments[0] === '/api/analyze').arguments
         assert.equal(path, '/api/analyze')
         assert.equal(options.method, 'POST')
         assert.deepEqual(JSON.parse(options.body), { plant })

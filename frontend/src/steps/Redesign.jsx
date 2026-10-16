@@ -7,6 +7,9 @@ import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 import PlantView from '../three/PlantView'
 import { protectProposal } from '../revisions'
+import { analyzeConfirmed, contextSignature, isConfirmed } from '../context'
+import ContextReview from '../components/ContextReview'
+import ContextPanel from '../components/ContextPanel'
 
 export function Delta({ label, unit, before, after, decimals = 0, goodWhenUp }) {
 	const p = pct(before, after)
@@ -78,6 +81,8 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 	const [history, setHistory] = useState([])
 	const [notice, setNotice] = useState('')
 	const [evaluating, setEvaluating] = useState(false)
+	const [confirmation, setConfirmation] = useState(null)
+	const [lastAnalyzed, setLastAnalyzed] = useState(null)
 	const choice = redesign.choice
 
 	const alt = alts.find((a) => a.id === choice)
@@ -86,6 +91,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 	const sel = choice === 'propio' ? custom : alt ? { plant, positions: alt.positions } : { plant, positions: plant.layout }
 	const positions = sel?.positions
 	const selPlant = sel?.plant || plant
+	const reviewPlant = useMemo(() => ({ ...selPlant, layout: positions }), [selPlant, positions])
 
 	const metrics = choice === 'propio' ? redesign.metrics : alt?.metrics
 	const name = choice === 'propio' ? 'Tu rediseño' : alt?.name || 'Plano actual'
@@ -99,12 +105,12 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 	const currentCustom = useRef(custom)
 	useEffect(() => { currentCustom.current = custom }, [custom])
 	const evaluate = async () => {
-		if (!custom || evaluating) return
+		if (!custom || evaluating || !isConfirmed(reviewPlant, confirmation)) return
 		const snapshot = custom
 		setEvaluating(true)
 		try {
-			const metrics = await api.evaluate(snapshot.plant, snapshot.positions, true)
-			if (currentCustom.current === snapshot) setRedesign({ metrics })
+			const metrics = await analyzeConfirmed(reviewPlant, confirmation, (p) => api.evaluate(p, snapshot.positions, true))
+			if (currentCustom.current === snapshot) { setRedesign({ metrics }); setLastAnalyzed(reviewPlant) }
 		} catch { setNotice('No se pudo analizar el rediseño.') }
 		finally { setEvaluating(false) }
 	}
@@ -216,7 +222,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 			{preview && <p role="status">Vista previa de propuesta. El plano no ha cambiado.</p>}
 			{notice && <p role="status">{notice}</p>}
 			<button type="button" className="btn btn--ghost btn--small" disabled={!history.length} onClick={undoApply}>Deshacer aplicación</button>
-			{custom && <button type="button" className="btn btn--small" disabled={evaluating} onClick={evaluate}>{evaluating ? 'Analizando…' : 'Analizar rediseño'}</button>}
+			{custom && <button type="button" className="btn btn--small" disabled={evaluating || !isConfirmed(reviewPlant, confirmation)} onClick={evaluate}>{evaluating ? 'Analizando…' : 'Analizar rediseño'}</button>}
 
 			<Appear style={{ marginTop: 32 }}>
 				<PlantView
@@ -243,7 +249,9 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 						</div>
 					</div>
 
-					<PlanEditor controller={editor} plant={selPlant} positions={positions} onChange={onEdit} catalog={catalog} mode="full" onMetrics={onLive} title="Editor del rediseño" />
+					<ContextPanel context={selPlant.context} onChange={(context) => onEdit({ ...selPlant, context }, positions)} />
+                    <ContextReview plant={reviewPlant} baseline={lastAnalyzed || plant} confirmed={isConfirmed(reviewPlant, confirmation)} onConfirm={() => setConfirmation(contextSignature(reviewPlant))} />
+                    <PlanEditor controller={editor} plant={selPlant} positions={positions} onChange={onEdit} catalog={catalog} mode="full" onMetrics={onLive} title="Editor del rediseño" />
 
 					<Appear className="kpis" style={{ marginTop: 32, gridTemplateColumns: `repeat(${full ? 4 : 1}, minmax(0, 1fr))` }}>
 						{metrics ? (

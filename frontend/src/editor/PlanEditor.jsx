@@ -7,6 +7,7 @@ import StationGlyph from './StationGlyph'
 import { parallelPath } from './display'
 import { copySelection, deleteSelectionOps, groupMoveOps, pasteOps, rectangleSelection, routeGroupOps, selected, toggleSelection } from './selection'
 import GroupInspector from './GroupInspector'
+import { recordTimeChanges } from '../context'
 
 const TOOLS_FULL = [
     { id: 'select', label: 'Mover', key: 'V', tip: 'Selecciona y arrastra máquinas, zonas, paredes y portones.' },
@@ -83,6 +84,7 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
         if (!ops.length) return
         try {
             const result = applyOps({ ...plant, layout: positions }, ops)
+            result.plant = recordTimeChanges({ ...plant, layout: positions }, result.plant)
             if (remember) {
                 undo.current.push(result.inverse)
                 if (undo.current.length > 100) undo.current.shift()

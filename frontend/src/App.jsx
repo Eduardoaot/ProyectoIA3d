@@ -18,6 +18,7 @@ import Workshop from './steps/Workshop'
 import { isStale } from './revisions'
 import { migratePlant } from './storage'
 import { applyOps, diffOps } from './editor/operations'
+import { analyzeConfirmed, contextSignature, isConfirmed } from './context'
 
 const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen', 'Taller de mejora (extra)']
 
@@ -42,6 +43,7 @@ export default function App() {
     const [catalog, setCatalog] = useState(null)
     const [reading, setReading] = useState(false)
     const [saving, setSaving] = useState(false)
+    const [confirmation, setConfirmation] = useState(null)
     const [error, setError] = useState(null)
     const [chat, setChat] = useState(false)
     const [toast, setToast] = useState(null)
@@ -105,13 +107,14 @@ export default function App() {
     }
 
     const save = async () => {
+        if (saving || !isConfirmed(draft, confirmation)) return
         const revision = project.plant_revision || 0
         const snapshot = structuredClone(draft)
         setSaving(true)
         setError(null)
 
         try {
-            const out = await api.analyze(snapshot)
+            const out = await analyzeConfirmed(snapshot, confirmation, api.analyze)
             update((current) => ({ plant: snapshot, analysis: out, analysis_revision: revision,
                 ...(current.plant_revision === revision ? { redesign: { choice: null, custom: null, metrics: null } } : {}), printed: false, game: EMPTY_GAME }))
             go(1)
@@ -157,6 +160,9 @@ export default function App() {
             onImport={importPlant}
             onSave={save}
             saving={saving}
+            baseline={plant}
+            contextConfirmed={isConfirmed(draft, confirmation)}
+            onConfirmContext={() => setConfirmation(contextSignature(draft))}
             />
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />

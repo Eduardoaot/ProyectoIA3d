@@ -5,6 +5,8 @@ import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 import { readPlantFile } from '../importProject'
 import { diffOps } from '../editor/operations'
+import ContextPanel from '../components/ContextPanel'
+import ContextReview from '../components/ContextReview'
 
 function Timer() {
     const [seconds, setSeconds] = useState(0)
@@ -146,7 +148,7 @@ function Assumptions({ draft, setDraft, catalog, info }) {
     )
 }
 
-export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onImport, onSave, saving }) {
+export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onImport, onSave, saving, baseline, contextConfirmed = false, onConfirmContext }) {
     const words = text.trim() ? text.trim().split(/\s+/).length : 0
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
@@ -291,8 +293,10 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         <Assumptions draft={draft} setDraft={(next) => planController.current?.apply(diffOps(draft, next))} catalog={catalog} info={info} />
                     </div>
 
+                    <ContextPanel context={draft.context} onChange={(context) => setDraft({ ...draft, context })} />
+                    <ContextReview plant={draft} baseline={baseline} confirmed={contextConfirmed} onConfirm={onConfirmContext} />
                     <div className="row" style={{ marginTop: 32 }}>
-                        <Btn onClick={onSave} disabled={reading || saving || importing || draft.stations.length === 0}>
+                        <Btn onClick={onSave} disabled={!contextConfirmed || reading || saving || importing || draft.stations.length === 0}>
                             {saving ? 'Analizando…' : 'Analizar'}
                         </Btn>
 
