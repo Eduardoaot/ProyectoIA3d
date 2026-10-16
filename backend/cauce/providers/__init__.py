@@ -21,7 +21,7 @@ def _make(kind: str, model: str, temperature: float):
 def get_extractor():
     return _make(
         os.getenv("CAUCE_EXTRACT_PROVIDER", os.getenv("CAUCE_PROVIDER", "ollama")),
-        os.getenv("CAUCE_EXTRACT_MODEL", os.getenv("CAUCE_MODEL", "llama3.2:3b")),
+        os.getenv("CAUCE_EXTRACT_MODEL", os.getenv("CAUCE_MODEL", "llama3.1:8b")),
         0.0,
     )
 
@@ -29,6 +29,6 @@ def get_extractor():
 def get_engineer():
     return _make(
         os.getenv("CAUCE_CHAT_PROVIDER", os.getenv("CAUCE_PROVIDER", "ollama")),
-        os.getenv("CAUCE_CHAT_MODEL", os.getenv("CAUCE_MODEL", "llama3.2:3b")),
+        os.getenv("CAUCE_CHAT_MODEL", os.getenv("CAUCE_MODEL", "llama3.1:8b")),
         0.5,
     )
