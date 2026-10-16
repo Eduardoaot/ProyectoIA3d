@@ -7,6 +7,8 @@ import { readPlantFile } from '../importProject'
 import { diffOps } from '../editor/operations'
 import ContextPanel from '../components/ContextPanel'
 import ContextReview from '../components/ContextReview'
+import WeightsEditor from '../components/WeightsEditor'
+import { DEFAULT_WEIGHTS, hasFeature, validWeights } from '../features'
 
 function Timer() {
     const [seconds, setSeconds] = useState(0)
@@ -148,7 +150,7 @@ function Assumptions({ draft, setDraft, catalog, info }) {
     )
 }
 
-export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onImport, onSave, saving, baseline, contextConfirmed = false, onConfirmContext }) {
+export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onImport, onSave, saving, baseline, contextConfirmed = false, onConfirmContext, capabilities = { features: [] }, weights = DEFAULT_WEIGHTS, onWeights }) {
     const words = text.trim() ? text.trim().split(/\s+/).length : 0
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
@@ -287,16 +289,17 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         <h2>Tu plano</h2>
                     </div>
 
-                    <PlanEditor controller={planController} key={editorVersion} plant={draft} positions={draft.layout} onChange={(p, pos) => setDraft({ ...p, layout: pos })} catalog={catalog} mode="full" onMetrics={setMetrics} />
+                    <PlanEditor capabilities={capabilities} controller={planController} key={editorVersion} plant={draft} positions={draft.layout} onChange={(p, pos) => setDraft({ ...p, layout: pos })} catalog={catalog} mode="full" onMetrics={setMetrics} />
 
                     <div style={{ marginTop: 24 }}>
                         <Assumptions draft={draft} setDraft={(next) => planController.current?.apply(diffOps(draft, next))} catalog={catalog} info={info} />
                     </div>
 
+                    {hasFeature(capabilities, 'weights') && <WeightsEditor weights={weights} onChange={onWeights} />}
                     <ContextPanel context={draft.context} onChange={(context) => setDraft({ ...draft, context })} />
                     <ContextReview plant={draft} baseline={baseline} confirmed={contextConfirmed} onConfirm={onConfirmContext} />
                     <div className="row" style={{ marginTop: 32 }}>
-                        <Btn onClick={onSave} disabled={!contextConfirmed || reading || saving || importing || draft.stations.length === 0}>
+                        <Btn onClick={onSave} disabled={!contextConfirmed || (hasFeature(capabilities, 'weights') && !validWeights(weights)) || reading || saving || importing || draft.stations.length === 0}>
                             {saving ? 'Analizando…' : 'Analizar'}
                         </Btn>
 

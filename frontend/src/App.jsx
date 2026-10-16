@@ -19,6 +19,7 @@ import { isStale } from './revisions'
 import { migratePlant } from './storage'
 import { applyOps, diffOps } from './editor/operations'
 import { analyzeConfirmed, contextSignature, isConfirmed } from './context'
+import { DEFAULT_WEIGHTS, hasFeature, validWeights } from './features'
 
 const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen', 'Taller de mejora (extra)']
 
@@ -41,6 +42,7 @@ export default function App() {
     const [project, update, reset] = useProject()
     const [step, setStep] = useState(() => (project.plant ? 1 : 0))
     const [catalog, setCatalog] = useState(null)
+    const [capabilities, setCapabilities] = useState({ features: [] })
     const [reading, setReading] = useState(false)
     const [saving, setSaving] = useState(false)
     const [confirmation, setConfirmation] = useState(null)
@@ -60,7 +62,7 @@ export default function App() {
         api.health().then(setAi).catch(() => setAi(null))
         api.catalog().then(setCatalog).catch(() => setError('Error conectando con el servidor.'))
         // Warm the shared cache. Unsupported features remain disabled.
-        void api.getCapabilities()
+        api.getCapabilities().then(setCapabilities)
     }, [])
 
     const notify = useCallback((msg) => setToast({ msg, id: Date.now() }), [])
@@ -107,14 +109,14 @@ export default function App() {
     }
 
     const save = async () => {
-        if (saving || !isConfirmed(draft, confirmation)) return
+        if (saving || !isConfirmed(draft, confirmation) || (hasFeature(capabilities, 'weights') && !validWeights(project.weights || DEFAULT_WEIGHTS))) return
         const revision = project.plant_revision || 0
         const snapshot = structuredClone(draft)
         setSaving(true)
         setError(null)
 
         try {
-            const out = await analyzeConfirmed(snapshot, confirmation, api.analyze)
+            const out = await analyzeConfirmed(snapshot, confirmation, (p) => api.analyze(p, project.weights))
             update((current) => ({ plant: snapshot, analysis: out, analysis_revision: revision,
                 ...(current.plant_revision === revision ? { redesign: { choice: null, custom: null, metrics: null } } : {}), printed: false, game: EMPTY_GAME }))
             go(1)
@@ -161,13 +163,16 @@ export default function App() {
             onSave={save}
             saving={saving}
             baseline={plant}
+            capabilities={capabilities}
+            weights={project.weights || DEFAULT_WEIGHTS}
+            onWeights={(weights) => { update({ weights }); setConfirmation(null) }}
             contextConfirmed={isConfirmed(draft, confirmation)}
             onConfirmContext={() => setConfirmation(contextSignature(draft))}
             />
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
         if (step === 2) return <Diagnosis plant={plant} analysis={analysis} report={report} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} catalog={catalog} onNext={() => go(4)} />
+        if (step === 3) return <Redesign capabilities={capabilities} plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} catalog={catalog} onNext={() => go(4)} />
         if (step === 4) return <Report plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
         if (step === 5) return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onWorkshop={() => go(6)} onRestart={restart} />
 

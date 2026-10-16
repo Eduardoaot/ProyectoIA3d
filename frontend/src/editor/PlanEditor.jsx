@@ -8,8 +8,13 @@ import { parallelPath } from './display'
 import { copySelection, deleteSelectionOps, groupMoveOps, pasteOps, rectangleSelection, routeGroupOps, selected, toggleSelection } from './selection'
 import GroupInspector from './GroupInspector'
 import { recordTimeChanges } from '../context'
+import { hasFeature } from '../features'
+import PlanAssistant from './PlanAssistant'
+import { ConveyorGlyph, FlowLegend } from './FlowGlyph'
+import { FLOW_STYLES, returnPath } from './flows'
 
 const TOOLS_FULL = [
+    { id: 'conveyor', label: 'Banda', key: 'B', tip: 'Clic en origen, puntos intermedios y destino para dibujar una banda.' },
     { id: 'select', label: 'Mover', key: 'V', tip: 'Selecciona y arrastra máquinas, zonas, paredes y portones.' },
     { id: 'station', label: 'Máquina', key: 'M', tip: 'Clic en el plano para agregar una máquina del tipo elegido.' },
     { id: 'route', label: 'Ruta', key: 'T', tip: 'Clic en la máquina de origen y luego en la de destino. Sigue encadenando; Esc para terminar.' },
@@ -39,8 +44,9 @@ function useLegs(plant, positions) {
     return out
 }
 
-export default function PlanEditor({ plant, positions, onChange: emitChange, catalog, mode = 'full', onMetrics, title, controller }) {
+export default function PlanEditor({ plant, positions, onChange: emitChange, catalog, mode = 'full', onMetrics, title, controller, capabilities = { features: [] } }) {
     const full = mode === 'full'
+    const tools = full ? TOOLS_FULL.filter((t) => t.id !== 'conveyor' || hasFeature(capabilities, 'conveyors')) : TOOLS_FULL.filter((t) => t.id === 'select')
     const svg = useRef(null)
     const box = useRef(null)
     const [tool, setTool] = useState('select')
@@ -49,12 +55,16 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
     const sel = currentSelection.length === 1 ? currentSelection[0] : null
     const setSel = (item) => setSelection(item ? [item] : [])
     const clipboard = useRef(null)
+    const [hasClipboard, setHasClipboard] = useState(false)
     const pasteCount = useRef(0)
     const marquee = useRef(null)
     const [selectionRect, setSelectionRect] = useState(null)
     const [addKind, setAddKind] = useState('otro')
     const [zoneKind, setZoneKind] = useState('oficina')
     const [routeFrom, setRouteFrom] = useState(null)
+    const [flow, setFlow] = useState('material')
+    const [isReturn, setIsReturn] = useState(false)
+    const [beltDraft, setBeltDraft] = useState(null)
     const [draft, setDraft] = useState(null)
     const [cursor, setCursorPt] = useState(null)
     const drag = useRef(null)
@@ -155,6 +165,7 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
         if (!content.items.length) { setNotice('Selecciona maquinas, zonas, paredes o portones para copiar.'); return }
         if (cut && !remove()) return
         clipboard.current = content
+        setHasClipboard(true)
         pasteCount.current = 0
         force((k) => k + 1)
         setNotice(content.items.length + ' elementos copiados, con sus rutas internas.')
@@ -176,12 +187,22 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
     }
 
     const routeClick = (id) => {
+        if (tool === 'conveyor') {
+            if (!beltDraft) { setBeltDraft({ from: id, points: [positions[id].slice(0, 2)] }); return }
+            if (beltDraft.from === id) return
+            const belt = { id: uid('band-'), from: beltDraft.from, to: id, points: [...beltDraft.points, positions[id].slice(0, 2)], capacity_ppm: 1, speed_mpm: 6, locked: false }
+            const route = plant.routes.find((r) => r.from === belt.from && r.to === belt.to && (r.flow || 'material') === 'material')
+            const ops = [{ op: 'add', element: belt }]
+            ops.push(route ? { op: 'update', id: route.id, set: { conveyor: belt.id } } : { op: 'connect', from: belt.from, to: belt.to, frac: 1, flow: 'material', conveyor: belt.id })
+            if (applyBatch(ops)) { setSel({ type: 'conveyor', id: belt.id }); setBeltDraft(null); setTool('select') }
+            return
+        }
         if (!routeFrom) {
             setRouteFrom(id)
             return
         }
-        if (routeFrom !== id && !plant.routes.some((r) => r.from === routeFrom && r.to === id)) {
-            const r = { id: uid('r'), from: routeFrom, to: id, frac: 1 }
+        if (routeFrom !== id && !plant.routes.some((r) => r.from === routeFrom && r.to === id && (r.flow || 'material') === flow)) {
+            const r = { id: uid('r'), from: routeFrom, to: id, frac: 1, ...(hasFeature(capabilities, 'flows') ? { flow, is_return: isReturn } : {}) }
             commit({ ...plant, routes: [...plant.routes, r] })
             setSel({ type: 'route', id: r.id })
         }
@@ -213,14 +234,15 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
             else if (k === 'escape') {
                 marquee.current = null
                 setSelectionRect(null)
+                setBeltDraft(null)
                 setRouteFrom(null)
                 setDraft(null)
                 setSel(null)
                 setTool('select')
             } else if (full && !e.ctrlKey && !e.metaKey) {
-                const t = TOOLS_FULL.find((q) => q.key.toLowerCase() === k)
+                const t = tools.find((q) => q.key.toLowerCase() === k)
                 if (t) {
-                setTool(t.id)
+                setBeltDraft(null); setTool(t.id)
                 setRouteFrom(null)
                 }
             }
@@ -250,7 +272,7 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
     const onDownStation = (e, s) => {
         e.stopPropagation()
         box.current.focus({ preventScroll: true })
-        if (tool === 'route') return routeClick(s.id)
+        if (tool === 'route' || tool === 'conveyor') return routeClick(s.id)
         if (tool !== 'select') return
 
         const [x, z] = toPt(e)
@@ -299,7 +321,9 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
             svg.current.setPointerCapture?.(e.pointerId)
             return
         }
-        if (tool === 'station') {
+        if (tool === 'conveyor') {
+            if (beltDraft) setBeltDraft({ ...beltDraft, points: [...beltDraft.points, [snap(x), snap(z)]] })
+        } else if (tool === 'station') {
             addStation(x, z)
             setTool('select')
         } else if (tool === 'wall' || tool === 'zone') {
@@ -397,17 +421,18 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
     const legBy = useMemo(() => Object.fromEntries((live.legs || []).map((l) => [l.id, l])), [live.legs])
     const recv = plant.receive_gate
     const disp = plant.dispatch_gate
-    const tools = full ? TOOLS_FULL : TOOLS_FULL.slice(0, 1)
+
     const activeTip = tools.find((t) => t.id === tool)?.tip
 
     return (
         <div className="editor" ref={box} tabIndex={0} aria-label={title || 'Editor del plano'}>
+            {hasFeature(capabilities, 'plan_ops') && <PlanAssistant plant={{ ...plant, layout: positions }} onApply={applyBatch} />}
             {notice && <p className="editor-notice" role="status">{notice}</p>}
             <div className="editor-bar">
                 {full && <div className="row editor-clipboard">
                     <button type="button" className="btn btn--ghost btn--small" disabled={!currentSelection.length} onClick={() => copy()}>Copiar</button>
                     <button type="button" className="btn btn--ghost btn--small" disabled={!currentSelection.length} onClick={() => copy(true)}>Cortar</button>
-                    <button type="button" className="btn btn--ghost btn--small" disabled={!clipboard.current} onClick={paste}>Pegar</button>
+                    <button type="button" className="btn btn--ghost btn--small" disabled={!hasClipboard} onClick={paste}>Pegar</button>
                 </div>}
                 <button type="button" className="btn btn--ghost btn--small" onClick={() => setViewport(null)}>Ajustar vista</button>
                 <div className="seg" role="group" aria-label="Herramientas">
@@ -427,6 +452,7 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
                     ))}
                 </div>
 
+                {full && tool === 'route' && hasFeature(capabilities, 'flows') && <><label>Flujo <select value={flow} onChange={(e) => setFlow(e.target.value)}>{Object.keys(FLOW_STYLES).map((f) => <option key={f}>{f}</option>)}</select></label><label><input type="checkbox" checked={isReturn} onChange={(e) => setIsReturn(e.target.checked)} /> Retorno</label></>}
                 {full && tool === 'station' && (
                     <select className="editor-select" value={addKind} onChange={(e) => setAddKind(e.target.value)} aria-label="Tipo de máquina">
                         {catalog?.kinds.map((k) => (
@@ -530,12 +556,18 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
                             )
                         })}
 
+                        {(plant.conveyors || []).map((c) => <ConveyorGlyph key={c.id} conveyor={c} selected={selected(currentSelection, 'conveyor', c.id)} onPointerDown={(e) => {
+                            if (!full || tool !== 'select') return
+                            e.stopPropagation(); startDrag(e, { type: 'conveyor', id: c.id })
+                        }} />)}
+                        {beltDraft && <path d={pathD(beltDraft.points)} fill="none" stroke="#555" strokeWidth={0.8} pointerEvents="none" />}
                         {plant.routes.map((r) => {
                             const a = positions[r.from]
                             const b = positions[r.to]
                             if (!a || !b) return null
                             const leg = legBy[r.id]
-                            const pts = parallelPath(r, plant.routes, leg?.path?.length > 1 ? leg.path : straight(a, b))
+                            const pts = returnPath(parallelPath(r, plant.routes, leg?.path?.length > 1 ? leg.path : straight(a, b)), r.is_return)
+                            const style = FLOW_STYLES[r.flow || 'material'] || FLOW_STYLES.material
                             const m = midOf(pts)
                             const on = selected(currentSelection, 'route', r.id)
                             const width = 0.12 + Math.min(1, r.frac ?? 1) * 0.22
@@ -543,8 +575,8 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
                             return (
                                 <g key={r.id} onPointerDown={(e) => onDownRoute(e, r)} style={{ cursor: full && tool === 'select' ? 'pointer' : undefined }}>
                                 <path d={pathD(pts)} fill="none" stroke="transparent" strokeWidth={1.2} />
-                                <path d={pathD(pts)} fill="none" stroke="#000" strokeOpacity={on ? 1 : 0.65} strokeWidth={on ? width + 0.18 : width} strokeDasharray={(r.frac ?? 1) < 1 ? '0.6 0.4' : leg && !leg.ok ? '0.25 0.25' : undefined} strokeLinejoin="round" />
-                                <polygon points={arrowPoints(m, on ? 0.95 : 0.75)} fill="#000" />
+                                <path d={pathD(pts)} fill="none" stroke={style.color} strokeOpacity={on ? 1 : 0.65} strokeWidth={on ? width + 0.18 : width} strokeDasharray={style.dash || ((r.frac ?? 1) < 1 ? '0.6 0.4' : leg && !leg.ok ? '0.25 0.25' : undefined)} strokeLinejoin="round" />
+                                <polygon points={arrowPoints(m, on ? 0.95 : 0.75)} fill={style.color} />
                                 </g>
                             )
                         })}
@@ -589,6 +621,7 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
                         )}
                     </svg>
                     <p className="editor-tip small">{tool === 'route' && routeFrom ? `Desde «${st[routeFrom]?.name}»: clic en la máquina de destino.` : activeTip} Shift/Ctrl + clic: sumar o quitar. Arrastra el fondo para seleccionar. Rueda: zoom. Alt + arrastrar o botón central: desplazar vista.</p>
+                    {hasFeature(capabilities, 'flows') && <FlowLegend />}
                     <ol className="plan-legend">{plant.stations.map((s) => <li key={s.id}>{s.name}{(s.count || 1) > 1 ? ` ×${s.count}` : ''}</li>)}</ol>
                 </div>
 
@@ -601,10 +634,10 @@ export default function PlanEditor({ plant, positions, onChange: emitChange, cat
                         }}>{locate(plant, sel.id).element.locked ? '🔒 Desbloquear' : 'Bloquear'}</button>
                         <p className="small">{locate(plant, sel.id).element.lock_reason}</p>
                     </div>}
-                    <GroupInspector selection={currentSelection} full={full} remove={remove} onRoutes={(patch) => {
+                    <GroupInspector flowsEnabled={hasFeature(capabilities, 'flows')} selection={currentSelection} full={full} remove={remove} onRoutes={(patch) => {
                         try { applyBatch(routeGroupOps(plant, currentSelection, patch)) } catch (error) { setNotice(error.message) }
                     }} />
-                    {currentSelection.length <= 1 && <Inspector plant={plant} positions={positions} sel={sel} setSel={setSel} commit={commit} rotate={rotate} remove={remove} catalog={catalog} full={full} live={live} expanded={!!expanded[sel?.id]} onToggleExpanded={() => setExpanded((values) => ({ ...values, [sel.id]: !values[sel.id] }))} />}
+                    {currentSelection.length <= 1 && <Inspector capabilities={capabilities} plant={plant} positions={positions} sel={sel} setSel={setSel} commit={commit} rotate={rotate} remove={remove} catalog={catalog} full={full} live={live} expanded={!!expanded[sel?.id]} onToggleExpanded={() => setExpanded((values) => ({ ...values, [sel.id]: !values[sel.id] }))} />}
                 </div>
             </div>
         </div>

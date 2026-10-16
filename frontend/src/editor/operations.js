@@ -129,12 +129,19 @@ export function applyOps(original, ops) {
         } else fail(`Operación desconocida: ${op.op}`)
     }
     for (const station of plant.stations) {
-        if (!(station.w > 0 && station.d > 0) || !validPoint([station.w, station.d, ...(plant.layout[station.id] || [])])) fail('Dimensiones o posición inválidas.')
+        if (!(station.w > 0 && station.d > 0) || !Array.isArray(plant.layout[station.id]) || plant.layout[station.id].length < 2 || !validPoint([station.w, station.d, ...plant.layout[station.id]])) fail('Dimensiones o posición inválidas.')
         if (station.count != null && (!Number.isInteger(station.count) || station.count < 1)) fail('La cantidad debe ser un entero positivo.')
     }
     for (const route of plant.routes || []) {
         if (!plant.stations.some((s) => s.id === route.from) || !plant.stations.some((s) => s.id === route.to)) fail('Ruta con estación inexistente.')
         if (route.frac != null && (!Number.isFinite(route.frac) || route.frac < 0 || route.frac > 1)) fail('La fracción debe estar entre 0 y 1.')
+        if (route.flow != null && !['material', 'personas', 'vehiculos', 'carga'].includes(route.flow)) fail('Flujo desconocido.')
+        if (route.conveyor && !(plant.conveyors || []).some((c) => c.id === route.conveyor)) fail('Banda de ruta inexistente.')
+    }
+    for (const belt of plant.conveyors || []) {
+        if (!plant.stations.some((s) => s.id === belt.from) || !plant.stations.some((s) => s.id === belt.to)) fail('La banda necesita estaciones existentes.')
+        if (!Array.isArray(belt.points) || belt.points.length < 2 || !belt.points.every((p) => Array.isArray(p) && p.length === 2 && validPoint(p))) fail('La banda necesita al menos dos puntos válidos.')
+        if ([belt.capacity_ppm, belt.speed_mpm].some((v) => v != null && (!Number.isFinite(v) || v <= 0))) fail('La capacidad y la velocidad deben ser positivas.')
     }
     return { plant, inverse: diffOps(plant, original, true) }
 }

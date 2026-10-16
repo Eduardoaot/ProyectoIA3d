@@ -2268,4 +2268,13 @@ details.how ul {
 .context-entries li { margin: 10px 0; overflow-wrap: anywhere; }
 .context-entries [data-confidence='baja'] { border-left: 3px dashed #767676; padding-left: 8px; }
 .context-review p { margin: 12px 0; }
+.plan-assistant { margin: 12px; }
+.plan-assistant code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.simulation-panel { margin: 20px 0; }
+.simulation-panel table { width: 100%; text-align: left; }
+.metric-values { margin: 8px 0; }
+.metric-values > div { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr; gap: 12px; border-bottom: 1px solid #dedede; padding: 6px 0; }
+.metric-values dd { margin: 0; overflow-wrap: anywhere; }
+.result-details p, .result-details details, .discarded-claims { margin: 12px 0; }
+.flow-legend { font-size: 12px; margin: 10px 0; }
 @media print { .plan-legend { font-size: 8pt; } }

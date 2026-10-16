@@ -1,4 +1,5 @@
 import { plantForCapabilities } from './context.js'
+import { hasFeature, validWeights } from './features.js'
 async function prepareBody(body) {
     if (!body?.plant?.context?.segments) return body
     return { ...body, plant: plantForCapabilities(body.plant, await getCapabilities()) }
@@ -42,6 +43,11 @@ export function getCapabilities() {
     return capabilitiesRequest
 }
 
+async function featurePost(feature, path, body, signal) {
+    if (!hasFeature(await getCapabilities(), feature)) throw new Error('El servidor no ofrece esta función.')
+    return post(path, body, signal)
+}
+
 export const api = {
     getCapabilities,
     health: () => get('/api/health'),
@@ -49,19 +55,38 @@ export const api = {
     story: (text) => post('/api/story', { text }),
     routes: (plant, positions, signal) => post('/api/routes', { plant, positions }, signal),
     evaluate: (plant, positions, rebalance = true, signal) => post('/api/evaluate', { plant, positions, rebalance }, signal),
-    analyze: (plant) => post('/api/analyze', { plant }),
+    analyze: async (plant, weights) => {
+        if (weights != null && hasFeature(await getCapabilities(), 'weights')) {
+            if (!validWeights(weights)) throw new Error('Los pesos deben sumar 1.')
+            return post('/api/analyze', { plant, weights })
+        }
+        return post('/api/analyze', { plant })
+    },
+    planOps: (instruction, plant, signal) => featurePost('plan_ops', '/api/plan/ops', { instruction, plant }, signal),
+    simulate: (plant, alternative, replicas, seed, signal) => {
+        if (!Number.isInteger(replicas) || replicas < 1 || !Number.isInteger(seed) || seed < 0) return Promise.reject(new Error('Réplicas y semilla inválidas.'))
+        return featurePost('simulate', '/api/simulate', { plant, alternative, replicas, seed }, signal)
+    },
     missions: (context) => post('/api/missions', context),
 }
 
 export async function stream(path, body, onToken, signal) {
     body = await prepareBody(body)
+    const structuredReport = path === '/api/report' && hasFeature(await getCapabilities(), 'report_validation')
     const r = await fetch(path, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(structuredReport ? { Accept: 'application/json, text/plain;q=0.9' } : {}) },
         body: JSON.stringify(body),
         signal,
     })
     if (!r.ok || !r.body) throw new Error(`${path} respondió ${r.status}`)
+
+    if (path === '/api/report' && r.headers.get('Content-Type')?.includes('application/json')) {
+        const data = await r.json()
+        if (typeof data.text !== 'string') throw new Error('El informe estructurado necesita el campo text.')
+        onToken(data.text)
+        return { validation: data.validation }
+    }
 
     const reader = r.body.getReader()
     const dec = new TextDecoder()

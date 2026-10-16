@@ -30,6 +30,30 @@ before(async () => {
 })
 after(async () => { await server?.close() })
 
+test('capability-dependent controls are hidden for old backend and visible for full capabilities', async () => {
+    const plant = await fixture('transformadores-v3')
+    const props = { text: '', draft: plant, info: { source: 'Archivo JSON', notes: [] }, catalog: { kinds: [], assumptions: [] } }
+    const old = renderToStaticMarkup(createElement(Story, props))
+    assert.doesNotMatch(old, /Asistente del editor|Pesos de la decisión|>Banda<|>Flujo /)
+    const full = renderToStaticMarkup(createElement(Story, { ...props, capabilities: await fixture('capabilities-full') }))
+    assert.match(full, /Asistente del editor/)
+    assert.match(full, /Pesos de la decisión/)
+    assert.match(full, />Banda</)
+    assert.match(full, /Contexto 2/)
+})
+
+test('simulation percentiles show missing values and report prints discarded claims', async () => {
+    const { SimulationValues } = await server.ssrLoadModule('/src/components/SimulationPanel.jsx')
+    const html = renderToStaticMarkup(createElement(SimulationValues, { values: { piezas_dia: { p10: null, p50: 20, p90: 30 }, oee: null } }))
+    assert.match(html, /P10/); assert.match(html, /Mediana/); assert.match(html, /P90/)
+    assert.equal((html.match(/sin datos/g) || []).length, 2)
+    const plant = await fixture('transformadores-v3'), analysis = await fixture('analyze-v3')
+    const report = renderToStaticMarkup(createElement(ReportDoc, { plant, analysis, validation: { discarded: [{ text: 'Cifra incorrecta', reason: 'Sin evidencia' }] } }))
+    assert.match(report, /Afirmaciones descartadas/)
+    assert.match(report, /Cifra incorrecta/)
+    assert.match(report, /Pesos utilizados/)
+})
+
 for (const version of ['v2', 'v3']) {
     test(`the editor renders every station and the JSON import button with ${version}`, async (t) => {
         const errors = t.mock.method(console, 'error', () => {})

@@ -10,6 +10,9 @@ import { protectProposal } from '../revisions'
 import { analyzeConfirmed, contextSignature, isConfirmed } from '../context'
 import ContextReview from '../components/ContextReview'
 import ContextPanel from '../components/ContextPanel'
+import ResultDetails from '../components/ResultDetails'
+import SimulationPanel from '../components/SimulationPanel'
+import { hasFeature } from '../features'
 
 export function Delta({ label, unit, before, after, decimals = 0, goodWhenUp }) {
 	const p = pct(before, after)
@@ -68,7 +71,7 @@ function worksDiff(base, other) {
 	return n
 }
 
-export default function Redesign({ plant, analysis, redesign, setRedesign, catalog, onNext }) {
+export default function Redesign({ plant, analysis, redesign, setRedesign, catalog, onNext, capabilities = { features: [] } }) {
 	const cur = analysis.current
 	const alts = analysis.alternatives
 	const full = plant.use_assumptions && cur.daily_m != null
@@ -194,7 +197,8 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 				<p className="lede">Explora las propuestas con «Ver». «Aplicar» cambia tu rediseño y permite deshacer la acción.</p>
 			</header>
 
-			<Appear className="alts" style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }}>
+			<ResultDetails analysis={analysis} />
+            <Appear className="alts" style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }}>
 				{cards.map((a) => {
 					const p = a.m ? pct(cur.piece_m, a.m.piece_m) : null
 
@@ -204,6 +208,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 							{a.id === 'propio' && <span className="alt-best">TUYA</span>}
 
 							<h3>{a.name}</h3>
+                            <ResultDetails alternative={alts.find((item) => item.id === a.id) || {}} />
 
 							<div className="alt-figure num">
 								{a.m ? fmt(a.m.piece_m, 1) : '…'}
@@ -249,9 +254,10 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, catal
 						</div>
 					</div>
 
-					<ContextPanel context={selPlant.context} onChange={(context) => onEdit({ ...selPlant, context }, positions)} />
+					{hasFeature(capabilities, 'simulate') && <SimulationPanel plant={reviewPlant} alternative={choice || analysis.recommended} confirmed={isConfirmed(reviewPlant, confirmation)} />}
+                    <ContextPanel context={selPlant.context} onChange={(context) => onEdit({ ...selPlant, context }, positions)} />
                     <ContextReview plant={reviewPlant} baseline={lastAnalyzed || plant} confirmed={isConfirmed(reviewPlant, confirmation)} onConfirm={() => setConfirmation(contextSignature(reviewPlant))} />
-                    <PlanEditor controller={editor} plant={selPlant} positions={positions} onChange={onEdit} catalog={catalog} mode="full" onMetrics={onLive} title="Editor del rediseño" />
+                    <PlanEditor capabilities={capabilities} controller={editor} plant={selPlant} positions={positions} onChange={onEdit} catalog={catalog} mode="full" onMetrics={onLive} title="Editor del rediseño" />
 
 					<Appear className="kpis" style={{ marginTop: 32, gridTemplateColumns: `repeat(${full ? 4 : 1}, minmax(0, 1fr))` }}>
 						{metrics ? (

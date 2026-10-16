@@ -3,6 +3,7 @@ import { stream } from '../api'
 
 export default function useReport(context, version) {
     const [text, setText] = useState('')
+    const [validation, setValidation] = useState(null)
     const [state, setState] = useState('idle') // idle | running | done | error
     const ctl = useRef(null)
     const ctx = useRef(context)
@@ -16,9 +17,10 @@ export default function useReport(context, version) {
         const c = new AbortController()
         ctl.current = c
         setText('')
+        setValidation(null)
         setState('running')
         stream('/api/report', ctx.current, (t) => setText((p) => p + t), c.signal)
-        .then(() => setState('done'))
+        .then((result) => { if (!c.signal.aborted) { setValidation(result?.validation || null); setState('done') } })
         .catch((e) => {
             if (e.name !== 'AbortError') setState('error')
         })
@@ -29,8 +31,9 @@ export default function useReport(context, version) {
     useEffect(() => {
         ctl.current?.abort()
         setText('')
+        setValidation(null)
         setState('idle')
     }, [version])
 
-    return { text, state, run }
+    return { text, validation, state, run }
 }

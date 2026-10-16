@@ -1,5 +1,28 @@
 # Editor de Cauce · Fase A0
 
+## A6: flujos, bandas, propuestas y resultados
+
+Las herramientas nuevas aparecen cuando el servidor anuncia que las soporta.
+«Ruta» permite elegir flujo y marcar retorno; su color/trazo y curva también
+aparecen en el PDF. «Banda»: clic en una estación, puntos intermedios sobre el
+fondo y otra estación para terminar. Revisa capacidad y velocidad en el inspector
+(inicialmente 1 pieza/min y 6 m/min); Esc cancela. La ruta queda vinculada a la banda.
+
+Los pesos deben sumar 1 antes de analizar. Los resultados muestran los criterios,
+compromisos, tipo ideal/viable y sensibilidad cuando llegan del motor.
+El asistente presenta operaciones y rechazos: «Aplicar operaciones» es reversible
+en un solo paso. Si editas mientras prepara la propuesta, debes pedir otra.
+«Simular alternativa» muestra semilla, réplicas y percentiles; no rellena datos
+faltantes. Primero confirma Contexto 2. Una edición marca la simulación desactualizada.
+
+El informe sigue aceptando texto y ahora también JSON `{ text, validation }`,
+acordado con el usuario. «Afirmaciones descartadas» solo aparece si hay rechazos.
+
+La prueba opcional `node tests/browser-smoke.mjs` usa Chrome headless instalado,
+un perfil temporal y API simulada, sin dependencias nuevas. `CAUCE_BROWSER`
+permite indicar otro Chromium. Cubre interacción v2/v3, copia/pegado/deshacer,
+confirmación y aplicación reversible del asistente.
+
 ## A5: contexto con historial
 
 «Contexto por segmentos e historial» permite registrar datos con fuente,

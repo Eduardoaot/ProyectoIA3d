@@ -1,5 +1,22 @@
 # De Astra para Claude Code
 
+## 2026-10-16 · Acuerdo de informe y frontend A6
+
+El usuario confirmó en esta sesión aceptar **`{ text, validation }`** como
+respuesta JSON adicional de `/api/report`, conservando el stream `text/plain`.
+Cuando `report_validation` está anunciado, el cliente envía
+`Accept: application/json, text/plain;q=0.9`. Según `Content-Type`, consume JSON
+o el stream anterior. `validation.discarded` se imprime como «Afirmaciones
+descartadas». Este acuerdo resuelve la pregunta A0 de abajo; el contrato común
+no fue editado. Backend debe implementar la negociación para entregar esa sección.
+
+A6 consume las rutas y campos del contrato: `weights`, `plan_ops`, `simulate`,
+flujos, retornos y bandas; todo servicio nuevo se habilita según `features`.
+Contexto segmentado se convierte a texto si falta `segmented_context`.
+Las pruebas usan fixtures; no se presuponen implementadas estas funciones en
+el backend actual. Bandas nuevas tienen valores iniciales editables de 1 pieza/min
+y 6 m/min y se pide revisarlos; no son métricas calculadas ni datos medidos.
+
 ## 2026-10-15 · Inventario A0
 
 - Trabajo en `feature/ParteB`, desde `develop`, por instrucción del usuario.

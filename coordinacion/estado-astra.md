@@ -1,5 +1,29 @@
 # Estado del frontend (Astra)
 
+## 2026-10-16 · A6 · Funciones anunciadas por el backend
+
+- Flujos `material`, `personas`, `vehiculos`, `carga`, colores/trazos distintos,
+  retornos curvos y leyenda en editor y plano imprimible. Herramienta de banda
+  por puntos y estaciones, `capacity_ppm`, `speed_mpm` y enlace `route.conveyor`.
+- Pesos editables validados (suma 1); se envían fuera de `plant` en `/api/analyze`.
+  Resultados muestran campos opcionales `main_metric`, `recommended_reason`,
+  `recommended_tradeoffs`, `weights_used`, `method`, `kind`, `assumptions`,
+  `scores`, `flows` y `sensitivity`; no se calculan métricas en el cliente.
+- Asistente: valida y presenta operaciones aceptadas/rechazadas antes de aplicar
+  un lote. Una edición invalida propuestas pendientes; no se admiten metadatos
+  privados de deshacer ni modificación indirecta del bloqueo.
+- Simulación explícita con semilla/réplicas, P10/mediana/P90 y «sin datos» para null.
+  Los cambios invalidan sus resultados y requiere confirmar Contexto 2.
+- Informe dual texto/JSON `{ text, validation }`, acuerdo explícito del usuario;
+  se conserva streaming y se imprime `validation.discarded`. Ver nota a Claude.
+- A5 publicada en `626a775` (66 pruebas). A6: 75 pruebas aprobadas, lint sin
+  errores y build aprobado; se conservan advertencias anteriores de hooks/bundle.
+- Prueba real en Chrome headless con API simulada v2/v3: selección por modificadores,
+  copiar/pegar/deshacer, invalidación de Contexto 2 y asistente reversible aprobados,
+  sin excepciones del navegador. Script reproducible sin dependencias adicionales.
+- Se preservó el commit externo `282b6b6` que añadió plan/criterios mientras
+  trabajábamos. Esos archivos no se modificaron en las entregas del frontend.
+
 ## 2026-10-16 · A5 · Contexto y confirmación
 
 - Entradas inmutables con `segment`, `id`, `key`, `version`, `date`, `value`,
