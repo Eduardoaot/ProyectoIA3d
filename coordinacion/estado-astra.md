@@ -1,5 +1,21 @@
 # Estado del frontend (Astra)
 
+## 2026-10-16 · A4 · Edición por grupos
+
+- Reanudación desde `f065794` en `feature/ParteB`; el usuario solicita completar
+  A4–A7 con commit y push por fase. Se conserva la propiedad del frontend.
+- Selección rectangular y Shift/Ctrl/Meta para sumar/quitar; mover el grupo
+  conserva distancias relativas y genera un lote reversible de `move`.
+- Copiar/cortar/pegar con ids nuevos, desplazamiento incremental, rutas y bandas
+  internas remapeadas. Los bloqueados rechazan mover/cortar/borrar el grupo.
+- Edición de `flow`/`frac` en varias rutas, validada y reversible en un paso.
+- Se corrige el orden de eliminación de dependientes en `diffOps` para permitir
+  borrar/restaurar estaciones conectadas a bandas sin referencias rotas.
+- Pruebas de copia de tres estaciones, rutas internas, inversas exactas, corte,
+  movimiento con límites, selección y edición de rutas; render v2/v3 conservado.
+- Dependencias restauradas con `npm ci`, sin cambios al manifiesto ni al lock.
+
+
 ## A3 · Cantidades y plano legible
 
 - Inspector: `count`, `unit_w`, `unit_d`, `arrangement`, `ops_per_unit`, rango

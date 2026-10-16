@@ -1,5 +1,19 @@
 # Editor de Cauce · Fase A0
 
+## A4: selección y portapapeles
+
+Arrastra sobre el fondo para encerrar elementos completos. Shift/Ctrl (o Cmd)
++ clic suma o quita elementos. Arrastrar uno seleccionado mueve todo el grupo;
+si contiene un fijo, se explica el bloqueo. El límite de la bodega conserva
+las distancias relativas. Los portones mantienen el grupo sobre su muro.
+
+Ctrl+C/Ctrl+X/Ctrl+V copia/corta/pega con desplazamiento incremental de 1 m.
+También hay botones en la barra. El portapapeles es interno a ese editor;
+las rutas y bandas entre estaciones copiadas se duplican con ids nuevos.
+Deshacer elimina una pegada completa. Los atajos no interceptan los campos de texto.
+Selecciona varias rutas con Shift/Ctrl para aplicarles flujo o porcentaje desde
+el inspector. Cada aplicación es un paso de deshacer.
+
 ## A3: cantidades y navegación
 
 Selecciona una estación para editar unidades, dimensiones por unidad, disposición,

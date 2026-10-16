@@ -17,7 +17,7 @@ export function locate(plant, id, collection) {
 // undo. They are never sent to the backend or accepted from the assistant.
 export function diffOps(before, after, restoring = false) {
     const ops = []
-    for (const key of COLLECTIONS) {
+    for (const key of ['routes', 'conveyors', 'stations', 'zones', 'walls', 'gates']) {
         for (const element of before[key] || []) {
             if (!(after[key] || []).some((item) => item.id === element.id)) {
                 if (restoring && element.locked) ops.push({ op: 'unlock', id: element.id, _collection: key })
