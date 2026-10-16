@@ -2,6 +2,10 @@ import { motion } from 'motion/react'
 import { fmt } from '../api'
 import { arrowPoints, midOf, pathD, rectOf, shortName, straight } from '../editor/geometry'
 import { useTip } from './Tip'
+import StationGlyph from '../editor/StationGlyph'
+import { parallelPath } from '../editor/display'
+import { ConveyorGlyph, FlowLegend } from '../editor/FlowGlyph'
+import { FLOW_STYLES, returnPath } from '../editor/flows'
 
 export default function FlowPlan({ plant, positions, legs, title, total, unit = 'm por pieza', bottleneck, compact = false, still = false }) {
     const { node, bind } = useTip()
@@ -60,27 +64,27 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
                         </g>
                     )
                 })}
-                {plant.stations.map((s) => {
+                {plant.stations.map((s, index) => {
                 const p = positions[s.id]
                 if (!p) return null
                 const r = rectOf(s, p)
                 const hot = s.id === bottleneck
                 return (
                     <g key={s.id} {...bind(<b>{s.name}</b>)}>
-                    <motion.rect initial={false} animate={{ x: r.x, y: r.z, width: r.w, height: r.d }} transition={{ type: 'spring', stiffness: 90, damping: 18 }} fill={hot ? '#000' : '#fff'} stroke="#000" strokeWidth={0.22} />
-                    <motion.text initial={false} animate={{ x: p[0], y: p[1] + 0.35 }} transition={{ type: 'spring', stiffness: 90, damping: 18 }} textAnchor="middle" fontSize={compact ? 0.85 : 1} fontWeight="700" fill={hot ? '#fff' : '#000'}>
-                        {shortName(s.name, Math.max(5, Math.floor(r.w * 1.8)))}
-                    </motion.text>
+                    <rect x={r.x} y={r.z} width={r.w} height={r.d} fill="transparent" />
+                    <StationGlyph station={s} position={p} index={index} selected={hot} />
                     </g>
                 )
                 })}
 
+                {(plant.conveyors || []).map((c) => <ConveyorGlyph key={c.id} conveyor={c} />)}
                 {plant.routes.map((rt, i) => {
                     const a = positions[rt.from]
                     const b = positions[rt.to]
                     if (!a || !b) return null
                     const l = legBy[rt.id]
-                    const pts = l?.path?.length > 1 ? l.path : straight(a, b)
+                    const pts = returnPath(parallelPath(rt, plant.routes, l?.path?.length > 1 ? l.path : straight(a, b)), rt.is_return)
+                    const style = FLOW_STYLES[rt.flow || 'material'] || FLOW_STYLES.material
                     const m = midOf(pts)
                     return (
                         <g
@@ -101,20 +105,22 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
                         <motion.path
                             d={pathD(pts)}
                             fill="none"
-                            stroke="#000"
+                            stroke={style.color}
                             strokeOpacity={0.6}
                             strokeLinejoin="round"
-                            strokeDasharray={(rt.frac ?? 1) < 1 ? '0.6 0.4' : undefined}
+                            strokeDasharray={style.dash || ((rt.frac ?? 1) < 1 ? '0.6 0.4' : undefined)}
                             strokeWidth={0.16 + ((l?.meters || 0) / maxM) * 0.75}
                             initial={still ? false : { pathLength: 0 }}
                             animate={{ pathLength: 1 }}
                             transition={{ duration: 0.9, delay: 0.15 + i * 0.06 }}
                         />
-                            <polygon points={arrowPoints(m, 0.8)} fill="#000" />
+                            <polygon points={arrowPoints(m, 0.8)} fill={style.color} />
                         </g>
                     )
                 })}
             </svg>
+            {plant.routes.some((r) => (r.flow && r.flow !== 'material') || r.is_return) && <FlowLegend />}
+            <ol className="plan-legend">{plant.stations.map((s) => <li key={s.id}>{s.name}{(s.count || 1) > 1 ? ` ×${s.count}` : ''}</li>)}</ol>
 
             {node}
         </div>

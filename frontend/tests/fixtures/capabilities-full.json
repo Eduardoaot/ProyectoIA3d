@@ -1,0 +1,15 @@
+{
+  "schema_version": 3,
+  "features": [
+    "count",
+    "locked",
+    "flows",
+    "conveyors",
+    "weights",
+    "plan_ops",
+    "report_validation",
+    "simulate",
+    "segmented_context"
+  ],
+  "vision": false
+}

@@ -3,6 +3,12 @@ import { fmt } from '../api'
 import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
+import { readPlantFile } from '../importProject'
+import { diffOps } from '../editor/operations'
+import ContextPanel from '../components/ContextPanel'
+import ContextReview from '../components/ContextReview'
+import WeightsEditor from '../components/WeightsEditor'
+import { DEFAULT_WEIGHTS, hasFeature, validWeights } from '../features'
 
 function Timer() {
     const [seconds, setSeconds] = useState(0)
@@ -144,12 +150,37 @@ function Assumptions({ draft, setDraft, catalog, info }) {
     )
 }
 
-export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving }) {
+export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onImport, onSave, saving, baseline, contextConfirmed = false, onConfirmContext, capabilities = { features: [] }, weights = DEFAULT_WEIGHTS, onWeights }) {
     const words = text.trim() ? text.trim().split(/\s+/).length : 0
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
+    const planController = useRef(null)
+    const importInput = useRef(null)
+    const [importing, setImporting] = useState(false)
+    const [importError, setImportError] = useState(null)
+    const [editorVersion, setEditorVersion] = useState(0)
 
     const scrollToEditor = () => setTimeout(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120)
+
+    const importFile = async (event) => {
+        const file = event.target.files?.[0]
+        event.target.value = ''
+        if (!file) return
+        setImporting(true)
+        setImportError(null)
+        try {
+            const imported = await readPlantFile(file)
+            if (draft && !window.confirm('El archivo reemplazará el borrador que estás editando. ¿Continuar?')) return
+            onImport(imported, file.name)
+            setEditorVersion((version) => version + 1)
+            setMetrics(null)
+            scrollToEditor()
+        } catch (failure) {
+            setImportError(failure.message || 'No se pudo leer el archivo.')
+        } finally {
+            setImporting(false)
+        }
+    }
 
     return (
         <section className="step">
@@ -171,18 +202,23 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                                     onClick={async () => {
                                         if (await onRead()) scrollToEditor()
                                     }}
-                                    disabled={reading || words < 6}
+                                    disabled={reading || saving || importing || words < 6}
                                 >
-                                {reading ? 'Analizando…' : 'Analizar'}
+                                {reading ? 'Leyendo…' : 'Interpretar historia'}
                                 </Btn>
-                                <button type="button" className="btn btn--ghost btn--small" onClick={() => (onBlank(), scrollToEditor())}>
+                                <button type="button" className="btn btn--ghost btn--small" disabled={reading || saving || importing} onClick={() => (onBlank(), scrollToEditor())}>
                                 Dibujar desde cero
                                 </button>
+                                <button type="button" className="btn btn--ghost btn--small" disabled={reading || saving || importing} onClick={() => importInput.current?.click()}>
+                                    {importing ? 'Importando…' : 'Importar proyecto (JSON)'}
+                                </button>
+                                <input ref={importInput} type="file" accept=".json,application/json" aria-label="Archivo de proyecto JSON" hidden onChange={importFile} />
                             </div>
                         </div>
                     </div>
 
                     {error && <p className="small">{error}</p>}
+                    {importError && <p className="small" role="alert">{importError}</p>}
                 </Appear>
 
                 <div className="stack">
@@ -217,7 +253,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         <Appear className="block">
                             <div className="chart-head" style={{ marginBottom: 12 }}>
                                 <h3>Tu proceso</h3>
-                                <span className="small">Según la interpretación de la IA</span>
+                                <span className="small">{info.source === 'Archivo JSON' ? 'Importado desde JSON' : 'Según la interpretación de la IA'}</span>
                             </div>
 
                             {draft && (
@@ -253,15 +289,18 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         <h2>Tu plano</h2>
                     </div>
 
-                    <PlanEditor plant={draft} positions={draft.layout} onChange={(p, pos) => setDraft({ ...p, layout: pos })} catalog={catalog} mode="full" onMetrics={setMetrics} />
+                    <PlanEditor capabilities={capabilities} controller={planController} key={editorVersion} plant={draft} positions={draft.layout} onChange={(p, pos) => setDraft({ ...p, layout: pos })} catalog={catalog} mode="full" onMetrics={setMetrics} />
 
                     <div style={{ marginTop: 24 }}>
-                        <Assumptions draft={draft} setDraft={setDraft} catalog={catalog} info={info} />
+                        <Assumptions draft={draft} setDraft={(next) => planController.current?.apply(diffOps(draft, next))} catalog={catalog} info={info} />
                     </div>
 
+                    {hasFeature(capabilities, 'weights') && <WeightsEditor weights={weights} onChange={onWeights} />}
+                    <ContextPanel vision={capabilities.vision} context={draft.context} onChange={(context) => setDraft({ ...draft, context })} />
+                    <ContextReview plant={draft} baseline={baseline} confirmed={contextConfirmed} onConfirm={onConfirmContext} />
                     <div className="row" style={{ marginTop: 32 }}>
-                        <Btn onClick={onSave} disabled={saving || draft.stations.length === 0}>
-                            {saving ? 'Analizando…' : 'Guardar y ver en 3D'}
+                        <Btn onClick={onSave} disabled={!contextConfirmed || (hasFeature(capabilities, 'weights') && !validWeights(weights)) || reading || saving || importing || draft.stations.length === 0}>
+                            {saving ? 'Analizando…' : 'Analizar'}
                         </Btn>
 
                         {metrics && <span className="small num">Una pieza recorre {fmt(metrics.piece_m, 1)} m en este plano.</span>}

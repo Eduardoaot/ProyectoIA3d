@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { updateProject } from './revisions'
+import { loadProject, migratePlant, PROJECT_KEY } from './storage'
 
-const KEY = 'cauce-proyecto-v2'
+const KEY = PROJECT_KEY
 
 export const EMPTY_GAME = { missions: [], done: {} }
 
@@ -14,10 +16,12 @@ export const EMPTY = {
     printed: false,
     game: EMPTY_GAME,
     maxStep: 0,
+    plant_revision: 0,
+    analysis_revision: 0,
 }
 
 export function blankPlant(params = {}) {
-    return {
+    return migratePlant({
         name: 'Mi planta',
         industry: '',
         size: { w: 30, d: 16 },
@@ -34,13 +38,12 @@ export function blankPlant(params = {}) {
         use_assumptions: false,
         params,
         layout: {},
-    }
+    })
 }
 
 function load() {
     try {
-        const raw = localStorage.getItem(KEY)
-        return raw ? { ...EMPTY, ...JSON.parse(raw) } : EMPTY
+        return loadProject(localStorage, EMPTY)
     } catch {
         return EMPTY
     }
@@ -48,21 +51,24 @@ function load() {
 
 export function useProject() {
     const [p, setP] = useState(load)
+    const [saveError, setSaveError] = useState('')
 
     useEffect(() => {
         const t = setTimeout(() => {
         try {
             localStorage.setItem(KEY, JSON.stringify(p))
+            setSaveError('')
         } catch {
+            setSaveError('No se pudo guardar el proyecto en este navegador. Descarga una copia antes de cerrar; el último guardado se conserva.')
         }
         }, 300)
         return () => clearTimeout(t)
     }, [p])
 
-    const update = (patch) => setP((prev) => ({ ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) }))
+    const update = (patch) => setP((prev) => updateProject(prev, typeof patch === 'function' ? patch(prev) : patch))
     const reset = () => setP(EMPTY)
 
-    return [p, update, reset]
+    return [p, update, reset, saveError]
 }
 
 export function customOf(project) {
