@@ -187,11 +187,6 @@ export default function App() {
                         ))}
                     </div>
 
-                    <div className="rail-ai" title={aiTitle}>
-                        <span className="rail-ai-dot" data-on={!!aiOk} />
-                        <span>{aiOk ? 'IA lista' : 'Sin IA'}</span>
-                    </div>
-                    
                     <button type="button" className="rail-chat" onClick={() => setChat(true)} aria-label="Preguntarle al ingeniero">
                         <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" strokeWidth="2.2">
                         <path d="M3 4 H19 V15 H10 L5 19 V15 H3 Z" />
