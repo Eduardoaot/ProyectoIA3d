@@ -2789,3 +2789,39 @@ details.how ul {
   color: var(--white);
   text-align: center;
 }
+
+/* ---------- Asistente del editor ---------- */
+.editor-assistant {
+  padding: 14px;
+  border-top: 2px solid var(--black);
+}
+
+.assistant {
+  display: grid;
+  gap: 10px;
+}
+
+.assistant textarea {
+  width: 100%;
+  font: inherit;
+  padding: 8px 10px;
+  border: 1.5px solid var(--black);
+  resize: vertical;
+}
+
+.assistant-out {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--g100);
+  max-width: none;
+}
+
+.assistant-out ol,
+.assistant-out ul {
+  margin: 0 0 0 18px;
+}
+
+.assistant-why {
+  color: var(--g500);
+}

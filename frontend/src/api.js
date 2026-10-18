@@ -30,6 +30,8 @@ export const api = {
     analyze: (plant, extra = {}) => post('/api/analyze', { plant, ...extra }),
     compact: (plant) => post('/api/compact', { plant }),
     missions: (context) => post('/api/missions', context),
+    // Asistente del editor (solo si capabilities anuncia plan_ops).
+    planOps: (instruction, plant) => post('/api/plan/ops', { instruction, plant }),
 }
 
 export async function stream(path, body, onToken, signal) {

@@ -95,3 +95,19 @@ Con `pruebas/transformadores.json` el motor **no** recomienda la línea recta:
 - Etiquetas: si el nombre no cabe se muestra el número y el nombre va en una leyenda debajo del plano y al pasar el cursor; igual en el plano del reporte (PDF).
 - Pruebas: `f2-ops-migracion.test.js`, `f2-unidades.test.js`.
 - Pendiente menor: la vista 3D dibuja el bloque de una estación con varias máquinas como una sola maqueta.
+
+## F3. Agentes, proveedores y `/api/plan/ops`
+
+### Motor
+- `cauce/agents/` es un paquete: `spatial.py` (los agentes espaciales de antes, reexportados igual), un prompt por rol en `extractor.md`, `editor.md`, `contexto.md`, `analista.md`, `informe.md`, `misiones.md`, `chat.md`, y `roles.py` con los esquemas de salida. `schema.py` valida JSON sin dependencias.
+- Proveedores: `capabilities = {json_schema, stream, vision, max_context}` en `base.py`; Ollama marca `vision` solo para modelos con visión (llava, *vision*, gemma3…). `get_provider(rol)` con `CAUCE_<ROL>_PROVIDER/MODEL` (editor y misiones heredan del extractor; informe, analista y contexto heredan del chat). `/api/health` agrega `roles`.
+- `POST /api/plan/ops` (`cauce/planops.py`): el editor propone en abstracto (`near`, nunca coordenadas); el motor coloca en el hueco factible más cercano, rechaza lo fijo, lo que la instrucción protege ("no muevas X"), ids inexistentes, rutas repetidas y cifras que el usuario no escribió. Respuesta `{ ops, rejected, notes }`, nunca el plano. Si el modelo falla, `ops: []`.
+- Extractor: valida contra el esquema y reintenta una vez; nuevo campo `cantidad` (solo se usa si la cifra aparece en la historia).
+- Misiones: se descarta la que cita una cifra sin respaldo en `facts()`.
+- Arreglo encontrado por las pruebas: las importaciones diferidas de `spatial.py` apuntaban al paquete viejo.
+- `features`: `plan_ops`. Pruebas: `test_f3_agentes.py`.
+- Sin ruta todavía: los agentes `contexto` y `analista` tienen prompt y proveedor, pero el Contexto 2 se arma en el frontend sin IA (F6) y el análisis lo redacta el informe.
+
+### Interfaz
+- Asistente del plano debajo del editor (solo con `plan_ops`): muestra las operaciones en palabras y lo rechazado con su motivo antes de aplicar; «Aplicar» usa `applyOps` en un lote = un paso de deshacer. Si `applyOps` rechaza algo (por ejemplo, algo fijado después), lo dice.
+- Pruebas: `f3-asistente.test.js`.

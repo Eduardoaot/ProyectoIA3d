@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, fmt } from '../api'
 import { arrowPoints, bboxOf, centerOf, composeParts, dims, fitToOutline, fromPartLocal, gateInfo, GATE_HALF, midOf, movePart, nearestOnSeg, outlineOf, PART_KINDS, partPoly, partsOf, pathD, pointInPoly, polyD, projectToOutline, rectOf, rotatePart, round2, shortName, sizePart, smartPoint, snap, straight, toPartLocal, uid } from './geometry'
+import Assistant from './Assistant'
 import Inspector from './Inspector'
 import { applyOps } from '../ops'
 import { countOf, fitLabel, unitRects } from '../units'
@@ -1323,6 +1324,11 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
           group={{ isCollapsed, toggle: toggleCollapsed }}
         />
       </div>
+        {full && (
+          <div className="editor-assistant">
+            <Assistant plant={plant} positions={positions} onApply={(np, npos) => commit(np, npos)} />
+          </div>
+        )}
     </div>
   )
 }
