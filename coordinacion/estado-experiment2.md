@@ -74,3 +74,24 @@ Con `pruebas/transformadores.json` el motor **no** recomienda la línea recta:
 - El informe pide `with_validation` solo si el backend anuncia `report_validation`; las frases descartadas se muestran en «Afirmaciones descartadas».
 - `slim()` envía `recommended`, su razón y el texto de la historia como `context`.
 - Pruebas: `frontend/tests/f1-propuestas.test.js`.
+
+## F2. Cantidades, fijos y operaciones (H2, H6, H9)
+
+### Motor
+- `cauce/units.py`: `count`, `unit_w`/`unit_d`, `arrangement`, `ops_per_unit` (por defecto `ops / count`), `t_cycle_min` (rango → promedio), `t_source`, `batch`, `locked`, `lock_reason`, y `block_size()`.
+- Servidores: cada operario es un servidor (igual que v2); sin operarios, cada máquina. `count: 1` da exactamente lo mismo que v2 (la prueba del payload v3 compara capacidad, tiempo y camiones). Las estaciones con varias máquinas no entran al reparto de operarios.
+- Lote: `lead_parts.espera_lote` separado del tiempo de máquina; la pieza pasa el lote completo en el horno y la carga por pieza es `t_min / size`.
+- Fijos: todas las alternativas, incluida la compacta, dejan las estaciones `locked` en su lugar. `alternatives[].locked_respected` y, si algo no cabe, `alternatives[].infeasible = { stations, blocked_by, text }` dice qué fijo lo impide (si cabe sin los fijos) o que no hay lugar.
+- Zonas `kind: "obstaculo"` se tratan como bloqueadas en relaciones.
+- `pruebas/transformadores-v3.json`: 14 estaciones, 36 máquinas (embobinado ×10, montaje ×4, soldadura ×3, configuración ×6, gabinete ×4), horno por lote y fijo, dos columnas fijas, retornos, flujos de personas, vehículos y carga, y una banda. `probar_transformadores.py transformadores-v3.json` da OK; el horno sale como cuello de botella por tiempo.
+- `features`: `count`, `locked`. Pruebas: `test_f2_cantidades_fijos.py`; §5.4 #2 y #4 pasan.
+
+### Interfaz
+- `ops.js`: `applyOps(plant, ops) → { plant, inverse, applied, rejected }` con las 8 operaciones del contrato §5; rechaza mover, borrar o cambiar medidas de lo fijo con su motivo. La inversa deja el plano idéntico (campos extra `at` y `unset`).
+- `migrate.js`: guarda en `cauce-proyecto-v3`; la primera vez copia y migra `cauce-proyecto-v2`, que no se toca.
+- Editor: «Fijar en su lugar» con motivo y «Liberar» (por `applyOps`, un paso de deshacer); lo fijo se dibuja con borde punteado y candado y no se arrastra, gira, mueve con flechas ni borra (avisa el motivo). Las copias no heredan el fijo.
+- Con `count` anunciado: cantidad, operarios por máquina, medidas por unidad, acomodo, ciclo mínimo y máximo, procedencia y lote. Cambiar cantidad, medidas o acomodo recalcula el bloque.
+- El plano dibuja las N máquinas según el acomodo, o un bloque «×N» (más de 12 se agrupan por defecto; «Ver las N máquinas» / «Ver como un bloque» solo cambia la vista).
+- Etiquetas: si el nombre no cabe se muestra el número y el nombre va en una leyenda debajo del plano y al pasar el cursor; igual en el plano del reporte (PDF).
+- Pruebas: `f2-ops-migracion.test.js`, `f2-unidades.test.js`.
+- Pendiente menor: la vista 3D dibuja el bloque de una estación con varias máquinas como una sola maqueta.

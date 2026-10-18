@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { api } from './api'
-import { has, NO_CAPS } from './capabilities'
+import { has } from './capabilities'
+import { upgradePlant } from './migrate'
 import { isStale } from './proposals'
 import FlowMark from './brand/FlowMark'
 import EngineerChat from './components/EngineerChat'
@@ -12,6 +13,7 @@ import Cursor from './fx/Cursor'
 import Intro from './fx/Intro'
 import { blankPlant, chosen as chosenOf, EMPTY_GAME, useProject } from './project'
 import Story from './steps/Story'
+import useCaps from './useCaps'
 
 // Los pasos con 3D, gráficas o informe se cargan al llegar a ellos: la página abre sin descargar three.js.
 const Plant = lazy(() => import('./steps/Plant'))
@@ -58,7 +60,7 @@ export default function App() {
     const [chat, setChat] = useState(false)
     const [toast, setToast] = useState(null)
     const [ai, setAi] = useState(null)
-    const [caps, setCaps] = useState(NO_CAPS)
+    const caps = useCaps()
     const stage = useRef(null)
 
     const { plant, analysis, draft, info } = project
@@ -72,7 +74,6 @@ export default function App() {
         if (window.requestIdleCallback) window.requestIdleCallback(preload)
         else setTimeout(preload, 2500)
         api.health().then(setAi).catch(() => setAi(null))
-        api.getCapabilities().then(setCaps)
         api.catalog().then(setCatalog).catch(() => setError('Error conectando con el servidor.'))
     }, [])
 
@@ -102,7 +103,7 @@ export default function App() {
             const done = startWait('story')
             const r = await api.story(project.text)
             done()
-            update({ draft: r.plant, info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error, spatial: r.spatial } })
+            update({ draft: upgradePlant(r.plant), info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error, spatial: r.spatial } })
             setReading(false)
 
             return true
@@ -113,7 +114,7 @@ export default function App() {
         }
     }
 
-    const importPlant = (plant, warnings) => update({ draft: plant, info: { source: 'Proyecto importado', notes: warnings } })
+    const importPlant = (plant, warnings) => update({ draft: upgradePlant(plant), info: { source: 'Proyecto importado', notes: warnings } })
 
     const blank = () => update({ draft: blankPlant(defaultParams()), info: { source: 'Plano vacío', notes: [] } })
 

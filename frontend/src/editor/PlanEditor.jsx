@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, fmt } from '../api'
 import { arrowPoints, bboxOf, centerOf, composeParts, dims, fitToOutline, fromPartLocal, gateInfo, GATE_HALF, midOf, movePart, nearestOnSeg, outlineOf, PART_KINDS, partPoly, partsOf, pathD, pointInPoly, polyD, projectToOutline, rectOf, rotatePart, round2, shortName, sizePart, smartPoint, snap, straight, toPartLocal, uid } from './geometry'
 import Inspector from './Inspector'
+import { applyOps } from '../ops'
+import { countOf, fitLabel, unitRects } from '../units'
 
 const TOOLS_FULL = [
   { id: 'select', label: 'Mover', key: 'V', tip: 'Selecciona y arrastra máquinas, zonas, paredes y portones. Arrastra el fondo para mover la vista; la rueda acerca y aleja. Las flechas mueven lo seleccionado (Shift: 10 veces más).' },
@@ -54,6 +56,17 @@ function useLegs(plant, positions) {
   return out
 }
 
+/* Candado de los elementos fijos (en metros, sobre el plano). */
+function LockGlyph({ x, z, s = 0.8, dark }) {
+  const c = dark ? '#fff' : '#000'
+  return (
+    <g transform={`translate(${x} ${z}) scale(${s})`} pointerEvents="none">
+      <path d="M0.2 0.45 V0.3 A0.3 0.3 0 0 1 0.8 0.3 V0.45" fill="none" stroke={c} strokeWidth="0.12" />
+      <rect x="0.05" y="0.45" width="0.9" height="0.6" fill={c} />
+    </g>
+  )
+}
+
 const wallSeg = (w) => [
   [w.x1, w.z1],
   [w.x2, w.z2],
@@ -84,6 +97,8 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
   const [grid, setGrid] = useState(0.5)
   const [cam, setCam] = useState(null)
   const [guides, setGuides] = useState([])
+  // Agrupar o expandir las N máquinas de una estación: solo cambia la vista, no los datos.
+  const [collapsed, setCollapsed] = useState({})
   const drag = useRef(null)
   const lastPt = useRef(null)
   const frozenVB = useRef(null)
@@ -193,6 +208,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
 
   const rotate = useCallback(
     (id) => {
+      if (blockedByLock('station', id)) return
       const p = positions[id]
       const rot = ((p[2] || 0) + 90) % 360
       const [x, z] = clampStation(st[id], p[0], p[1], rot)
@@ -271,15 +287,34 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       setSel({ type: 'wall', id: b.id })
     },
     moveStation: (id, x, z) => {
+      if (blockedByLock('station', id)) return
       const p = positions[id]
       const [w, d] = dims(st[id], p[2])
       commit(plant, { ...positions, [id]: [round2(Math.min(W - w / 2, Math.max(w / 2, x))), round2(Math.min(D - d / 2, Math.max(d / 2, z))), p[2] || 0] })
     },
   }
 
+  /* Fijar y liberar pasan por las operaciones del contrato (§5): un paso de deshacer. */
+  const lock = (id, on, reason = '') => {
+    const out = applyOps({ ...plant, layout: positions }, [on ? { op: 'lock', id, reason } : { op: 'unlock', id }])
+    if (out.rejected.length) return setNotice(out.rejected[0].reason)
+    const { layout, ...rest } = out.plant
+    commit('layout' in plant ? { ...rest, layout: plant.layout } : rest, layout)
+  }
+  const lockedItem = (type, id) => (type === 'station' ? st[id] : type === 'zone' ? plant.zones.find((q) => q.id === id) : null)
+  const blockedByLock = (type, id) => {
+    const it = lockedItem(type, id)
+    if (!it?.locked) return false
+    setNotice(`«${it.name}» está fijo${it.lock_reason ? `: ${it.lock_reason}` : ''}. Libéralo en el panel para moverlo.`)
+    return true
+  }
+  const isCollapsed = (s) => collapsed[s.id] ?? countOf(s) > 12
+  const toggleCollapsed = (s) => setCollapsed((c) => ({ ...c, [s.id]: !isCollapsed(s) }))
+
   const remove = () => {
     if (!sel || !full) return
     const { type, id } = sel
+    if (blockedByLock(type, id)) return
     if (type === 'station') {
       const pos = { ...positions }
       delete pos[id]
@@ -305,6 +340,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
   /* Flechas: mueve lo seleccionado un paso de la malla (Shift: diez pasos). */
   const nudge = (dx, dz) => {
     if (!sel || !full) return false
+    if (blockedByLock(sel.type, sel.id)) return true
     if (sel.type === 'station') {
       const p = positions[sel.id]
       ops.moveStation(sel.id, p[0] + dx, p[1] + dz)
@@ -523,6 +559,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     if (tool === 'route') return routeClick(s.id)
     if (tool !== 'select') return
     setSel({ type: 'station', id: s.id })
+    if (s.locked) return blockedByLock('station', s.id)
     const [x, z] = toPt(e)
     const p = positions[s.id]
     startDrag(e, { type: 'station', id: s.id, dx: x - p[0], dz: z - p[1] })
@@ -531,6 +568,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     if (!full || tool !== 'select') return
     e.stopPropagation()
     setSel({ type: 'zone', id: zn.id })
+    if (zn.locked) return blockedByLock('zone', zn.id)
     const [x, z] = toPt(e)
     startDrag(e, { type: 'zone', id: zn.id, dx: x - zn.x, dz: z - zn.z })
   }
@@ -829,7 +867,8 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     const { type, item } = clipboard
     if (type === 'station') {
       const id = uid('s')
-      const s = { ...item, id, name: `${item.name} (copia)` }
+      // La copia es una máquina nueva: no hereda el «fijo».
+      const s = { ...item, id, name: `${item.name} (copia)`, locked: false, lock_reason: '' }
       const [x, z] = at || [clipboard.at[0] + off, clipboard.at[1] + off]
       const [cx, cz] = clampStation(s, x, z, clipboard.rot)
       commit({ ...plant, stations: [...plant.stations, s] }, { ...positions, [id]: [cx, cz, clipboard.rot] })
@@ -837,7 +876,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     } else if (type === 'zone') {
       const id = uid('z')
       const [x, z] = at || [item.x + off, item.z + off]
-      const zn = { ...item, id, name: `${item.name} (copia)`, x: Math.min(W - item.w / 2, Math.max(item.w / 2, g(x))), z: Math.min(D - item.d / 2, Math.max(item.d / 2, g(z))) }
+      const zn = { ...item, id, name: `${item.name} (copia)`, locked: false, lock_reason: '', x: Math.min(W - item.w / 2, Math.max(item.w / 2, g(x))), z: Math.min(D - item.d / 2, Math.max(item.d / 2, g(z))) }
       commit({ ...plant, zones: [...plant.zones, zn] })
       setSel({ type: 'zone', id })
     } else if (type === 'wall') {
@@ -866,6 +905,16 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
   const shapeOn = full && tool === 'shape'
   const penOn = shapeOn && !!pen
   const activeTip = tools.find((t) => t.id === tool)?.tip
+  // Las estaciones cuyo nombre no cabe se dibujan con su número; aquí va la leyenda.
+  const legend = plant.stations
+    .map((s, i) => {
+      const p = positions[s.id]
+      if (!p) return null
+      const n = countOf(s)
+      const lab = fitLabel(n > 1 && isCollapsed(s) ? `${s.name} ×${n}` : s.name, rectOf(s, p).w, i)
+      return lab.numbered ? { n: lab.text, name: n > 1 ? `${s.name} (×${n})` : s.name } : null
+    })
+    .filter(Boolean)
   const outside = useMemo(() => plant.stations.filter((s) => positions[s.id] && !pointInPoly(outline, positions[s.id])).length, [plant.stations, positions, outline])
   const selPart = sel && (sel.type === 'part' || sel.type === 'pvertex') ? parts.find((p) => p.id === sel.id) : null
 
@@ -1039,6 +1088,8 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
                   <text x={zn.x} y={zn.z + 0.35} textAnchor="middle" fontSize="0.95" fill="#3b3b3b" pointerEvents="none">
                     {shortName(zn.name, 18)}
                   </text>
+                  {zn.locked && <LockGlyph x={zn.x + zn.w / 2 - 0.85} z={zn.z - zn.d / 2 + 0.1} s={Math.min(0.7, zn.w * 0.6, zn.d * 0.6)} />}
+                  <title>{zn.name}{zn.locked ? ` (fija${zn.lock_reason ? `: ${zn.lock_reason}` : ''})` : ''}</title>
                 </g>
               )
             })}
@@ -1071,21 +1122,34 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
               )
             })}
 
-            {plant.stations.map((s) => {
+            {plant.stations.map((s, i) => {
               const p = positions[s.id]
               if (!p) return null
               const r = rectOf(s, p)
               const on = sel?.type === 'station' && sel.id === s.id
               const start = routeFrom === s.id
+              const dark = on || start
+              const n = countOf(s)
+              const grouped = n > 1 && isCollapsed(s)
+              const units = n > 1 && !grouped ? unitRects(s, r, p[2]) : []
+              const lab = fitLabel(grouped ? `${s.name} ×${n}` : s.name, r.w, i)
+              const tiny = lab.numbered || r.d < 1.8
               return (
-                <g key={s.id} onPointerDown={(e) => onDownStation(e, s)} style={{ cursor: tool === 'select' ? 'grab' : tool === 'route' ? 'crosshair' : undefined }}>
-                  <rect x={r.x} y={r.z} width={r.w} height={r.d} fill={on || start ? '#000' : '#fff'} stroke="#000" strokeWidth={on ? 0.3 : 0.18} />
-                  <text x={p[0]} y={p[1] - 0.05} textAnchor="middle" fontSize="0.9" fontWeight="700" fill={on || start ? '#fff' : '#000'} pointerEvents="none">
-                    {shortName(s.name, Math.max(6, Math.floor(r.w * 1.9)))}
+                <g key={s.id} onPointerDown={(e) => onDownStation(e, s)} style={{ cursor: tool === 'select' ? (s.locked ? 'not-allowed' : 'grab') : tool === 'route' ? 'crosshair' : undefined }}>
+                  <title>{`${s.name}${n > 1 ? ` (×${n})` : ''}${s.locked ? ` · fija${s.lock_reason ? `: ${s.lock_reason}` : ''}` : ''}`}</title>
+                  <rect x={r.x} y={r.z} width={r.w} height={r.d} fill={dark ? '#000' : units.length ? '#f6f6f6' : '#fff'} stroke="#000" strokeWidth={on ? 0.3 : 0.18} strokeDasharray={s.locked ? '0.5 0.3' : undefined} />
+                  {units.map((q, k) => (
+                    <rect key={k} x={q.x} y={q.z} width={q.w} height={q.d} fill={dark ? '#3b3b3b' : '#fff'} stroke={dark ? '#c2c2c2' : '#767676'} strokeWidth={0.06} pointerEvents="none" />
+                  ))}
+                  <text x={p[0]} y={p[1] + (tiny ? 0.3 : -0.05)} textAnchor="middle" fontSize={lab.numbered ? Math.min(1.2, r.d * 0.6) : 0.9} fontWeight="700" fill={dark ? '#fff' : '#000'} stroke={units.length && !dark ? '#fff' : undefined} strokeWidth={units.length && !dark ? 0.2 : undefined} paintOrder="stroke" pointerEvents="none">
+                    {lab.text}
                   </text>
-                  <text x={p[0]} y={p[1] + 0.95} textAnchor="middle" fontSize="0.6" fill={on || start ? '#c2c2c2' : '#767676'} pointerEvents="none">
-                    {shortName(kindName[s.kind] || s.kind, Math.max(6, Math.floor(r.w * 2.6)))}
-                  </text>
+                  {!tiny && (
+                    <text x={p[0]} y={p[1] + 0.95} textAnchor="middle" fontSize="0.6" fill={dark ? '#c2c2c2' : '#767676'} pointerEvents="none">
+                      {shortName(kindName[s.kind] || s.kind, Math.max(6, Math.floor(r.w * 2.6)))}
+                    </text>
+                  )}
+                  {s.locked && <LockGlyph x={r.x + r.w - 0.85} z={r.z + 0.1} s={Math.min(0.7, r.w * 0.3, r.d * 0.3)} dark={dark} />}
                 </g>
               )
             })}
@@ -1111,7 +1175,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
               sel?.type === 'zone' &&
               (() => {
                 const zn = plant.zones.find((q) => q.id === sel.id)
-                if (!zn) return null
+                if (!zn || zn.locked) return null
                 return [
                   [-1, -1],
                   [1, -1],
@@ -1217,6 +1281,15 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
             {/* Encima de todo: al dibujar una pieza a mano cada clic pone una esquina, aunque caiga sobre una máquina. */}
             {penOn && <rect x={vx - vw} y={vz - vh} width={vw * 3} height={vh * 3} fill="transparent" style={{ cursor: 'crosshair' }} onPointerDown={onDownPen} onDoubleClick={() => closePen()} />}
           </svg>
+          {legend.length > 0 && (
+            <p className="editor-legend small">
+              {legend.map(({ n, name }) => (
+                <span key={n}>
+                  <b>{n}</b> {name}
+                </span>
+              ))}
+            </p>
+          )}
           <p className="editor-tip small">
             {tip}
             {cursor && full && (
@@ -1246,6 +1319,8 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
           parts={parts}
           comp={comp}
           shape={{ arm, setArm, addHole, setHole, startPen, pen, cancel: cancelShape }}
+          lock={lock}
+          group={{ isCollapsed, toggle: toggleCollapsed }}
         />
       </div>
     </div>

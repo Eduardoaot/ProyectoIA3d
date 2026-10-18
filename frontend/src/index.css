@@ -2757,3 +2757,35 @@ details.how ul {
   color: var(--black);
   background: var(--white);
 }
+
+/* ---------- Editor v3: fijos, unidades y leyenda ---------- */
+.lock-box,
+.units-box {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--g200);
+}
+
+.lock-box .btn {
+  justify-self: start;
+}
+
+.editor-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  max-width: none;
+}
+
+.editor-legend b {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 4px;
+  margin-right: 4px;
+  background: var(--black);
+  color: var(--white);
+  text-align: center;
+}

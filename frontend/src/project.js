@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-
-const KEY = 'cauce-proyecto-v2'
+import { loadStored, saveStored } from './migrate'
 
 export const EMPTY_GAME = { missions: [], done: {} }
 
@@ -27,20 +26,23 @@ export function blankPlant(params = {}) {
         ],
         receive_gate: 'A',
         dispatch_gate: 'B',
+        schema_version: 3,
         stations: [],
         zones: [],
         walls: [],
         routes: [],
+        conveyors: [],
         use_assumptions: false,
         params,
         layout: {},
     }
 }
 
+/* Se guarda en cauce-proyecto-v3; la primera vez se copia y migra desde v2, que no se toca. */
 function load() {
     try {
-        const raw = localStorage.getItem(KEY)
-        return raw ? { ...EMPTY, ...JSON.parse(raw) } : EMPTY
+        const stored = loadStored(localStorage)
+        return stored ? { ...EMPTY, ...stored } : EMPTY
     } catch {
         return EMPTY
     }
@@ -50,12 +52,7 @@ export function useProject() {
     const [p, setP] = useState(load)
 
     useEffect(() => {
-        const t = setTimeout(() => {
-        try {
-            localStorage.setItem(KEY, JSON.stringify(p))
-        } catch {
-        }
-        }, 300)
+        const t = setTimeout(() => saveStored(localStorage, p), 300)
         return () => clearTimeout(t)
     }, [p])
 

@@ -1,5 +1,6 @@
 import { motion } from 'motion/react'
 import { fmt } from '../api'
+import { countOf, fitLabel } from '../units'
 import { arrowPoints, bboxOf, GATE_HALF, gateInfo, midOf, outlineOf, pathD, polyD, rectOf, shortName, straight } from '../editor/geometry'
 import { useTip } from './Tip'
 
@@ -9,6 +10,16 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
   const { node, bind } = useTip()
   const { w: W, d: D } = plant.size
   const names = Object.fromEntries(plant.stations.map((s) => [s.id, s.name]))
+  // Nombres que no caben en su máquina: número en el plano y nombre completo en la leyenda (H9).
+  const legend = plant.stations
+    .map((s, i) => {
+      const p = positions[s.id]
+      if (!p) return null
+      const n = countOf(s)
+      const lab = fitLabel(n > 1 ? `${s.name} ×${n}` : s.name, rectOf(s, p).w, i, 1.8)
+      return lab.numbered ? { n: lab.text, name: n > 1 ? `${s.name} (×${n})` : s.name } : null
+    })
+    .filter(Boolean)
   const legBy = Object.fromEntries((legs || []).map((l) => [l.id, l]))
   const maxM = Math.max(1, ...(legs || []).map((l) => l.meters || 0))
   const outline = outlineOf(plant)
@@ -109,21 +120,32 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
             </g>
           )
         })}
-        {plant.stations.map((s) => {
+        {plant.stations.map((s, i) => {
           const p = positions[s.id]
           if (!p) return null
           const r = rectOf(s, p)
           const hot = s.id === bottleneck
+          const n = countOf(s)
+          const lab = fitLabel(n > 1 ? `${s.name} ×${n}` : s.name, r.w, i, 1.8)
           return (
             <g key={s.id} {...bind(<b>{s.name}</b>)}>
               <motion.rect initial={false} animate={{ x: r.x, y: r.z, width: r.w, height: r.d }} transition={{ type: 'spring', stiffness: 90, damping: 18 }} fill={hot ? '#000' : '#fff'} stroke="#000" strokeWidth={0.22} />
               <motion.text initial={false} animate={{ x: p[0], y: p[1] + 0.35 }} transition={{ type: 'spring', stiffness: 90, damping: 18 }} textAnchor="middle" fontSize={compact ? 0.85 : 1} fontWeight="700" fill={hot ? '#fff' : '#000'}>
-                {shortName(s.name, Math.max(5, Math.floor(r.w * 1.8)))}
+                {lab.text}
               </motion.text>
             </g>
           )
         })}
       </svg>
+      {legend.length > 0 && (
+        <p className="editor-legend small">
+          {legend.map(({ n, name }) => (
+            <span key={n}>
+              <b>{n}</b> {name}
+            </span>
+          ))}
+        </p>
+      )}
       {node}
     </div>
   )

@@ -1,6 +1,102 @@
 import { useState } from 'react'
 import { fmt } from '../api'
+import { has } from '../capabilities'
+import { ARRANGEMENTS, countOf, resize } from '../units'
+import useCaps from '../useCaps'
 import { bboxOf, centerOf, PART_KINDS, partLabel, shapePreset } from './geometry'
+
+const T_SOURCES = [
+  { id: 'medido', label: 'Medido' },
+  { id: 'estimado', label: 'Estimado' },
+  { id: 'supuesto', label: 'Supuesto' },
+  { id: 'usuario', label: 'Lo indica el usuario' },
+]
+
+/* Fijar o liberar: lo fijo no se mueve en el editor ni en ninguna alternativa. */
+function LockBox({ item, lock, full }) {
+  const [reason, setReason] = useState('')
+  if (!full || !lock) return null
+  if (item.locked)
+    return (
+      <div className="lock-box">
+        <span className="small">
+          <b>Fijo.</b> {item.lock_reason || 'Sin motivo anotado.'} No se mueve ni cambia de tamaño.
+        </span>
+        <button type="button" className="btn btn--ghost btn--small" onClick={() => lock(item.id, false)}>
+          Liberar
+        </button>
+      </div>
+    )
+  return (
+    <div className="lock-box">
+      <label className="field">
+        <span>Motivo para fijar (opcional)</span>
+        <input value={reason} placeholder="Columna, anclado al piso, instalación de gas…" onChange={(e) => setReason(e.target.value)} />
+      </label>
+      <button type="button" className="btn btn--ghost btn--small" onClick={() => lock(item.id, true, reason.trim())}>
+        Fijar en su lugar
+      </button>
+    </div>
+  )
+}
+
+/* Rango de tiempo: un número o [mínimo, máximo]. */
+const rangeOf = (v) => (Array.isArray(v) ? v : v != null ? [v, v] : [null, null])
+const toRange = (a, b) => (a == null && b == null ? undefined : a == null || b == null || a === b ? (a ?? b) : [Math.min(a, b), Math.max(a, b)])
+
+function Units({ s, setStation }) {
+  const n = countOf(s)
+  const [tmin, tmax] = rangeOf(s.t_cycle_min)
+  const perUnit = n ? (Number(s.ops) || 0) / n : 0
+  const set = (patch) => setStation(s.id, resize(s, patch))
+  const setRaw = (patch) => setStation(s.id, patch)
+  return (
+    <div className="units-box">
+      <span className="inspector-kicker">Máquinas y tiempos</span>
+      <div className="field-row">
+        <Field label="Máquinas iguales" type="number" step="1" min={1} value={n} suffix="×" onCommit={(v) => set({ count: Math.max(1, Math.round(v)) })} />
+        <Field label="Operarios por máquina" type="number" step="0.5" min={0} value={Math.round(perUnit * 100) / 100} onCommit={(v) => setRaw({ ops: Math.round(v * n) })} />
+      </div>
+      {n > 1 && (
+        <>
+          <div className="field-row">
+            <Field label="Ancho de cada una" type="number" step="0.1" min={0.2} value={s.unit_w ?? s.w} suffix="m" onCommit={(v) => set({ unit_w: v })} />
+            <Field label="Fondo de cada una" type="number" step="0.1" min={0.2} value={s.unit_d ?? s.d} suffix="m" onCommit={(v) => set({ unit_d: v })} />
+          </div>
+          <label className="field">
+            <span>Acomodo de las {n}</span>
+            <select value={s.arrangement || 'fila'} onChange={(e) => set({ arrangement: e.target.value })}>
+              {ARRANGEMENTS.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
+      <div className="field-row">
+        <Field label="Ciclo mínimo" type="number" step="0.5" min={0} value={tmin ?? ''} suffix="min" onCommit={(v) => setRaw({ t_cycle_min: toRange(v, tmax) })} />
+        <Field label="Ciclo máximo" type="number" step="0.5" min={0} value={tmax ?? ''} suffix="min" onCommit={(v) => setRaw({ t_cycle_min: toRange(tmin, v) })} />
+      </div>
+      <label className="field">
+        <span>De dónde sale el tiempo</span>
+        <select value={s.t_source || 'supuesto'} onChange={(e) => setRaw({ t_source: e.target.value })}>
+          {T_SOURCES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="field-row">
+        <Field label="Lote (piezas)" type="number" step="1" min={0} value={s.batch?.size ?? ''} onCommit={(v) => setRaw({ batch: v >= 1 ? { size: Math.round(v), t_min: s.batch?.t_min || s.t || 1 } : undefined })} />
+        <Field label="Minutos por lote" type="number" step="5" min={0} value={s.batch?.t_min ?? ''} suffix="min" onCommit={(v) => setRaw({ batch: v > 0 ? { size: s.batch?.size || 1, t_min: v } : undefined })} />
+      </div>
+      <p className="small">Horno o secado: la pieza espera a que se junte el lote; el motor lo cuenta aparte del tiempo de máquina.</p>
+    </div>
+  )
+}
 
 function ShapeIcon({ id }) {
   const pts = id === 'poly' ? [[2, 12], [6, 1], [14, 4], [19, 0], [17, 13]] : id === 'rect' ? [[0, 0], [20, 0], [20, 14], [0, 14]] : id === 'cuadrado' ? [[3, 0], [17, 0], [17, 14], [3, 14]] : shapePreset(id, 20, 14)
@@ -70,7 +166,8 @@ function SolidHole({ hole, onChange }) {
   )
 }
 
-export default function Inspector({ plant, positions, sel, setSel, commit, rotate, remove, catalog, full, live, duplicate, ops, outside = 0, tool, parts = [], comp, shape }) {
+export default function Inspector({ plant, positions, sel, setSel, commit, rotate, remove, catalog, full, live, duplicate, ops, outside = 0, tool, parts = [], comp, shape, lock, group }) {
+  const caps = useCaps()
   const names = Object.fromEntries(plant.stations.map((s) => [s.id, s.name]))
   const setStation = (id, patch) => commit({ ...plant, stations: plant.stations.map((s) => (s.id === id ? { ...s, ...patch } : s)) }, positions)
   const setZone = (id, patch) => commit({ ...plant, zones: plant.zones.map((z) => (z.id === id ? { ...z, ...patch } : z)) }, positions)
@@ -208,25 +305,34 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
             </select>
           </label>
         )}
-        {full && (
+        {full && !s.locked && (
           <div className="field-row">
             <Field label="Ancho" type="number" step="0.5" min={0.5} value={s.w} suffix="m" onCommit={(v) => setStation(s.id, { w: v })} />
             <Field label="Fondo" type="number" step="0.5" min={0.5} value={s.d} suffix="m" onCommit={(v) => setStation(s.id, { d: v })} />
           </div>
         )}
-        {full && positions[s.id] && (
+        {full && !s.locked && positions[s.id] && (
           <div className="field-row">
             <Field label="Centro X" type="number" step="0.1" value={positions[s.id][0]} suffix="m" onCommit={(v) => ops.moveStation(s.id, v, positions[s.id][1])} />
             <Field label="Centro Z" type="number" step="0.1" value={positions[s.id][1]} suffix="m" onCommit={(v) => ops.moveStation(s.id, positions[s.id][0], v)} />
           </div>
         )}
         <div className="row">
-          <button type="button" className="btn btn--small" onClick={() => rotate(s.id)}>
-            Girar 90° (R)
-          </button>
+          {!s.locked && (
+            <button type="button" className="btn btn--small" onClick={() => rotate(s.id)}>
+              Girar 90° (R)
+            </button>
+          )}
           {dup}
-          {del}
+          {!s.locked && del}
         </div>
+        {countOf(s) > 1 && group && (
+          <button type="button" className="link-btn small" onClick={() => group.toggle(s)}>
+            {group.isCollapsed(s) ? `Ver las ${countOf(s)} máquinas` : `Ver como un bloque ×${countOf(s)}`}
+          </button>
+        )}
+        <LockBox item={s} lock={lock} full={full} />
+        {full && has(caps, 'count') && !s.locked && <Units s={s} setStation={setStation} />}
         {full && (
           <div className="inspector-list">
             <span className="small">Le llega de</span>
@@ -299,19 +405,24 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
             ))}
           </select>
         </label>
-        <div className="field-row">
-          <Field label="Ancho" type="number" step="0.5" min={1} value={z.w} suffix="m" onCommit={(v) => setZone(z.id, { w: v })} />
-          <Field label="Fondo" type="number" step="0.5" min={1} value={z.d} suffix="m" onCommit={(v) => setZone(z.id, { d: v })} />
-        </div>
-        <div className="field-row">
-          <Field label="Centro X" type="number" step="0.1" value={z.x} suffix="m" onCommit={(v) => setZone(z.id, { x: v })} />
-          <Field label="Centro Z" type="number" step="0.1" value={z.z} suffix="m" onCommit={(v) => setZone(z.id, { z: v })} />
-        </div>
-        <p className="small">Arrastra una esquina para cambiar el tamaño.</p>
+        {!z.locked && (
+          <>
+            <div className="field-row">
+              <Field label="Ancho" type="number" step="0.5" min={1} value={z.w} suffix="m" onCommit={(v) => setZone(z.id, { w: v })} />
+              <Field label="Fondo" type="number" step="0.5" min={1} value={z.d} suffix="m" onCommit={(v) => setZone(z.id, { d: v })} />
+            </div>
+            <div className="field-row">
+              <Field label="Centro X" type="number" step="0.1" value={z.x} suffix="m" onCommit={(v) => setZone(z.id, { x: v })} />
+              <Field label="Centro Z" type="number" step="0.1" value={z.z} suffix="m" onCommit={(v) => setZone(z.id, { z: v })} />
+            </div>
+          </>
+        )}
+        {!z.locked && <p className="small">Arrastra una esquina para cambiar el tamaño.</p>}
         <div className="row">
           {dup}
-          {del}
+          {!z.locked && del}
         </div>
+        <LockBox item={z} lock={lock} full />
       </aside>
     )
   }
