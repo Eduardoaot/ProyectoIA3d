@@ -80,7 +80,9 @@ def test_payload_v3_no_rompe_backend(client, plant):
     assert ra["recommended"] == rb["recommended"]
     assert [x["positions"] for x in ra["alternatives"]] == [x["positions"] for x in rb["alternatives"]]
     assert [x["metrics"]["piece_m"] for x in ra["alternatives"]] == [x["metrics"]["piece_m"] for x in rb["alternatives"]]
-    assert ra["current"]["piece_m"] == rb["current"]["piece_m"]
+    for k in ("piece_m", "daily_m", "capacity", "lead_h", "loading_min", "bottleneck"):
+        assert ra["current"][k] == rb["current"][k], k
+    assert [x["metrics"]["capacity"] for x in ra["alternatives"]] == [x["metrics"]["capacity"] for x in rb["alternatives"]]
 
 
 def test_capabilities_coherente(client):

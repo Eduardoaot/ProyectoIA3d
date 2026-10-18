@@ -374,8 +374,8 @@ def evaluate(plant, positions, ops=None):
         t = units.machine_time(s)
         load = demand * share[sid] * t + handling[sid]
         n = ops.get(sid, 0)
-        # count: N son N máquinas en paralelo (units.servers); sin count, como en v2.
-        servers = units.servers(s) if units.has_count(s) else units.servers(s, n)
+        # Cada operario es un servidor; sin operarios, cada una de las N máquinas (units.servers).
+        servers = units.servers(s, n)
         if servers == 0 or load <= 0:
             continue
         util = load / (servers * avail)
@@ -426,13 +426,13 @@ def evaluate(plant, positions, ops=None):
 
 def rebalance_ops(plant, positions):
     """Reparte los mismos operarios para maximizar la capacidad."""
-    # Las estaciones con count tienen sus operarios atados a sus máquinas: no entran al reparto.
-    free = [s for s in plant["stations"] if not units.has_count(s)]
+    # Las estaciones con varias máquinas tienen sus operarios atados a ellas: no entran al reparto.
+    free = [s for s in plant["stations"] if units.count(s) == 1]
     total = sum(int(s.get("ops", 0) or 0) for s in free)
     working = [s["id"] for s in free if units.machine_time(s) > 0 and int(s.get("ops", 0) or 0) > 0]
     if not working or total < len(working):
         return None
-    ops = {s["id"]: (units.operators(s) if units.has_count(s) else 0) for s in plant["stations"]}
+    ops = {s["id"]: (units.operators(s) if units.count(s) > 1 else 0) for s in plant["stations"]}
     for sid in working:
         ops[sid] = 1
     for _ in range(total - len(working)):

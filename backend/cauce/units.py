@@ -44,20 +44,15 @@ def operators(s: dict) -> int:
 def servers(s: dict, ops: int | None = None) -> int:
     """Servidores en paralelo para colas y capacidad.
 
-    v2 (sin count): los operarios, o 1 si es automática y tiene tiempo.
-    v3 (con count): una por máquina; si hay menos de un operario por máquina, los operarios
-    limitan (0,6 operarios por unidad en 10 unidades = 6 servidores). Con 0 operarios por
-    unidad las máquinas trabajan solas: N servidores.
+    Como en v2, cada operario es un servidor. Con count, los operarios son
+    ops_per_unit × N: 10 embobinadoras con 1 operario cada una son 10 servidores y,
+    si hay 6 operarios para 10 máquinas, limitan los operarios (6). Sin operarios las
+    máquinas trabajan solas: N servidores (1 sin count). Así count: 1 da lo mismo que v2.
     """
-    if not has_count(s):
-        n = int(s.get("ops", 0) or 0) if ops is None else ops
-        return n if n > 0 else (1 if machine_time(s) > 0 else 0)
-    n, opu = count(s), ops_per_unit(s)
-    if machine_time(s) <= 0 and opu <= 0:
-        return 0
-    if opu <= 0 or opu >= 1:
+    n = operators(s) if ops is None else int(ops)
+    if n > 0:
         return n
-    return max(1, int(round(n * opu)))
+    return count(s) if machine_time(s) > 0 else 0
 
 
 def _mean(v) -> float | None:
