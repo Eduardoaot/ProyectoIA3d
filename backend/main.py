@@ -6,6 +6,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from cauce import catalog
+from cauce import context as ctxmod
+from cauce import decision
+from cauce.validate import Validator, claims_from, trailer
+from cauce.versions import context_version, plant_version
 from cauce.engine import compare, evaluate, rebalance_ops, relations
 from cauce.layout import alternatives, ops_moves, score
 from cauce.agents import MIN_CUES, detail, read_spatial
@@ -32,6 +36,8 @@ class StoryInterface(BaseModel):
 
 class PlantInterface(BaseModel):
     plant: dict
+    context: str | dict | None = None
+    weights: dict | None = None
 
 
 class LayoutInterface(BaseModel):
@@ -44,16 +50,20 @@ class ContextInterface(BaseModel):
     plant: dict
     analysis: dict | None = None
     redesign: dict | None = None
+    context: str | dict | None = None
+    # Con True, el flujo de texto termina con el resumen de validación (validate.trailer).
+    with_validation: bool = False
 
 
 class ChatInterface(BaseModel):
     messages: list[dict]
     context: ContextInterface | None = None
+    with_validation: bool = False
 
 
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
-FEATURES: list[str] = []
+FEATURES: list[str] = ["report_validation", "segmented_context"]
 
 
 def provider_caps(p) -> dict:
@@ -135,6 +145,9 @@ def analyze_route(body: PlantInterface):
         "recommended": best["id"],
         "relations": relations(plant),
         "comparison": compare(current, best["metrics"]),
+        "plant_version": plant_version(plant),
+        "context_version": context_version(body.context),
+        **decision.summary(plant, current, alts, best["id"]),
     }
 
 
@@ -153,20 +166,35 @@ async def compact_route(body: PlantInterface):
 
 # ---------- Textos del ingeniero ----------
 
+def _vs_today(before, after):
+    p = decision.pct(before, after)
+    if p is None:
+        return ""
+    if p > 0.5:
+        return f" ({p:+.1f} % frente a hoy: más que hoy)"
+    if p < -0.5:
+        return f" ({p:+.1f} % frente a hoy: menos que hoy)"
+    return " (igual que hoy)"
+
+
 def facts(ctx: ContextInterface) -> str:
     plant, a, rd = ctx.plant, ctx.analysis, ctx.redesign
     names = {s["id"]: s["name"] for s in plant["stations"]}
     lines = [
         f"Planta: {plant.get('name')}. Bodega de {plant['size']['w']} x {plant['size']['d']} m.",
-        "Estaciones en orden: " + ", ".join(s["name"] for s in plant["stations"]) + ".",
+        "Estaciones en orden: " + ", ".join(s["name"] + (f" (x{s['count']})" if int(s.get("count") or 1) > 1 else "") for s in plant["stations"]) + ".",
         "Flujo: " + "; ".join(f"{names.get(r['from'])} -> {names.get(r['to'])} ({round(float(r.get('frac', 1)) * 100)} %)" for r in plant.get("routes", [])) + ".",
         "Zonas donde no pasa material: " + (", ".join(z["name"] for z in plant.get("zones", [])) or "ninguna") + ".",
     ]
+    fixed = [s["name"] for s in plant["stations"] if s.get("locked")] + [z["name"] for z in plant.get("zones", []) if z.get("locked")]
+    if fixed:
+        lines.append("Elementos fijos (no se mueven): " + ", ".join(fixed) + ".")
     if not plant.get("use_assumptions"):
         lines.append("No hay tiempos ni producción: solo se analizan recorridos y cercanía entre áreas.")
     else:
         p = plant.get("params", {})
         lines.append(f"Supuestos: {p.get('demand')} piezas al día, lote de {p.get('batch')}, {p.get('trucks')} camiones al día.")
+    lines += ctxmod.lines(ctx.context)
     if a:
         cur = a["current"]
         lines.append(f"Hoy una pieza recorre {cur['piece_m']} m dentro de la planta.")
@@ -176,10 +204,20 @@ def facts(ctx: ContextInterface) -> str:
                 lines.append(f"Cuello de botella: {names.get(cur['bottleneck'])} al {round(cur['bottleneck_util'] * 100)} %.")
         for x in cur.get("avoid_hits", []):
             lines.append(f"Aviso: {x['text']}.")
-        lines.append("Alternativas: " + "; ".join(f"{x['name']}: {x['metrics']['piece_m']} m por pieza" for x in a["alternatives"]) + ".")
+        lines.append("Alternativas: " + "; ".join(f"{x['name']}: {x['metrics']['piece_m']} m por pieza{_vs_today(cur['piece_m'], x['metrics']['piece_m'])}" for x in a["alternatives"]) + ".")
+        # La recomendada y su razón vienen del motor; el modelo no la elige.
+        claims = claims_from(ctx.model_dump())
+        if claims.recommended:
+            rec = claims.labels.get(claims.recommended, claims.recommended)
+            lines.append(a.get("recommended_reason") or f"Recomendada por el motor: «{rec}» (la de menor recorrido).")
+            for t in a.get("recommended_tradeoffs") or []:
+                lines.append(f"A cambio, la recomendada empeora: {t.get('note')}")
+        for aid in sorted(claims.worse_than_today):
+            lines.append(f"«{claims.labels.get(aid, aid)}» hace caminar más al material que hoy: no es más eficiente en recorrido.")
     if rd and rd.get("metrics"):
         m = rd["metrics"]
-        lines.append(f"Rediseño elegido: {rd.get('name')}. Una pieza recorre {m['piece_m']} m.")
+        base = (a or {}).get("current") or {}
+        lines.append(f"Rediseño elegido por el usuario: {rd.get('name')}. Una pieza recorre {m['piece_m']} m{_vs_today(base.get('piece_m'), m['piece_m'])}.")
         if m.get("daily_m") is not None:
             lines.append(f"Con el rediseño: {m['daily_m']} m al día, capacidad {m.get('capacity')}, {m.get('lead_h')} h por pieza, camiones {m.get('loading_min')} min.")
     return "\n".join(lines)
@@ -188,6 +226,8 @@ def facts(ctx: ContextInterface) -> str:
 REPORT_SYSTEM = (
     "Eres un ingeniero de procesos que le habla al dueño de un taller pequeño. "
     "Escribe en español, claro y directo, sin jerga innecesaria y sin inventar cifras: usa solo los datos dados. "
+    "No calcules porcentajes ni diferencias: cita solo las cifras escritas en los datos. "
+    "La alternativa recomendada la decide el motor y está en los datos; no elogies otra. "
     "Estructura: un párrafo de diagnóstico, uno sobre el rediseño elegido y una lista de 3 acciones para la semana. "
     "Si no hay tiempos ni producción, habla solo de recorridos y cercanía entre áreas. No uses emojis. Máximo 220 palabras."
 )
@@ -219,28 +259,42 @@ async def stream_or_fallback(messages: list[dict], fallback: str):
     try:
         async for tok in engineer.stream(messages):
             yield tok
-    except Exception: 
+    except Exception:
         for word in fallback.split(" "):
             yield word + " "
             await asyncio.sleep(0.012)
 
 
+async def validated(tokens, v: Validator, with_trailer: bool):
+    """Solo pasan las oraciones respaldadas por el motor; al final, el resumen si se pidió."""
+    async for sentence in v.filter_stream(tokens):
+        yield sentence
+    if with_trailer:
+        yield trailer(v.result())
+
+
 @app.post("/api/report")
 async def report(body: ContextInterface):
-    msgs = [{"role": "system", "content": REPORT_SYSTEM}, {"role": "user", "content": facts(body)}]
-    return StreamingResponse(stream_or_fallback(msgs, fallback_report(body)), media_type="text/plain; charset=utf-8")
+    f = facts(body)
+    msgs = [{"role": "system", "content": REPORT_SYSTEM}, {"role": "user", "content": f}]
+    v = Validator(f, claims_from(body.model_dump()))
+    return StreamingResponse(validated(stream_or_fallback(msgs, fallback_report(body)), v, body.with_validation), media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/chat")
 async def chat(body: ChatInterface):
+    f = facts(body.context) if body.context else "Aún no hay planta."
     system = (
         "Eres el ingeniero de procesos de Cauce. Respondes en español, breve y concreto, sin emojis. "
-        "Si te preguntan algo que los datos no cubren, dilo y sugiere qué medir. Datos de la planta:\n"
-        + (facts(body.context) if body.context else "Aún no hay planta.")
+        "Cita solo cifras que estén en los datos; no calcules otras. "
+        "Si te preguntan algo que los datos no cubren, dilo y sugiere qué medir. Datos de la planta:\n" + f
     )
     msgs = [{"role": "system", "content": system}] + body.messages[-12:]
     fallback = "El modelo de IA no está respondiendo. Inícialo con 'ollama serve' y vuelve a preguntar."
-    return StreamingResponse(stream_or_fallback(msgs, fallback), media_type="text/plain; charset=utf-8")
+    # Las cifras que escribió el usuario también cuentan como respaldo.
+    said = [str(m.get("content", "")) for m in body.messages if m.get("role") == "user"]
+    v = Validator(f, claims_from(body.context.model_dump()) if body.context else None, said)
+    return StreamingResponse(validated(stream_or_fallback(msgs, fallback), v, body.with_validation), media_type="text/plain; charset=utf-8")
 
 
 MISSION_SCHEMA = {

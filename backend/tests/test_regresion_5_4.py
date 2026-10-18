@@ -31,7 +31,6 @@ def test_mas_distancia_no_gana_por_distancia(client, plant):
         assert b["scores"]["manejo"] <= a["scores"]["manejo"] + 1e-9
 
 
-@pytest.mark.xfail(strict=True, reason="F1: la respuesta aún no declara contrapartidas")
 def test_recomendada_que_empeora_lo_declara(client, plant):
     out = analyze(client, plant)
     rec = next(a for a in out["alternatives"] if a["id"] == out["recommended"])
@@ -95,7 +94,6 @@ def test_planta_con_retornos(client):
 
 
 # 6. El informe del caso de transformadores no contradice a facts().
-@pytest.mark.xfail(strict=True, reason="F1: el informe aún no se valida")
 def test_informe_no_contradice_facts(client):
     from test_compat import fixture
 
