@@ -45,6 +45,7 @@ export function addEntry(ctx, entry, date = today()) {
         confidence: entry.confidence || 'media',
         ...(entry.owner ? { owner: entry.owner } : {}),
         ...(entry.image ? { image: entry.image } : {}),
+        ...(entry.interpreted ? { interpreted: true } : {}),
         ...(prev ? { supersedes: prev.id } : {}),
     }
     const segs = { ...(ctx?.segments || {}) }
@@ -112,4 +113,12 @@ export function contextPayload(ctx, story, segmented) {
     }
     const text = toText(ctx, story || '')
     return text ? text.slice(0, 4000) : undefined
+}
+
+export const MAX_IMAGE_BYTES = 1_000_000 // el proyecto se guarda en el navegador: imágenes chicas
+
+/* Estado de una referencia con imagen: interpretada por un modelo con visión, o solo nota. */
+export function referenceStatus(entry, vision) {
+    if (entry.interpreted) return 'Interpretada por un modelo con visión.'
+    return vision ? 'Sin interpretar todavía.' : 'No interpretada: el proveedor actual no tiene visión.'
 }

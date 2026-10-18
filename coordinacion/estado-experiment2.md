@@ -180,3 +180,14 @@ Con `pruebas/transformadores.json` el motor **no** recomienda la línea recta:
 ### Interfaz
 - «Simulación con variabilidad» en el rediseño (solo con `simulate` y con supuestos): simula la opción elegida (o hoy), muestra rangos P10–P90 con su mediana, semilla y réplicas, tiempo muerto por causa, utilización y «sin datos» para cada null.
 - Pruebas: `f8-simulacion.test.js`.
+
+## F9. Visión
+
+### Motor
+- Rol `vision` (`CAUCE_VISION_PROVIDER/MODEL`, hereda del chat). `/api/capabilities.vision` refleja ese proveedor: con `llama3.1:8b` es `false`.
+- `POST /api/references/read`: sin visión responde 422 «El proveedor actual (…) no tiene visión: la imagen se guarda como nota, sin interpretar.»; con visión (`OllamaProvider.vision()`, por ejemplo `llava`) describe la imagen y quita cifras sin respaldo.
+- README actualizado: API v3 completa, variables por rol, `requirements*.txt` y pruebas automáticas. Pruebas: `test_f9_vision.py`.
+
+### Interfaz
+- «Referencias con imagen» en el paso 1: imagen (hasta 1 MB, porque el proyecto vive en el navegador) con nota, como entrada del segmento `referencias`. Sin visión dice «No interpretada: el proveedor actual no tiene visión»; con visión, «Interpretar» guarda la lectura como versión nueva. La imagen nunca viaja en `context`, solo la nota.
+- Pruebas: `f9-referencias.test.js`.

@@ -32,6 +32,13 @@ export const api = {
     missions: (context) => post('/api/missions', context),
     // Asistente del editor (solo si capabilities anuncia plan_ops).
     planOps: (instruction, plant) => post('/api/plan/ops', { instruction, plant }),
+    // Imágenes de referencia: el backend responde 422 si su proveedor no tiene visión.
+    readReference: async (image, note) => {
+        const r = await fetch('/api/references/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image, note }) })
+        const body = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(body.detail || `La lectura respondió ${r.status}`)
+        return body
+    },
     // Simulación (solo si capabilities anuncia simulate). positions: para «Tu rediseño».
     simulate: (plant, alternative = 'hoy', positions = null) => post('/api/simulate', { plant, alternative, replicas: 30, seed: 42, ...(positions ? { positions } : {}) }),
 }

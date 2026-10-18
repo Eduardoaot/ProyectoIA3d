@@ -6,6 +6,7 @@ import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 import Context2 from '../components/Context2'
 import ContextPanel from '../components/ContextPanel'
+import References from '../components/References'
 import { parseProject } from '../importProject'
 
 function Switch({ on, onChange, children }) {
@@ -424,6 +425,12 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                     {setContext && (
                         <div style={{ marginTop: 24 }}>
                             <ContextPanel context={context} setContext={setContext} />
+                        </div>
+                    )}
+
+                    {setContext && (
+                        <div style={{ marginTop: 24 }}>
+                            <References context={context} setContext={setContext} />
                         </div>
                     )}
 
