@@ -111,3 +111,22 @@ Con `pruebas/transformadores.json` el motor **no** recomienda la línea recta:
 ### Interfaz
 - Asistente del plano debajo del editor (solo con `plan_ops`): muestra las operaciones en palabras y lo rechazado con su motivo antes de aplicar; «Aplicar» usa `applyOps` en un lote = un paso de deshacer. Si `applyOps` rechaza algo (por ejemplo, algo fijado después), lo dice.
 - Pruebas: `f3-asistente.test.js`.
+
+## F4. Alternativas y multicriterio (H4, H5)
+
+### Motor
+- «Reordenar en su lugar» = CRAFT: intercambios por pares y, cuando ya no mejoran, rotaciones de tres estaciones entre sus lugares, hasta que el costo de manejo no baje. Si por las rutas reales caminara más que hoy, se queda como hoy (§5.4 #3 garantizado, no solo observado).
+- Nueva alternativa `slp` «Por bloques (SLP)»: las áreas con relación A o E forman bloques que siguen el orden del flujo y se empacan desde la esquina de menor costo. En transformadores: 136,4 m frente a 163 m hoy; en la v3, 200,9 m frente a 244,4 m.
+- En la v3, CRAFT no encuentra intercambios factibles (bloques de tamaños muy distintos): «Reordenar» queda igual que hoy y lo declara; no se finge una mejora.
+- `criteria.py`: puntaje 0–1 por criterio (manejo, lead_time, capacidad, obra, seguridad, flexibilidad), pesos validados (422 si hay criterios desconocidos, negativos o todo en 0) y normalizados (`weights_note`). Recomendada = mayor total entre las viables (respetan fijos y caben); `ideal` = mejor sin contar obra ni fijos; `sensitivity` por criterio ×0,5 y ×2.
+- `/api/analyze` agrega `alternatives[].method`, `assumptions`, `scores`, `score_total`, `kind`, `sensitivity`, y `weights_used`, `ideal`, `current_scores`. `score` (el de antes) se conserva por compatibilidad.
+- README: tabla de alternativas y explicación del puntaje actualizadas.
+- Rendimiento: `pack()` con caja envolvente incremental; SLP busca en malla de 1 m.
+- `features`: `weights`. Pruebas: `test_f4_multicriterio.py`; §5.4 #1 pasa.
+
+### Interfaz
+- Tabla «Cómo se comparan»: puntaje por criterio de hoy y cada alternativa, total, ★ en la recomendada, etiqueta «ideal» y lectura de la sensibilidad. Solo si llegan `scores`.
+- «Qué pesa más para ti» (solo con `weights`): seis pesos que deben sumar 1, «Ajustar para que sumen 1», «Pesos por defecto» y «Recalcular con estos pesos» (acción explícita; no toca «Tu rediseño»). Los pesos se guardan y se envían al guardar el plano.
+- Tarjetas: «IDEAL» cuando la mejor técnica no es la recomendada; aviso si una alternativa no respeta lo fijo.
+- «Cómo se calculó» explica la recomendación multicriterio.
+- Pruebas: `f4-pesos.test.js`.

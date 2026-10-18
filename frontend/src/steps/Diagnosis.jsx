@@ -111,6 +111,7 @@ export default function Diagnosis({ plant, analysis, report, onNext }) {
 						<li>Cercanía entre áreas: sale del flujo que dibujaste y de qué áreas ensucian (polvo, ruido, calor) o deben quedar limpias. No usa supuestos.</li>
 						{full && <li>Carga: minutos de trabajo y de traslado frente a los minutos útiles del turno ({fmt(plant.params.shift_min * plant.params.efficiency)} por persona).</li>}
 						{full && <li>Espera en cola: aproximación de Sakasegawa para varios servidores.</li>}
+						<li>Recomendación: cada alternativa recibe un puntaje de 0 a 100 por criterio (costo de manejo, tiempo por pieza, capacidad, obra, seguridad y espacio libre) y gana la de mayor total ponderado entre las que respetan lo fijo. Más metros nunca dan mejor puntaje de manejo.</li>
 						<li>Con datos medidos el método es el mismo.</li>
 					</ul>
 				</details>

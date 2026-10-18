@@ -123,7 +123,7 @@ export default function App() {
         setError(null)
 
         try {
-            const out = await api.analyze(draft, { context: context?.context })
+            const out = await api.analyze(draft, { context: context?.context, ...(has(caps, 'weights') && project.weights ? { weights: project.weights } : {}) })
             update((p) => ({
                 plant: draft,
                 analysis: out,
@@ -138,6 +138,17 @@ export default function App() {
             setError('Error al analizar el plano.')
         }
         setSaving(false)
+    }
+
+    // Recalcular con otros pesos: mismo plano, solo cambia la decisión. No toca «Tu rediseño».
+    const reweigh = async (weights) => {
+        try {
+            const out = await api.analyze(plant, { context: context?.context, weights })
+            update({ analysis: out, weights })
+            notify('Se recalculó la recomendación con tus pesos.')
+        } catch {
+            notify('No se pudo recalcular con esos pesos.')
+        }
     }
 
     const setRedesign = useCallback((patch) => update((p) => ({ redesign: { ...p.redesign, ...patch } })), [update])
@@ -180,7 +191,7 @@ export default function App() {
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
         if (step === 2) return <Diagnosis plant={plant} analysis={analysis} report={report} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} onNext={() => go(4)} />
+        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} weights={project.weights} onReweigh={reweigh} onNext={() => go(4)} />
         if (step === 4) return <Report plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
         if (step === 5) return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onWorkshop={() => go(6)} onRestart={restart} />
 

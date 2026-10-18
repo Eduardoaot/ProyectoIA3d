@@ -7,7 +7,10 @@ import { startWait } from '../components/wait'
 import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
+import Criteria from '../components/Criteria'
+import { has } from '../capabilities'
 import { protectLocked } from '../proposals'
+import useCaps from '../useCaps'
 import PlantView from '../three/PlantView'
 
 export function Delta({ label, unit, before, after, decimals = 0, goodWhenUp }) {
@@ -68,7 +71,14 @@ function worksDiff(base, other) {
 	return n
 }
 
-export default function Redesign({ plant, analysis, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, notify = () => {}, onNext }) {
+export default function Redesign({ plant, analysis, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, notify = () => {}, weights, onReweigh, onNext }) {
+	const caps = useCaps()
+	const [reweighing, setReweighing] = useState(false)
+	const reweigh = async (w) => {
+		setReweighing(true)
+		await onReweigh(w)
+		setReweighing(false)
+	}
 	const cur = analysis.current
 	const alts = analysis.alternatives
 	const full = plant.use_assumptions && cur.daily_m != null
@@ -236,6 +246,8 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 					return (
 						<div key={a.id} className="alt" data-on={a.id === choice && !showOriginal} onClick={() => pick(a.id)}>
 							{a.id === analysis.recommended && <span className="alt-best">RECOMENDADA</span>}
+							{a.id === analysis.ideal && a.id !== analysis.recommended && <span className="alt-best">IDEAL</span>}
+							{a.kind === 'ideal' && <span className="small">No respeta lo fijo o no cabe: solo como referencia.</span>}
 							{a.id === 'propio' && <span className="alt-best">TUYA</span>}
 							{a.id === 'ia' && <span className="alt-best">{a.source === 'ia' ? 'IA' : 'SIN IA: ORDEN DEL FLUJO'}</span>}
 
@@ -285,6 +297,8 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 					)}
 				</div>
 			)}
+
+			<Criteria key={analysis.plant_version + JSON.stringify(analysis.weights_used || {})} analysis={analysis} canWeigh={has(caps, 'weights') && !!onReweigh} weights={weights} onReweigh={reweigh} busy={reweighing} />
 
 			{(redesign.undoApply?.length > 0 || (custom && redesign.basedOnRev != null && redesign.basedOnRev !== analysisRev)) && (
 				<div className="row small" style={{ marginTop: 12 }}>

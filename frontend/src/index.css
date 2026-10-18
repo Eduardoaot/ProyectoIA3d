@@ -2825,3 +2825,52 @@ details.how ul {
 .assistant-why {
   color: var(--g500);
 }
+
+/* ---------- Multicriterio ---------- */
+.criteria {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.criteria-table {
+  border-collapse: collapse;
+  min-width: 100%;
+}
+
+.criteria-table th,
+.criteria-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--g200);
+  text-align: left;
+}
+
+.criteria-table .num {
+  text-align: right;
+}
+
+.criteria-table .tag {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  font-size: var(--t-12);
+}
+
+.criteria-total td {
+  font-weight: 700;
+  border-top: 2px solid var(--black);
+}
+
+.weights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.warn {
+  font-weight: 700;
+}
