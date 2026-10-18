@@ -4,6 +4,8 @@ import WaitPanel from '../components/WaitPanel'
 import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
+import Context2 from '../components/Context2'
+import ContextPanel from '../components/ContextPanel'
 import { parseProject } from '../importProject'
 
 function Switch({ on, onChange, children }) {
@@ -281,7 +283,7 @@ function SpatialNote({ spatial }) {
     )
 }
 
-export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onImport, onSave, saving }) {
+export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onImport, onSave, saving, context, setContext, context2 }) {
     const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
     const [importError, setImportError] = useState(null)
@@ -419,14 +421,27 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         <Assumptions draft={draft} setDraft={setDraft} catalog={catalog} info={info} />
                     </div>
 
+                    {setContext && (
+                        <div style={{ marginTop: 24 }}>
+                            <ContextPanel context={context} setContext={setContext} />
+                        </div>
+                    )}
+
+                    {context2 && (
+                        <div style={{ marginTop: 24 }}>
+                            <Context2 summary={context2.summary} confirmed={context2.confirmed} onConfirm={context2.onConfirm} />
+                        </div>
+                    )}
+
                     <div className="row" style={{ marginTop: 32 }}>
-                        <Btn onClick={onSave} disabled={saving || draft.stations.length === 0}>
+                        <Btn onClick={onSave} disabled={saving || draft.stations.length === 0 || (context2 && !context2.confirmed)}>
                             {saving ? 'Analizando…' : 'Guardar y ver en 3D'}
                         </Btn>
 
                         {metrics && <span className="small num">Una pieza recorre {fmt(metrics.piece_m, 1)} m en este plano.</span>}
                         
                         {draft.stations.length === 0 && <span className="small">Agrega al menos una máquina.</span>}
+                        {draft.stations.length > 0 && context2 && !context2.confirmed && <span className="small">Confirma el resumen de arriba para analizar.</span>}
                     </div>
                 </div>
             )}

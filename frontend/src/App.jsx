@@ -4,6 +4,8 @@ import { api } from './api'
 import { has } from './capabilities'
 import { upgradePlant } from './migrate'
 import { isStale } from './proposals'
+import { contextPayload, EMPTY_CONTEXT } from './context'
+import { summarize } from './context2'
 import FlowMark from './brand/FlowMark'
 import EngineerChat from './components/EngineerChat'
 import useReport from './components/useReport'
@@ -28,7 +30,7 @@ const preload = () => import('./steps/Plant')
 const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen', 'Taller de mejora (extra)']
 
 /* Lo mínimo que necesita el ingeniero para hablar de la planta (sin trazos). */
-function slim(project, ch) {
+function slim(project, ch, segmented = false) {
     const { plant, analysis } = project
     if (!plant) return null
 
@@ -45,7 +47,8 @@ function slim(project, ch) {
             recommended_tradeoffs: analysis.recommended_tradeoffs,
         },
         redesign: ch && ch.metrics ? { name: ch.name, metrics: pick(ch.metrics) } : null,
-        context: project.text?.trim() ? project.text.trim().slice(0, 2000) : undefined,
+        // Texto si el backend no conoce el contexto segmentado; objeto si lo anuncia.
+        context: contextPayload(project.context, project.text, segmented),
     }
 }
 
@@ -65,7 +68,10 @@ export default function App() {
 
     const { plant, analysis, draft, info } = project
     const ch = useMemo(() => chosenOf(project), [project])
-    const context = useMemo(() => slim(project, ch), [project, ch])
+    const segmented = has(caps, 'segmented_context')
+    const context = useMemo(() => slim(project, ch, segmented), [project, ch, segmented])
+    const summary = useMemo(() => summarize(project.draft, project.plant), [project.draft, project.plant])
+    const confirmed = !!summary.signature && project.context2Ok === summary.signature
     const version = `${analysis?.current?.piece_m}-${ch?.id}-${ch?.metrics?.piece_m}`
     const report = useReport(context, version, has(caps, 'report_validation'))
     const stale = isStale(project)
@@ -119,6 +125,7 @@ export default function App() {
     const blank = () => update({ draft: blankPlant(defaultParams()), info: { source: 'Plano vacío', notes: [] } })
 
     const save = async () => {
+        if (!confirmed) return
         setSaving(true)
         setError(null)
 
@@ -185,6 +192,9 @@ export default function App() {
             onRead={read}
             onBlank={blank}
             onImport={importPlant}
+            context={project.context || EMPTY_CONTEXT}
+            setContext={(c) => update({ context: c })}
+            context2={{ summary, confirmed, onConfirm: () => update({ context2Ok: summary.signature }) }}
             onSave={save}
             saving={saving}
             />

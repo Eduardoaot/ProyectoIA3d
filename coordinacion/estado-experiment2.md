@@ -146,3 +146,15 @@ Con `pruebas/transformadores.json` el motor **no** recomienda la línea recta:
 - Herramienta «Banda» (con `conveyors`): se dibuja arrastrando, sus extremos se unen a la máquina más cercana; inspector con capacidad, velocidad (valores iniciales marcados como supuestos), de dónde recibe y a quién entrega, fijar y quitar (las rutas que la usaban vuelven a ir a pie).
 - Panel «Por flujo» en el rediseño con metros por flujo, ciclos y carga de cada banda, solo si vienen.
 - Pruebas: `f5-flujos.test.js`.
+
+## F6. Contexto segmentado y Contexto 2
+
+### Interfaz
+- `context.js`: 9 segmentos del contrato, entradas inmutables con `id`, `version`, `date`, `source`, `confidence`, `owner` y `supersedes`; `current()` igual que el motor; `history()`; valores como número, rango («3,5 a 4,5») o texto.
+- Panel «Datos de la planta» en el paso 1: agregar un dato con su procedencia, «Corregir» crea una versión nueva y «Historial» muestra las anteriores. La confianza baja se marca y un número se muestra como rango (±20 %).
+- Envío: si el backend anuncia `segmented_context`, `context` va como objeto (con la historia en `story`); si no, como texto legible de los datos vigentes. Las imágenes nunca viajan en el contexto.
+- Contexto 2 (`context2.js`, sin IA): estaciones con su cantidad, fijos, rutas por flujo y retornos, bandas, supuestos y cambios desde el último análisis. «Guardar y ver en 3D» queda deshabilitado hasta pulsar «Sí, así es»; cualquier edición del plano pide confirmarlo de nuevo.
+- Pruebas: `f6-contexto.test.js`.
+
+### Motor
+- Un contexto segmentado puede traer `story`; `facts()` lo incluye como «Contexto del usuario». Pruebas: `test_f6_contexto.py`.

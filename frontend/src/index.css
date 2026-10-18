@@ -2903,3 +2903,50 @@ details.how ul {
 .flows-table th:first-child {
   text-align: left;
 }
+
+/* ---------- Contexto segmentado y Contexto 2 ---------- */
+.context-panel ul {
+  margin: 4px 0 10px 18px;
+}
+
+.context-meta {
+  color: var(--g500);
+}
+
+.context-panel li[data-low='true'] b::after {
+  content: ' (confianza baja)';
+  font-weight: 400;
+  color: var(--g500);
+}
+
+.context-history {
+  color: var(--g500);
+}
+
+.context-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--g200);
+}
+
+.context-form input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1.5px solid var(--black);
+  font: inherit;
+}
+
+.context2 {
+  border-left: 4px solid var(--black);
+}
+
+.context2[data-ok='true'] {
+  border-left-color: var(--g300);
+}
+
+.context2 ul {
+  margin: 6px 0 10px 18px;
+}
