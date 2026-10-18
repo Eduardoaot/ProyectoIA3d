@@ -22,7 +22,6 @@ def main_value(m, use_assumptions):
 
 
 # 1. Una alternativa que aumenta la distancia no puede ganar por distancia.
-@pytest.mark.xfail(strict=True, reason="F4: aún no hay puntaje por criterio (scores)")
 def test_mas_distancia_no_gana_por_distancia(client, plant):
     out = analyze(client, plant)
     alts = sorted(out["alternatives"], key=lambda a: a["metrics"]["daily_m"])

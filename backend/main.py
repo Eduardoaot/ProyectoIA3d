@@ -1,17 +1,18 @@
 import asyncio
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from cauce import catalog
+from cauce import criteria
 from cauce import context as ctxmod
 from cauce import decision
 from cauce.validate import Validator, claims_from, trailer
 from cauce.versions import context_version, plant_version
 from cauce.engine import compare, evaluate, rebalance_ops, relations
-from cauce.layout import alternatives, ops_moves, score
+from cauce.layout import alternatives, ops_moves, plant_area, score
 from cauce.agents import MIN_CUES, check, detail, prompt, read_spatial
 from cauce.agents.roles import MISSION_SCHEMA
 from cauce.planops import plan_ops
@@ -69,7 +70,7 @@ class ChatInterface(BaseModel):
 
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
-FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops"]
+FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights"]
 
 
 def provider_caps(p) -> dict:
@@ -143,25 +144,43 @@ def evaluate_route(body: LayoutInterface):
 
 @app.post("/api/analyze")
 def analyze_route(body: PlantInterface):
+    try:
+        weights, weights_note = criteria.normalize(body.weights)
+    except criteria.WeightsError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     plant = body.plant
     current = evaluate(plant, plant["layout"])
     current["footprint_m2"] = footprint(plant, plant["layout"])
     alts = alternatives(plant)
     for a in alts:
+        # `score` (menor es mejor) se conserva por compatibilidad; la recomendación es multicriterio.
         a["score"] = score(current, a["metrics"], a["works_cost"], plant.get("use_assumptions"))
         a["ops_moves"] = ops_moves(plant, a["metrics"].get("ops") if plant.get("use_assumptions") else None)
         a["metrics"]["footprint_m2"] = footprint(plant, a["positions"])
-    best = min(alts, key=lambda a: a["score"])
-    return {
+    r = criteria.rank(plant, current, alts, weights, plant_area(plant))
+    for a in alts:
+        a["scores"] = r["scores"][a["id"]]
+        a["score_total"] = r["totals"][a["id"]]
+        a["kind"] = "viable" if criteria.viable(a) else "ideal"
+        a["sensitivity"] = r["sensitivity"]
+    best = next(a for a in alts if a["id"] == r["recommended"])
+    out = {
         "current": current,
         "alternatives": alts,
         "recommended": best["id"],
+        "ideal": r["ideal"],
+        "current_scores": r["scores"]["hoy"],
+        "current_score_total": r["totals"]["hoy"],
         "relations": relations(plant),
         "comparison": compare(current, best["metrics"]),
         "plant_version": plant_version(plant),
         "context_version": context_version(body.context),
+        "weights_used": weights,
         **decision.summary(plant, current, alts, best["id"]),
     }
+    if weights_note:
+        out["weights_note"] = weights_note
+    return out
 
 
 @app.post("/api/compact")

@@ -87,7 +87,7 @@ def footprint(plant, positions):
     return round((b[2] - b[0] + GAP) * (b[3] - b[1] + GAP), 1)
 
 
-def pack(plant, order, groups, corner):
+def pack(plant, order, groups, corner, step=0.5):
     st = station_map(plant)
     W, D = plant["size"]["w"], plant["size"]["d"]
     anchor = corner_point(plant, corner)
@@ -114,18 +114,20 @@ def pack(plant, order, groups, corner):
             continue
         s = st[sid]
         gate = gate_of.get(s["kind"])
+        # Caja de lo ya colocado: se calcula una vez por estación, no por cada lugar candidato.
+        bb = _bbox(list(rects.values())) if rects else None
         cands = []
         for rot in (0, 90) if s["w"] != s["d"] else (0,):
             w, d = dims(s, rot)
-            nx = int((W - w - 2 * EDGE) / 0.5) + 1
-            nz = int((D - d - 2 * EDGE) / 0.5) + 1
+            nx = int((W - w - 2 * EDGE) / step) + 1
+            nz = int((D - d - 2 * EDGE) / step) + 1
             for i in range(max(nx, 0)):
-                x = w / 2 + EDGE + i * 0.5
+                x = w / 2 + EDGE + i * step
                 for j in range(max(nz, 0)):
-                    z = d / 2 + EDGE + j * 0.5
+                    z = d / 2 + EDGE + j * step
                     r = (x - w / 2, z - d / 2, x + w / 2, z + d / 2)
                     if rects:
-                        cost = _area(_bbox(list(rects.values()) + [r]))
+                        cost = (max(bb[2], r[2]) - min(bb[0], r[0])) * (max(bb[3], r[3]) - min(bb[1], r[1]))
                     else:
                         cost = manhattan((x, z), anchor) * 4
                     for other, f in links.get(sid, []):

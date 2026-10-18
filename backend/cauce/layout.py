@@ -309,39 +309,114 @@ def line_path(plant):
     return path if rx <= W / 2 else [(W - x, z) for x, z in path]
 
 
-def keep_swap(plant, positions):
-    """Reordenar en su lugar: intercambia lugares mientras baje el recorrido."""
+def _fits(plant, st, trial, ids, moved):
+    """¿Las estaciones movidas caben en sus lugares nuevos sin chocar con el resto?"""
+    placed = [_rect(st[k], *trial[k]) for k in ids if k not in moved]
+    for k in moved:
+        r = _rect(st[k], *trial[k])
+        if not feasible(plant, r, placed):
+            return False
+        placed.append(r)
+    return True
+
+
+def _rot_options(st, sid, slot_rot):
+    rots = [slot_rot, (slot_rot + 90) % 180]
+    return rots if st[sid]["w"] != st[sid]["d"] else rots[:1]
+
+
+def keep_swap(plant, positions, triples=True):
+    """Reordenar en su lugar con CRAFT: intercambios por pares y, cuando ya no mejoran,
+    rotaciones de tres estaciones entre sus lugares, hasta que el costo de manejo no baje.
+    Las estaciones solo ocupan lugares que ya existen: no hay obra. Lo fijo no participa."""
     st = station_map(plant)
     pos = {k: list(v) for k, v in positions.items()}
     best = search_cost(plant, pos)
     locked = set(units.locked_stations(plant))
     ids = [s for s in pos if s in st]
     movable = [s for s in ids if s not in locked]
-    for _ in range(4):
+
+    def attempt(cycle):
+        """cycle = [a, b, c...]: a va al lugar de b, b al de c... y el último al de a."""
+        nonlocal pos, best
+        slots = [pos[k] for k in cycle[1:]] + [pos[cycle[0]]]
+        # El costo solo depende de los centros: si no mejora, no hace falta probar giros ni choques.
+        c = search_cost(plant, {**pos, **{sid: [slot[0], slot[1], slot[2]] for sid, slot in zip(cycle, slots)}})
+        if c >= best - 0.5:
+            return False
+        combos = [[]]
+        for sid, slot in zip(cycle, slots):
+            combos = [c + [r] for c in combos for r in _rot_options(st, sid, slot[2])]
+        for rots in combos:
+            trial = dict(pos)
+            for sid, slot, r in zip(cycle, slots, rots):
+                trial[sid] = [slot[0], slot[1], r]
+            if not _fits(plant, st, trial, ids, cycle):
+                continue
+            c = search_cost(plant, trial)
+            if c < best - 0.5:
+                pos, best = trial, c
+                return True
+        return False
+
+    for _ in range(8):
         changed = False
         for i in range(len(movable)):
             for j in range(i + 1, len(movable)):
-                a, b = movable[i], movable[j]
-                for ra in (pos[b][2], (pos[b][2] + 90) % 180):
-                    for rb in (pos[a][2], (pos[a][2] + 90) % 180):
-                        trial = dict(pos)
-                        trial[a] = [pos[b][0], pos[b][1], ra]
-                        trial[b] = [pos[a][0], pos[a][1], rb]
-                        others = [_rect(st[k], *trial[k]) for k in ids if k not in (a, b)]
-                        ka = _rect(st[a], *trial[a])
-                        kb = _rect(st[b], *trial[b])
-                        if not (feasible(plant, ka, others) and feasible(plant, kb, others + [ka])):
-                            continue
-                        c = search_cost(plant, trial)
-                        if c < best - 0.5:
-                            pos, best, changed = trial, c, True
-                            break
-                    else:
-                        continue
-                    break
+                changed |= attempt([movable[i], movable[j]])
+        if not changed and triples and len(movable) <= 30:
+            n = len(movable)
+            for i in range(n):
+                for j in range(i + 1, n):
+                    for k in range(j + 1, n):
+                        a, b, c = movable[i], movable[j], movable[k]
+                        if attempt([a, b, c]) or attempt([a, c, b]):
+                            changed = True
         if not changed:
             break
     return pos
+
+
+def slp_blocks(plant):
+    """Grupos de estaciones con relación A o E (SLP): se unen las que deben quedar juntas."""
+    from .engine import relations
+
+    ids = [s["id"] for s in plant["stations"]]
+    parent = {k: k for k in ids}
+
+    def find(k):
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    for c in relations(plant)["cells"]:
+        if c["r"] in ("A", "E") and c["a"] in parent and c["b"] in parent:
+            parent[find(c["a"])] = find(c["b"])
+    order = flow_order(plant)
+    rank_ = {k: i for i, k in enumerate(order)}
+    groups = {}
+    for k in ids:
+        groups.setdefault(find(k), []).append(k)
+    blocks = sorted((sorted(g, key=rank_.get) for g in groups.values()), key=lambda g: rank_[g[0]])
+    return blocks
+
+
+def slp_layout(plant, fixed=None):
+    """Por bloques (SLP): las áreas con relación A o E forman un bloque y los bloques se
+    acomodan en el orden del flujo, empacados desde la esquina que da menor costo."""
+    from .compact import CORNERS, pack
+
+    blocks = slp_blocks(plant)
+    order = [k for b in blocks for k in b]
+    groups = [b for b in blocks if len(b) > 1]
+    best = None
+    for c in CORNERS:
+        pos = pack(plant, order, groups, c, step=1.0)
+        cost = search_cost(plant, pos)
+        if best is None or cost < best[0]:
+            best = (cost, pos)
+    return best[1]
 
 
 def initial_layout(plant):
@@ -395,8 +470,17 @@ def shape_outline(kind, W, D):
 ALTERNATIVES = [
     ("u", "Flujo en U", "El material entra, recorre el perímetro hacia el fondo y regresa a la salida.", "Mover máquinas al perímetro.", 1),
     ("i", "Línea recta", "Las estaciones en fila por el centro, en el orden del proceso.", "Mover máquinas al centro.", 1),
-    ("keep", "Reordenar en su lugar", "Las máquinas intercambian sus lugares actuales; nada de obra.", "Solo intercambiar máquinas de lugar.", 0),
+    ("keep", "Reordenar en su lugar", "Las máquinas intercambian sus lugares actuales (por pares y por tríos); nada de obra.", "Solo intercambiar máquinas de lugar.", 0),
+    ("slp", "Por bloques (SLP)", "Las áreas que deben quedar juntas forman bloques y los bloques siguen el orden del flujo.", "Mover máquinas por grupos.", 1),
 ]
+
+METHODS = {"u": "linea", "i": "linea", "keep": "craft", "slp": "slp"}
+ASSUMPTIONS = {
+    "u": ["Las estaciones siguen el orden del flujo por el perímetro.", "Recepción y despacho quedan junto a sus portones."],
+    "i": ["Las estaciones siguen el orden del flujo en fila (en S si no cabe)."],
+    "keep": ["Solo se usan los lugares que las máquinas ocupan hoy.", "Se busca con intercambios por pares y por tríos (CRAFT) mientras baje el costo de manejo."],
+    "slp": ["Se agrupan las áreas con relación A o E (mucho flujo directo).", "Los bloques se empacan desde la esquina de menor costo."],
+}
 
 
 def collisions(plant, positions):
@@ -427,7 +511,13 @@ def _build(plant, aid, order, fixed):
         return improve_order(plant, order, u_path(plant), fixed)
     if aid == "i":
         return improve_order(plant, order, line_path(plant), fixed)
-    return keep_swap(plant, plant["layout"])
+    if aid == "slp":
+        return slp_layout(plant, fixed)
+    pos = keep_swap(plant, plant["layout"])
+    # Nunca peor que hoy (§5.4 #3): si por las rutas reales camina más, se queda como hoy.
+    if evaluate(plant, pos)["piece_m"] > evaluate(plant, plant["layout"])["piece_m"] + 1e-6:
+        return {k: list(v) for k, v in plant["layout"].items()}
+    return pos
 
 
 def alternatives(plant):
@@ -440,7 +530,9 @@ def alternatives(plant):
         pos = _build(plant, aid, order, fixed)
         ops = rebalance_ops(plant, pos) if plant.get("use_assumptions") else None
         m = evaluate(plant, pos, ops)
-        alt = {"id": aid, "name": name, "summary": summary, "works": works, "works_cost": cost, "positions": pos, "metrics": m, "locked_respected": locked_respected(plant, pos)}
+        alt = {"id": aid, "name": name, "summary": summary, "works": works, "works_cost": cost, "positions": pos, "metrics": m, "locked_respected": locked_respected(plant, pos), "method": METHODS[aid], "assumptions": list(ASSUMPTIONS[aid])}
+        if plant.get("use_assumptions"):
+            alt["assumptions"].append("Tiempos, producción y lotes son supuestos del usuario; los operarios se reparten de nuevo para la mayor capacidad.")
         bad = collisions(plant, pos) - set(fixed)
         if bad and aid != "keep":
             names = ", ".join(sorted(st[k]["name"] for k in bad))

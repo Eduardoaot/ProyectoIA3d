@@ -478,24 +478,33 @@ No depende de supuestos.
 
 **Costo de búsqueda (`search_cost`).** Para comparar acomodos rápido sin trazar rutas: distancia rectilínea ponderada por el flujo + 40 de castigo por cada área sucia a menos de 8 m de una limpia + distancia de recepción y despacho a sus portones.
 
-**Las tres alternativas:**
+**Las cuatro alternativas** (cada una declara `method` y `assumptions`):
 
-| Id | Nombre | Cómo se construye | Obra |
-|---|---|---|---|
-| `u` | **Flujo en U** | Traza una U del ancho justo para las máquinas, centrada entre el portón de entrada y el de salida; coloca las estaciones en orden por ese trazo con el lado largo siguiendo la dirección. Recepción y despacho quedan junto a sus portones. | Mover máquinas al perímetro |
-| `i` | **Línea recta** | Una fila por el centro en el orden del proceso; si no cabe, sigue en una segunda fila (forma de S). | Mover máquinas al centro |
-| `keep` | **Reordenar en su lugar** | Las máquinas **intercambian sus lugares actuales** (probando ambas orientaciones) mientras baje el costo. | Ninguna |
+| Id | Nombre | Método | Cómo se construye | Obra |
+|---|---|---|---|---|
+| `u` | **Flujo en U** | `linea` | Traza una U del ancho justo para las máquinas, centrada entre el portón de entrada y el de salida; coloca las estaciones en orden por ese trazo con el lado largo siguiendo la dirección. Recepción y despacho quedan junto a sus portones. | Mover máquinas al perímetro |
+| `i` | **Línea recta** | `linea` | Una fila por el centro en el orden del proceso; si no cabe, sigue en una segunda fila (forma de S). | Mover máquinas al centro |
+| `keep` | **Reordenar en su lugar** | `craft` | CRAFT: las máquinas **intercambian sus lugares actuales** por pares y, cuando ya no mejora, en rotaciones de tres (probando las orientaciones) mientras baje el costo de manejo. Si por las rutas reales caminara más que hoy, se queda como hoy: nunca es peor. | Ninguna |
+| `slp` | **Por bloques (SLP)** | `slp` | Las áreas con relación A o E forman un bloque; los bloques siguen el orden del flujo y se empacan desde la esquina de menor costo. | Mover máquinas por grupos |
 
 Para la U y la línea, `improve_order()` intenta además intercambiar estaciones vecinas en el orden mientras baje el costo.
 
-Ninguna alternativa abre portones, mueve paredes ni cruza zonas: respetan lo que el usuario dibujó.
+Ninguna alternativa abre portones, mueve paredes ni cruza zonas, y ninguna mueve lo que el usuario fijó (`locked`): cada una trae `locked_respected` y, si algo no cabe, `infeasible` con el fijo que lo impide.
 
-**Puntaje y recomendación (`score`).** Menor es mejor:
+**Recomendación multicriterio.** Cada alternativa (y hoy, como referencia) recibe un puntaje de 0 a 1 por criterio, donde 1 es lo mejor entre las opciones (`scores`):
 
-- *Sin supuestos:* `recorrido_nuevo / recorrido_hoy + 0,03 × obra + 0,2 × avisos`.
-- *Con supuestos:* `0,35 × metros al día + 0,25 × capacidad (inversa) + 0,2 × tiempo por pieza + 0,1 × carga de camiones + 0,05 × obra + 0,1 × avisos`, todo relativo a hoy.
+| Criterio | Peso por defecto | Se mide con | Puntaje |
+|---|---|---|---|
+| `manejo` | 0,25 | m al día (con supuestos) o m por pieza | menor / valor |
+| `lead_time` | 0,20 | horas por pieza | menor / valor |
+| `capacidad` | 0,15 | piezas al día | valor / mayor |
+| `obra` | 0,15 | estaciones que cambian de lugar y obra | 1 − movidas / total − 0,25 × obra |
+| `seguridad` | 0,15 | áreas sucias junto a limpias | 1 / (1 + avisos) |
+| `flexibilidad` | 0,10 | área libre de la planta | libre / mayor libre |
 
-La alternativa con menor puntaje se marca como **RECOMENDADA**.
+El total es la suma ponderada con los pesos (`weights` en la petición; se validan y se normalizan para que sumen 1; la respuesta trae `weights_used`). Un criterio sin datos (por ejemplo tiempos sin supuestos) no cuenta y su peso se reparte. Más metros nunca dan mejor puntaje de manejo. La **recomendada** es la de mayor total entre las viables (respetan lo fijo y caben); `ideal` es la mejor técnica sin contar obra ni fijos. `sensitivity` dice si la recomendada sería la misma al multiplicar cada peso por 0,5 o por 2. `recommended_reason` y `recommended_tradeoffs` explican la elección y lo que empeora frente a hoy.
+
+El campo `score` de antes (menor es mejor) se sigue enviando por compatibilidad, pero ya no decide la recomendación.
 
 ### 8.7 `cauce/plant.py`: la planta de ejemplo
 
