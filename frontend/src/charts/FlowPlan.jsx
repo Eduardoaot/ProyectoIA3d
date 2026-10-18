@@ -1,5 +1,6 @@
 import { motion } from 'motion/react'
 import { fmt } from '../api'
+import { flowOf, lateralOffsets, shiftPath } from '../flows'
 import { countOf, fitLabel } from '../units'
 import { arrowPoints, bboxOf, GATE_HALF, gateInfo, midOf, outlineOf, pathD, polyD, rectOf, shortName, straight } from '../editor/geometry'
 import { useTip } from './Tip'
@@ -10,6 +11,7 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
   const { node, bind } = useTip()
   const { w: W, d: D } = plant.size
   const names = Object.fromEntries(plant.stations.map((s) => [s.id, s.name]))
+  const offsets = lateralOffsets(plant.routes)
   // Nombres que no caben en su máquina: número en el plano y nombre completo en la leyenda (H9).
   const legend = plant.stations
     .map((s, i) => {
@@ -86,7 +88,8 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
           const b = positions[rt.to]
           if (!a || !b) return null
           const l = legBy[rt.id]
-          const pts = l?.path?.length > 1 ? l.path : straight(a, b)
+          const fl = flowOf(rt)
+          const pts = shiftPath(l?.path?.length > 1 ? l.path : straight(a, b), offsets[rt.id])
           const m = midOf(pts)
           return (
             <g
@@ -107,16 +110,16 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
               <motion.path
                 d={pathD(pts)}
                 fill="none"
-                stroke="#000"
                 strokeOpacity={0.6}
                 strokeLinejoin="round"
-                strokeDasharray={(rt.frac ?? 1) < 1 ? '0.6 0.4' : undefined}
+                stroke={fl.color}
+                strokeDasharray={rt.is_return ? '0.5 0.3' : fl.dash || ((rt.frac ?? 1) < 1 ? '0.6 0.4' : undefined)}
                 strokeWidth={0.16 + ((l?.meters || 0) / maxM) * 0.75}
                 initial={still ? false : { pathLength: 0 }}
                 animate={{ pathLength: 1 }}
                 transition={{ duration: 0.9, delay: 0.15 + i * 0.06 }}
               />
-              <polygon points={arrowPoints(m, 0.8)} fill="#000" />
+              <polygon points={arrowPoints(m, 0.8)} fill={fl.color} />
             </g>
           )
         })}

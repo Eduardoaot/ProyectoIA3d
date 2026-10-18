@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { fmt } from '../api'
 import { has } from '../capabilities'
+import { FLOWS } from '../flows'
 import { ARRANGEMENTS, countOf, resize } from '../units'
 import useCaps from '../useCaps'
 import { bboxOf, centerOf, PART_KINDS, partLabel, shapePreset } from './geometry'
@@ -171,6 +172,7 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
   const names = Object.fromEntries(plant.stations.map((s) => [s.id, s.name]))
   const setStation = (id, patch) => commit({ ...plant, stations: plant.stations.map((s) => (s.id === id ? { ...s, ...patch } : s)) }, positions)
   const setZone = (id, patch) => commit({ ...plant, zones: plant.zones.map((z) => (z.id === id ? { ...z, ...patch } : z)) }, positions)
+  const setConveyor = (id, patch) => commit({ ...plant, conveyors: (plant.conveyors || []).map((c) => (c.id === id ? { ...c, ...patch } : c)) }, positions)
   const setRoute = (id, patch) => commit({ ...plant, routes: plant.routes.map((r) => (r.id === id ? { ...r, ...patch } : r)) }, positions)
   const setGate = (id, patch) => commit({ ...plant, gates: plant.gates.map((g) => (g.id === id ? { ...g, ...patch } : g)) }, positions)
 
@@ -373,6 +375,37 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
           </select>
         </label>
         <Field label="Piezas que pasan por aquí" type="number" step="5" min={1} value={Math.round((r.frac ?? 1) * 100)} suffix="%" onCommit={(v) => setRoute(r.id, { frac: Math.min(100, v) / 100 })} />
+        {has(caps, 'flows') && (
+          <>
+            <label className="field">
+              <span>Qué se mueve</span>
+              <select value={r.flow || 'material'} onChange={(e) => setRoute(r.id, { flow: e.target.value })}>
+                {FLOWS.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field field--check">
+              <input type="checkbox" checked={!!r.is_return} onChange={(e) => setRoute(r.id, { is_return: e.target.checked })} />
+              <span>Es un retorno (regresa a una estación anterior: retrabajo, otra prueba)</span>
+            </label>
+          </>
+        )}
+        {has(caps, 'conveyors') && (plant.conveyors || []).length > 0 && (
+          <label className="field">
+            <span>Va en banda</span>
+            <select value={r.conveyor || ''} onChange={(e) => setRoute(r.id, { conveyor: e.target.value || null })}>
+              <option value="">No, se lleva a mano</option>
+              {plant.conveyors.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name || c.id}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="row">
           <button type="button" className="btn btn--small" onClick={() => setRoute(r.id, { from: r.to, to: r.from })}>
             Invertir dirección
@@ -384,6 +417,40 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
             {leg.ok ? `${fmt(leg.dist, 1)} m por viaje, por los pasillos.` : 'No hay paso libre entre estas dos: revisa paredes y zonas. Se cuenta en línea recta.'}
           </p>
         )}
+      </aside>
+    )
+  }
+
+  if (sel?.type === 'conveyor') {
+    const c = (plant.conveyors || []).find((q) => q.id === sel.id)
+    if (!c) return <aside className="inspector" />
+    const len = (c.points || []).slice(1).reduce((a, p, i) => a + Math.hypot(p[0] - c.points[i][0], p[1] - c.points[i][1]), 0)
+    const used = plant.routes.filter((r) => r.conveyor === c.id)
+    return (
+      <aside className="inspector">
+        <span className="inspector-kicker">Banda transportadora</span>
+        <Field label="Nombre" value={c.name || ''} onCommit={(v) => setConveyor(c.id, { name: v.trim() || c.name })} />
+        <p className="small num">Largo: {fmt(len, 1)} m.</p>
+        <div className="field-row">
+          <Field label="Capacidad" type="number" step="0.5" min={0} value={c.capacity_ppm ?? ''} suffix="pzs/min" onCommit={(v) => setConveyor(c.id, { capacity_ppm: v })} />
+          <Field label="Velocidad" type="number" step="0.5" min={0.1} value={c.speed_mpm ?? ''} suffix="m/min" onCommit={(v) => setConveyor(c.id, { speed_mpm: v })} />
+        </div>
+        {['from', 'to'].map((end) => (
+          <label key={end} className="field">
+            <span>{end === 'from' ? 'Recibe de' : 'Entrega a'}</span>
+            <select value={c[end] || ''} onChange={(e) => setConveyor(c.id, { [end]: e.target.value || null })}>
+              <option value="">Ninguna</option>
+              {plant.stations.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+        <p className="small">{used.length ? `La usan ${used.length} ${used.length === 1 ? 'ruta' : 'rutas'}.` : 'Ninguna ruta va en esta banda: elige «Va en banda» en una ruta.'} Capacidad y velocidad iniciales son supuestos; cámbialos por los de la banda real.</p>
+        <div className="row">{!c.locked && del}</div>
+        <LockBox item={c} lock={lock} full={full} />
       </aside>
     )
   }

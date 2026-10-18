@@ -130,3 +130,19 @@ Con `pruebas/transformadores.json` el motor **no** recomienda la línea recta:
 - Tarjetas: «IDEAL» cuando la mejor técnica no es la recomendada; aviso si una alternativa no respeta lo fijo.
 - «Cómo se calculó» explica la recomendación multicriterio.
 - Pruebas: `f4-pesos.test.js`.
+
+## F5. Flujos, ciclos y bandas (H3)
+
+### Motor
+- `cauce/flows.py`: flujo por ruta (`material`, `personas`, `vehiculos`, `carga`). Las métricas de siempre son solo del material; `current.flows` y `alternatives[].flows` traen metros por pieza y al día de cada flujo. En la búsqueda pesan material y carga 1, vehículos 0,5 y personas 0,3.
+- Orden del proceso con componentes fuertemente conexas (Tarjan) sin los retornos: un ciclo ya no manda estaciones al final. Sin ciclos el orden es el mismo de antes. `current.cycles` lista los ciclos (con retornos). En la planta v2 había un ciclo sin marcar (pruebas → encubado, 5 %): ahora queda en su lugar del proceso; U, línea y reordenar dan lo mismo que antes y SLP cambia un poco (136,4 → 142,4 m).
+- Bandas: una ruta con `conveyor` mide la banda más la carga y descarga; nadie camina el tramo en banda (no suma a `daily_m`), su traslado usa `speed_mpm` y `conveyor_load` compara piezas por minuto con `capacity_ppm`.
+- Legs con `flow`, `is_return`, `conveyor` y `belt_m`. Otros flujos dan relación I. `facts()` nombra retornos, bandas y flujos de personas, vehículos y carga.
+- `features`: `flows`, `conveyors`. Pruebas: `test_f5_flujos.py`; §5.4 #5 pasa. **Las 6 pruebas de §5.4 pasan; no queda ningún `xfail`.**
+
+### Interfaz
+- Rutas con color y trazo por flujo; los retornos se dibujan como flecha curva punteada; las rutas entre el mismo par de estaciones se separan a los lados (editor y plano del reporte). Leyenda de flujos bajo el plano.
+- Herramienta «Ruta» con selector de flujo (con `flows`); en el inspector, «Qué se mueve», «Es un retorno» y «Va en banda» (con `conveyors`).
+- Herramienta «Banda» (con `conveyors`): se dibuja arrastrando, sus extremos se unen a la máquina más cercana; inspector con capacidad, velocidad (valores iniciales marcados como supuestos), de dónde recibe y a quién entrega, fijar y quitar (las rutas que la usaban vuelven a ir a pie).
+- Panel «Por flujo» en el rediseño con metros por flujo, ciclos y carga de cada banda, solo si vienen.
+- Pruebas: `f5-flujos.test.js`.

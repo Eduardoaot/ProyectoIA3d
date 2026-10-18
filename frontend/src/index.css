@@ -2874,3 +2874,32 @@ details.how ul {
 .warn {
   font-weight: 700;
 }
+
+/* ---------- Flujos y bandas ---------- */
+.field--check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.field--check input {
+  margin-top: 3px;
+}
+
+.editor-flows span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.flows-table td,
+.flows-table th {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--g200);
+  text-align: right;
+}
+
+.flows-table td:first-child,
+.flows-table th:first-child {
+  text-align: left;
+}

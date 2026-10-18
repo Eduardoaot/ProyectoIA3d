@@ -5,6 +5,9 @@ import Assistant from './Assistant'
 import Inspector from './Inspector'
 import { applyOps } from '../ops'
 import { countOf, fitLabel, unitRects } from '../units'
+import { has } from '../capabilities'
+import { FLOWS, flowOf, lateralOffsets, returnArc, shiftPath } from '../flows'
+import useCaps from '../useCaps'
 
 const TOOLS_FULL = [
   { id: 'select', label: 'Mover', key: 'V', tip: 'Selecciona y arrastra máquinas, zonas, paredes y portones. Arrastra el fondo para mover la vista; la rueda acerca y aleja. Las flechas mueven lo seleccionado (Shift: 10 veces más).' },
@@ -13,6 +16,7 @@ const TOOLS_FULL = [
   { id: 'wall', label: 'Pared', key: 'P', tip: 'Arrastra para dibujar una pared interior. Se pega a esquinas y muros cercanos y se ajusta a 45°; con Alt queda libre.' },
   { id: 'zone', label: 'Zona', key: 'Z', tip: 'Arrastra un rectángulo: oficina, baños, comedor o zona bloqueada. Por ahí no pasa el material.' },
   { id: 'gate', label: 'Portón', key: 'O', tip: 'Clic sobre cualquier muro exterior para agregar un portón. La calle se agrega de ese lado.' },
+  { id: 'conveyor', label: 'Banda', key: 'B', needs: 'conveyors', tip: 'Arrastra para dibujar una banda transportadora. Sus extremos se unen a la máquina más cercana; en el panel se ajustan capacidad y velocidad.' },
   { id: 'shape', label: 'Forma', key: 'F', tip: 'El edificio se arma con piezas: agrega formas sólidas o huecos desde el panel derecho. Arrastra una pieza para moverla, sus manijas cambian el tamaño y el círculo de arriba la gira. Cada pieza se edita sola.' },
 ]
 
@@ -100,6 +104,8 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
   const [guides, setGuides] = useState([])
   // Agrupar o expandir las N máquinas de una estación: solo cambia la vista, no los datos.
   const [collapsed, setCollapsed] = useState({})
+  const caps = useCaps()
+  const [routeFlow, setRouteFlow] = useState('material')
   const drag = useRef(null)
   const lastPt = useRef(null)
   const frozenVB = useRef(null)
@@ -302,7 +308,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     const { layout, ...rest } = out.plant
     commit('layout' in plant ? { ...rest, layout: plant.layout } : rest, layout)
   }
-  const lockedItem = (type, id) => (type === 'station' ? st[id] : type === 'zone' ? plant.zones.find((q) => q.id === id) : null)
+  const lockedItem = (type, id) => (type === 'station' ? st[id] : type === 'zone' ? plant.zones.find((q) => q.id === id) : type === 'conveyor' ? conveyors.find((q) => q.id === id) : null)
   const blockedByLock = (type, id) => {
     const it = lockedItem(type, id)
     if (!it?.locked) return false
@@ -321,6 +327,12 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       delete pos[id]
       commit({ ...plant, stations: plant.stations.filter((s) => s.id !== id), routes: plant.routes.filter((r) => r.from !== id && r.to !== id) }, pos)
     } else if (type === 'route') commit({ ...plant, routes: plant.routes.filter((r) => r.id !== id) })
+    else if (type === 'conveyor') {
+      const c = conveyors.find((q) => q.id === id)
+      if (c?.locked) return setNotice(`«${c.name}» está fija. Libérala en el panel para quitarla.`)
+      // Las rutas que iban en esta banda vuelven a ir a pie.
+      commit({ ...plant, conveyors: conveyors.filter((q) => q.id !== id), routes: plant.routes.map((r) => (r.conveyor === id ? { ...r, conveyor: null } : r)) })
+    }
     else if (type === 'zone') commit({ ...plant, zones: plant.zones.filter((z) => z.id !== id) })
     else if (type === 'wall') commit({ ...plant, walls: plant.walls.filter((w) => w.id !== id) })
     else if (type === 'part') return ops.removePart(id)
@@ -374,8 +386,8 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       setRouteFrom(id)
       return
     }
-    if (routeFrom !== id && !plant.routes.some((r) => r.from === routeFrom && r.to === id)) {
-      const r = { id: uid('r'), from: routeFrom, to: id, frac: 1 }
+    if (routeFrom !== id && !plant.routes.some((r) => r.from === routeFrom && r.to === id && (r.flow || 'material') === routeFlow)) {
+      const r = { id: uid('r'), from: routeFrom, to: id, frac: 1, ...(routeFlow !== 'material' ? { flow: routeFlow } : {}) }
       commit({ ...plant, routes: [...plant.routes, r] })
       setSel({ type: 'route', id: r.id })
     }
@@ -509,7 +521,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
         setSel(null)
         setTool('select')
       } else if (full && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const t = TOOLS_FULL.find((q) => q.key.toLowerCase() === k)
+        const t = tools.find((q) => q.key.toLowerCase() === k)
         if (t) pickTool(t.id)
       }
     }
@@ -595,6 +607,14 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     setSel({ type: 'gate', id: gt.id })
     startDrag(e, { type: 'gate', id: gt.id })
   }
+  const onDownConveyor = (e, c) => {
+    if (!full || tool !== 'select') return
+    e.stopPropagation()
+    setSel({ type: 'conveyor', id: c.id })
+    if (c.locked) return setNotice(`«${c.name || 'Banda'}» está fija${c.lock_reason ? `: ${c.lock_reason}` : ''}.`)
+    const [x, z] = toPt(e)
+    startDrag(e, { type: 'conveyor', id: c.id, x0: x, z0: z, c0: c })
+  }
   const onDownRoute = (e, r) => {
     if (!full || tool !== 'select') return
     e.stopPropagation()
@@ -662,6 +682,9 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       const { p } = smartPoint([x, z], { points: magnetPoints(), segs: magnetSegs(), grid, tol })
       setDraft({ type: 'wall', x1: p[0], z1: p[1], x2: p[0], z2: p[1] })
       svg.current.setPointerCapture?.(e.pointerId)
+    } else if (tool === 'conveyor') {
+      setDraft({ type: 'conveyor', x1: g(x), z1: g(z), x2: g(x), z2: g(z) })
+      svg.current.setPointerCapture?.(e.pointerId)
     } else if (tool === 'zone') {
       setDraft({ type: 'zone', x1: g(x), z1: g(z), x2: g(x), z2: g(z) })
       svg.current.setPointerCapture?.(e.pointerId)
@@ -698,6 +721,11 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
         const sp = smartPoint([x, z], { points: magnetPoints(), segs: magnetSegs(), from: [draft.x1, draft.z1], free: e.altKey, grid, tol })
         setGuides(sp.guides)
         setDraft({ ...draft, x2: sp.p[0], z2: sp.p[1] })
+      } else if (draft.type === 'conveyor') {
+        // Banda recta, horizontal o vertical (la dirección más larga del arrastre).
+        const nx = Math.min(W, Math.max(0, g(x)))
+        const nz = Math.min(D, Math.max(0, g(z)))
+        setDraft(Math.abs(nx - draft.x1) >= Math.abs(nz - draft.z1) ? { ...draft, x2: nx, z2: draft.z1 } : { ...draft, x2: draft.x1, z2: nz })
       } else setDraft({ ...draft, x2: Math.min(W, Math.max(0, g(x))), z2: Math.min(D, Math.max(0, g(z))) })
       return
     }
@@ -735,6 +763,12 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       if (!dx && !dz) return
       markMoved(d)
       onChange({ ...plant, walls: plant.walls.map((q) => (q.id === d.id ? { ...q, x1: round2(w.x1 + dx), z1: round2(w.z1 + dz), x2: round2(w.x2 + dx), z2: round2(w.z2 + dz) } : q)) }, positions)
+    } else if (d.type === 'conveyor') {
+      const dx = g(x - d.x0)
+      const dz = g(z - d.z0)
+      if (!dx && !dz) return
+      markMoved(d)
+      onChange({ ...plant, conveyors: conveyors.map((q) => (q.id === d.id ? { ...q, points: d.c0.points.map(([px, pz]) => [round2(px + dx), round2(pz + dz)]) } : q)) }, positions)
     } else if (d.type === 'wallEnd') {
       const w = plant.walls.find((q) => q.id === d.id)
       const other = d.end === 1 ? [w.x2, w.z2] : [w.x1, w.z1]
@@ -818,6 +852,22 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
         const id = uid('w')
         commit({ ...plant, walls: [...plant.walls, { id, x1, z1, x2, z2 }] })
         setSel({ type: 'wall', id })
+      } else if (type === 'conveyor' && Math.hypot(x2 - x1, z2 - z1) >= 1) {
+        // Cada extremo se une a la máquina más cercana (a menos de 4 m), si la hay.
+        const near = ([px, pz]) => {
+          let best = null
+          for (const q of plant.stations) {
+            const pp = positions[q.id]
+            if (!pp) continue
+            const dd = Math.hypot(pp[0] - px, pp[1] - pz)
+            if (dd < 4 + Math.max(q.w, q.d) / 2 && (!best || dd < best[0])) best = [dd, q.id]
+          }
+          return best?.[1] || null
+        }
+        const id = uid('b')
+        const c = { id, name: `Banda ${conveyors.length + 1}`, from: near([x1, z1]), to: near([x2, z2]), points: [[x1, z1], [x2, z2]], capacity_ppm: 1, speed_mpm: 6, locked: false }
+        commit({ ...plant, conveyors: [...conveyors, c] })
+        setSel({ type: 'conveyor', id })
       } else if (type === 'zone' && Math.abs(x2 - x1) >= 1 && Math.abs(z2 - z1) >= 1) {
         const zk = catalog?.zones.find((q) => q.id === zoneKind)
         const id = uid('z')
@@ -902,7 +952,9 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
   const legBy = useMemo(() => Object.fromEntries((live.legs || []).map((l) => [l.id, l])), [live.legs])
   const recv = plant.receive_gate
   const disp = plant.dispatch_gate
-  const tools = full ? TOOLS_FULL : TOOLS_FULL.slice(0, 1)
+  const tools = full ? TOOLS_FULL.filter((t) => !t.needs || has(caps, t.needs)) : TOOLS_FULL.slice(0, 1)
+  const offsets = useMemo(() => lateralOffsets(plant.routes), [plant.routes])
+  const conveyors = plant.conveyors || []
   const shapeOn = full && tool === 'shape'
   const penOn = shapeOn && !!pen
   const activeTip = tools.find((t) => t.id === tool)?.tip
@@ -992,6 +1044,15 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
             {catalog?.kinds.map((k) => (
               <option key={k.id} value={k.id}>
                 {k.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {full && tool === 'route' && has(caps, 'flows') && (
+          <select className="editor-select" value={routeFlow} onChange={(e) => setRouteFlow(e.target.value)} aria-label="Flujo de la ruta">
+            {FLOWS.map((f) => (
+              <option key={f.id} value={f.id}>
+                Flujo: {f.label.toLowerCase()}
               </option>
             ))}
           </select>
@@ -1105,20 +1166,49 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
               )
             })}
 
+            {conveyors.map((c) => {
+              const on = sel?.type === 'conveyor' && sel.id === c.id
+              const pts = c.points || []
+              if (pts.length < 2) return null
+              const mid = midOf(pts)
+              return (
+                <g key={c.id} onPointerDown={(e) => onDownConveyor(e, c)} style={{ cursor: full && tool === 'select' ? (c.locked ? 'not-allowed' : 'move') : undefined }}>
+                  <title>{`${c.name || 'Banda'}${c.capacity_ppm ? ` · ${c.capacity_ppm} piezas/min` : ''}${c.speed_mpm ? ` · ${c.speed_mpm} m/min` : ''}`}</title>
+                  <path d={pathD(pts)} fill="none" stroke="#000" strokeWidth={on ? 1.15 : 1.0} strokeLinecap="butt" strokeDasharray={c.locked ? '0.5 0.3' : undefined} />
+                  <path d={pathD(pts)} fill="none" stroke="#dedede" strokeWidth={0.75} strokeDasharray="0.25 0.35" />
+                  <polygon points={arrowPoints(mid, 0.6)} fill="#000" />
+                </g>
+              )
+            })}
+
             {plant.routes.map((r) => {
               const a = positions[r.from]
               const b = positions[r.to]
               if (!a || !b) return null
               const leg = legBy[r.id]
-              const pts = leg?.path?.length > 1 ? leg.path : straight(a, b)
-              const m = midOf(pts)
+              const fl = flowOf(r)
               const on = sel?.type === 'route' && sel.id === r.id
               const width = 0.12 + Math.min(1, r.frac ?? 1) * 0.22
+              const dash = fl.dash || ((r.frac ?? 1) < 1 ? '0.6 0.4' : leg && !leg.ok ? '0.25 0.25' : undefined)
+              if (r.is_return) {
+                // Un retorno se dibuja como flecha curva: se lee como regreso, no como otra ida.
+                const arc = returnArc(a, b)
+                return (
+                  <g key={r.id} onPointerDown={(e) => onDownRoute(e, r)} style={{ cursor: full && tool === 'select' ? 'pointer' : undefined }}>
+                    <title>{`Retorno ${st[r.from]?.name} → ${st[r.to]?.name} (${Math.round((r.frac ?? 1) * 100)} %)`}</title>
+                    <path d={arc.d} fill="none" stroke="transparent" strokeWidth={1.2} />
+                    <path d={arc.d} fill="none" stroke={fl.color} strokeOpacity={on ? 1 : 0.7} strokeWidth={on ? width + 0.18 : width} strokeDasharray="0.5 0.3" />
+                    <polygon points={arrowPoints({ x: arc.tip[0], z: arc.tip[1], angle: Math.atan2(arc.dir[1], arc.dir[0]) }, on ? 0.95 : 0.75)} fill={fl.color} />
+                  </g>
+                )
+              }
+              const pts = shiftPath(leg?.path?.length > 1 ? leg.path : straight(a, b), offsets[r.id])
+              const m = midOf(pts)
               return (
                 <g key={r.id} onPointerDown={(e) => onDownRoute(e, r)} style={{ cursor: full && tool === 'select' ? 'pointer' : undefined }}>
                   <path d={pathD(pts)} fill="none" stroke="transparent" strokeWidth={1.2} />
-                  <path d={pathD(pts)} fill="none" stroke="#000" strokeOpacity={on ? 1 : 0.65} strokeWidth={on ? width + 0.18 : width} strokeDasharray={(r.frac ?? 1) < 1 ? '0.6 0.4' : leg && !leg.ok ? '0.25 0.25' : undefined} strokeLinejoin="round" />
-                  <polygon points={arrowPoints(m, on ? 0.95 : 0.75)} fill="#000" />
+                  <path d={pathD(pts)} fill="none" stroke={fl.color} strokeOpacity={on ? 1 : 0.65} strokeWidth={on ? width + 0.18 : width} strokeDasharray={dash} strokeLinejoin="round" />
+                  <polygon points={arrowPoints(m, on ? 0.95 : 0.75)} fill={fl.color} />
                 </g>
               )
             })}
@@ -1272,6 +1362,12 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
                 {segLabel([draft.x1, draft.z1], [draft.x2, draft.z2], `${fmt(Math.hypot(draft.x2 - draft.x1, draft.z2 - draft.z1), 2)} m`)}
               </g>
             )}
+            {draft?.type === 'conveyor' && (
+              <g pointerEvents="none">
+                <line x1={draft.x1} y1={draft.z1} x2={draft.x2} y2={draft.z2} stroke="#000" strokeWidth={1} strokeOpacity={0.4} />
+                {segLabel([draft.x1, draft.z1], [draft.x2, draft.z2], `${fmt(Math.hypot(draft.x2 - draft.x1, draft.z2 - draft.z1), 2)} m`)}
+              </g>
+            )}
             {draft?.type === 'zone' && (
               <g pointerEvents="none">
                 <rect x={Math.min(draft.x1, draft.x2)} y={Math.min(draft.z1, draft.z2)} width={Math.abs(draft.x2 - draft.x1)} height={Math.abs(draft.z2 - draft.z1)} fill="#000" fillOpacity={0.12} stroke="#000" strokeWidth={0.15} strokeDasharray="0.4 0.3" />
@@ -1282,6 +1378,20 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
             {/* Encima de todo: al dibujar una pieza a mano cada clic pone una esquina, aunque caiga sobre una máquina. */}
             {penOn && <rect x={vx - vw} y={vz - vh} width={vw * 3} height={vh * 3} fill="transparent" style={{ cursor: 'crosshair' }} onPointerDown={onDownPen} onDoubleClick={() => closePen()} />}
           </svg>
+          {(plant.routes.some((r) => (r.flow || 'material') !== 'material' || r.is_return) || conveyors.length > 0) && (
+            <p className="editor-legend editor-flows small">
+              {FLOWS.filter((f) => f.id === 'material' || plant.routes.some((r) => r.flow === f.id)).map((f) => (
+                <span key={f.id}>
+                  <svg width="26" height="8" aria-hidden="true">
+                    <line x1="1" y1="4" x2="25" y2="4" stroke={f.color} strokeWidth="2.5" strokeDasharray={f.dash ? f.dash.split(' ').map((v) => v * 6).join(' ') : undefined} />
+                  </svg>
+                  {f.label}
+                </span>
+              ))}
+              {plant.routes.some((r) => r.is_return) && <span>↩ Retorno (curva)</span>}
+              {conveyors.length > 0 && <span>▭ Banda</span>}
+            </p>
+          )}
           {legend.length > 0 && (
             <p className="editor-legend small">
               {legend.map(({ n, name }) => (
