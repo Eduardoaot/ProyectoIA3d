@@ -9,6 +9,7 @@ import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 import Criteria from '../components/Criteria'
 import FlowsPanel from '../components/FlowsPanel'
+import SimPanel from '../components/SimPanel'
 import { has } from '../capabilities'
 import { protectLocked } from '../proposals'
 import useCaps from '../useCaps'
@@ -418,6 +419,12 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 					{cur.flows && (
 						<div style={{ marginTop: 24 }}>
 							<FlowsPanel plant={plant} current={cur} metrics={metrics} name={name} />
+						</div>
+					)}
+
+					{plant.use_assumptions && (
+						<div style={{ marginTop: 24 }}>
+							<SimPanel plant={choice === 'propio' ? selPlant : plant} choice={choice} name={name} positions={positions} />
 						</div>
 					)}
 

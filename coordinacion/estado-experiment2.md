@@ -167,3 +167,16 @@ Con `pruebas/transformadores.json` el motor **no** recomienda la línea recta:
 - Ctrl+C / Ctrl+X / Ctrl+V del grupo: copia las estaciones y solo las rutas entre ellas; al pegar, ids nuevos, desplazamiento y rutas apuntando a las copias, en un lote de `add` + `connect` (un paso de deshacer). Cortar y borrar respetan lo fijo y avisan. Ctrl+X también funciona con un solo elemento.
 - Panel del grupo: fijar o liberar todas, quitar, y para las rutas entre ellas cambiar el flujo o el porcentaje de todas a la vez.
 - `groups.js` (puro) con `selectInRect`, `copyGroup`, `pasteOps`, `deleteOps`, `moveOps`, `routesAmong`, `patchRoutes`. Pruebas: `f7-grupos.test.js` (copiar 3 estaciones conectadas y pegarlas da 3 estaciones y sus rutas internas; deshacer las quita en un paso).
+
+## F8. Simulación (SimPy)
+
+### Motor
+- `POST /api/simulate` (`cauce/simulate.py`) según contrato §6.5: `{ plant, alternative, replicas, seed }` (más `days` y `positions` opcionales) → `{ seed, replicas, days, kpis, bottleneck, notes, alternative }`.
+- Modelo: las piezas entran al ritmo de la demanda y siguen las rutas de material. Salidas que suman más de 100 % son ramas paralelas (la pieza se divide); una estación con varias entradas seguras espera a todas (ensamble); los retornos, marcados o hacia atrás en el orden del proceso, no se esperan. Servidores = `units.servers()`. Triangular con rango y dato no medido; determinista si es medido o no hay rango. Lotes con su espera de llenado. Traslados con las distancias del motor y la velocidad de la banda. 2 días de calentamiento sin medir.
+- KPIs con P10, mediana y P90: piezas al día, tiempo por pieza, utilización por estación, WIP, takt; tiempo muerto `material` y `lote`; `falla`, `personal` y `cambio` en null (sin datos); OEE solo si `params.availability` y `params.quality` existen.
+- Coherente con las fórmulas: transformadores sostiene su demanda de 8 (capacidad 9,3) con pintura como cuello de botella; en la v3 el horno es el cuello de botella por tiempo (5,8 piezas/día frente a 6,3 de capacidad por fórmula).
+- `simpy>=4.1` en `requirements.txt` (puro Python, sin dependencias). `features`: `simulate`. Pruebas: `test_f8_simulacion.py` (misma semilla, mismo resultado; horno cuello de botella; null sin datos).
+
+### Interfaz
+- «Simulación con variabilidad» en el rediseño (solo con `simulate` y con supuestos): simula la opción elegida (o hoy), muestra rangos P10–P90 con su mediana, semilla y réplicas, tiempo muerto por causa, utilización y «sin datos» para cada null.
+- Pruebas: `f8-simulacion.test.js`.

@@ -32,6 +32,8 @@ export const api = {
     missions: (context) => post('/api/missions', context),
     // Asistente del editor (solo si capabilities anuncia plan_ops).
     planOps: (instruction, plant) => post('/api/plan/ops', { instruction, plant }),
+    // Simulación (solo si capabilities anuncia simulate). positions: para «Tu rediseño».
+    simulate: (plant, alternative = 'hoy', positions = null) => post('/api/simulate', { plant, alternative, replicas: 30, seed: 42, ...(positions ? { positions } : {}) }),
 }
 
 export async function stream(path, body, onToken, signal) {

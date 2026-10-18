@@ -2950,3 +2950,24 @@ details.how ul {
 .context2 ul {
   margin: 6px 0 10px 18px;
 }
+
+/* ---------- Simulación ---------- */
+.sim-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px 20px;
+  margin-top: 12px;
+}
+
+.sim-grid > div {
+  display: grid;
+  gap: 2px;
+}
+
+.sim-grid .sim-wide {
+  grid-column: 1 / -1;
+}
+
+.sim-grid ul {
+  margin: 4px 0 0 18px;
+}
