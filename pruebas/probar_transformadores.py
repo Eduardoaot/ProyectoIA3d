@@ -1,7 +1,8 @@
 """Valida pruebas/transformadores.json (planta en formato v2) contra el motor, sin servidor.
 Revisa que las máquinas no se encimen ni se salgan de la bodega, que todas las rutas
 encuentren paso y que el análisis completo (hoy y alternativas) corra.
-Uso: backend/.venv/Scripts/python pruebas/probar_transformadores.py"""
+Uso: backend/.venv/Scripts/python pruebas/probar_transformadores.py [archivo.json]
+(por defecto transformadores.json; también sirve para transformadores-v3.json)"""
 import json
 import pathlib
 import sys
@@ -14,7 +15,7 @@ from cauce.catalog import KIND, ZONE  # noqa: E402
 from cauce.engine import evaluate, rect_at, station_map, zone_rect  # noqa: E402
 from cauce.layout import alternatives, score  # noqa: E402
 
-plant = json.loads((ROOT / "transformadores.json").read_text(encoding="utf-8"))
+plant = json.loads((ROOT / (sys.argv[1] if len(sys.argv) > 1 else "transformadores.json")).read_text(encoding="utf-8"))
 W, D = plant["size"]["w"], plant["size"]["d"]
 errores = []
 

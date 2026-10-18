@@ -42,7 +42,6 @@ def test_recomendada_que_empeora_lo_declara(client, plant):
 
 
 # 2. Ningún elemento locked cambia de posición en ninguna alternativa.
-@pytest.mark.xfail(strict=True, reason="F2: las alternativas aún no respetan locked")
 def test_locked_no_se_mueve(client, plant):
     p = copy.deepcopy(plant)
     fixed = {"horno", "pruebas"}
@@ -67,7 +66,6 @@ def test_reordenar_nunca_peor_que_hoy(client, plant, use_assumptions):
 
 
 # 4. Una estación con count: N produce N servidores en el cálculo de capacidad.
-@pytest.mark.xfail(strict=True, reason="F2: el motor aún no lee count")
 def test_count_n_servidores(client, plant):
     p = copy.deepcopy(plant)
     emb = next(s for s in p["stations"] if s["id"] == "embobinado")

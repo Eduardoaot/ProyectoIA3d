@@ -17,6 +17,7 @@ import heapq
 import math
 from functools import lru_cache
 
+from . import units
 from .catalog import CLEAN, DEFAULT_PARAMS, DIRTY
 
 STEP = 0.5      # resolución de la malla (m)
@@ -354,7 +355,7 @@ def evaluate(plant, positions, ops=None):
         return out
 
     p = params(plant)
-    ops = ops or {s["id"]: int(s.get("ops", 0) or 0) for s in plant["stations"]}
+    ops = {**{s["id"]: units.operators(s) for s in plant["stations"]}, **(ops or {})}
     avail = p["shift_min"] * p["efficiency"]
     share = shares(plant)
     demand = max(float(p["demand"]), 1e-6)
@@ -370,36 +371,45 @@ def evaluate(plant, positions, ops=None):
     stations = []
     for s in plant["stations"]:
         sid = s["id"]
-        t = float(s.get("t", 0) or 0)
+        t = units.machine_time(s)
         load = demand * share[sid] * t + handling[sid]
         n = ops.get(sid, 0)
-        servers = n if n > 0 else (1 if t > 0 else 0)
+        # count: N son N máquinas en paralelo (units.servers); sin count, como en v2.
+        servers = units.servers(s) if units.has_count(s) else units.servers(s, n)
         if servers == 0 or load <= 0:
             continue
         util = load / (servers * avail)
-        stations.append({
-            "id": sid, "name": s["name"], "ops": n, "auto": n == 0,
+        row = {
+            "id": sid, "name": s["name"], "ops": n, "auto": n == 0, "servers": servers,
             "load_min": round(load, 1), "handling_min": round(handling[sid], 1),
             "util": round(util, 4), "required": round(load / avail, 2), "capacity": round(servers * avail / (load / demand), 1),
-        })
+        }
+        if units.has_count(s):
+            row["count"] = units.count(s)
+        stations.append(row)
     stations.sort(key=lambda x: -x["util"])
 
     takt = avail / demand
-    proc = sum(float(s.get("t", 0) or 0) * share[s["id"]] for s in plant["stations"])
+    proc = sum(units.stay_time(s) * share[s["id"]] for s in plant["stations"])
     queue = 0.0
     for x in stations:
         sh = max(share[x["id"]], 1e-9)
         te = x["load_min"] / (demand * sh)
-        queue += sakasegawa_wq(x["util"], max(x["ops"], 1), te, p["cv2"]) * sh
+        queue += sakasegawa_wq(x["util"], max(x["servers"], 1), te, p["cv2"]) * sh
     batch_wait = sum((p["batch"] - 1) / 2 * takt * min(1.0, leg["frac"]) for leg in legs)
+    # Horno o secado por lote: la pieza espera a que se junte el lote (criterios §3.4). No es tiempo de máquina.
+    fill_wait = sum((b["size"] - 1) / 2 * takt * share[s["id"]] for s in plant["stations"] if (b := units.batch(s)))
     transport = sum(leg["frac"] * leg["dist"] / p["speed"] for leg in legs)
-    lead_min = proc + queue + batch_wait + transport
+    lead_min = proc + queue + batch_wait + fill_wait + transport
 
+    parts = {"proceso": round(proc, 1), "cola": round(queue, 1), "lote": round(batch_wait, 1), "transporte": round(transport, 1)}
+    if fill_wait:
+        parts["espera_lote"] = round(fill_wait, 1)
     out.update({
         "daily_m": round(daily_m, 0),
         "demand": p["demand"],
         "lead_h": round(lead_min / 60, 2),
-        "lead_parts": {"proceso": round(proc, 1), "cola": round(queue, 1), "lote": round(batch_wait, 1), "transporte": round(transport, 1)},
+        "lead_parts": parts,
         "stations": stations,
         "ops": ops,
     })
@@ -416,11 +426,13 @@ def evaluate(plant, positions, ops=None):
 
 def rebalance_ops(plant, positions):
     """Reparte los mismos operarios para maximizar la capacidad."""
-    total = sum(int(s.get("ops", 0) or 0) for s in plant["stations"])
-    working = [s["id"] for s in plant["stations"] if float(s.get("t", 0) or 0) > 0 and int(s.get("ops", 0) or 0) > 0]
+    # Las estaciones con count tienen sus operarios atados a sus máquinas: no entran al reparto.
+    free = [s for s in plant["stations"] if not units.has_count(s)]
+    total = sum(int(s.get("ops", 0) or 0) for s in free)
+    working = [s["id"] for s in free if units.machine_time(s) > 0 and int(s.get("ops", 0) or 0) > 0]
     if not working or total < len(working):
         return None
-    ops = {s["id"]: 0 for s in plant["stations"]}
+    ops = {s["id"]: (units.operators(s) if units.has_count(s) else 0) for s in plant["stations"]}
     for sid in working:
         ops[sid] = 1
     for _ in range(total - len(working)):
@@ -435,7 +447,7 @@ def rebalance_ops(plant, positions):
 
 def relations(plant):
     """Tabla de relaciones (A, E, I, O, U, X). No depende de supuestos."""
-    zones = [z for z in plant.get("zones", []) if z["kind"] != "bloqueado"]
+    zones = [z for z in plant.get("zones", []) if z["kind"] not in ("bloqueado", "obstaculo")]
     ids = [s["id"] for s in plant["stations"]] + [z["id"] for z in zones]
     names = {s["id"]: s["name"] for s in plant["stations"]}
     names.update({z["id"]: z["name"] for z in zones})

@@ -13,7 +13,7 @@ from __future__ import annotations
 from .catalog import CLEAN, DIRTY
 from .engine import dims, evaluate, gate_pt, manhattan, rebalance_ops, station_map
 from .story import impersonal
-from .layout import EDGE, GAP, _rect, feasible, flow_order, nearest_free, plant_area
+from .layout import EDGE, GAP, _rect, feasible, fixed_of, flow_order, locked_respected, nearest_free, plant_area
 
 CORNERS = ["frente-izquierda", "frente-derecha", "fondo-izquierda", "fondo-derecha"]
 
@@ -105,8 +105,13 @@ def pack(plant, order, groups, corner):
     # Lo que entra y lo que sale se queda cerca de su portón.
     gate_of = {"recepcion": gate_pt(plant, plant.get("receive_gate")), "despacho": gate_pt(plant, plant.get("dispatch_gate"))}
 
-    positions, placed, rects = {}, [], {}
+    # Lo fijo ya está en su lugar: el resto se acomoda alrededor.
+    positions = {k: list(v) for k, v in fixed_of(plant).items()}
+    rects = {k: _rect(st[k], *v) for k, v in positions.items()}
+    placed = list(rects.values())
     for sid in order:
+        if sid in positions:
+            continue
         s = st[sid]
         gate = gate_of.get(s["kind"])
         cands = []
@@ -211,4 +216,5 @@ async def compact_alternative(plant, provider):
         "source": source,
         "reasons": reasons,
         "error": error,
+        "locked_respected": locked_respected(plant, pos),
     }

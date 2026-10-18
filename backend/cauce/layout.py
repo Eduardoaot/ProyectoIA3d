@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
+from . import units
 from .catalog import CLEAN, DIRTY
 from .engine import dims, evaluate, gate_pt, gate_x, manhattan, outline, params, point_in_poly, poly_area, poly_edges, rebalance_ops, seg_dist, station_map, zone_rect
 
@@ -202,9 +203,22 @@ def _pin_ends(plant, order, positions, placed):
     return rest
 
 
-def place_along(plant, order, path):
+def fixed_of(plant):
+    """Estaciones fijas (locked) con su lugar de hoy: ninguna alternativa las mueve."""
+    return {sid: list(plant["layout"][sid]) for sid in units.locked_stations(plant)}
+
+
+def _seed(plant, fixed):
     st = station_map(plant)
-    positions, placed = {}, []
+    positions = {k: list(v) for k, v in (fixed or {}).items() if k in st}
+    placed = [_rect(st[k], *v) for k, v in positions.items()]
+    return positions, placed
+
+
+def place_along(plant, order, path, fixed=None):
+    st = station_map(plant)
+    positions, placed = _seed(plant, fixed)
+    order = [sid for sid in order if sid not in positions]
     rest = _pin_ends(plant, order, positions, placed)
     total = sum(abs(b[0] - a[0]) + abs(b[1] - a[1]) for a, b in zip(path, path[1:]))
     s = 0.0
@@ -237,16 +251,17 @@ def place_along(plant, order, path):
     return positions
 
 
-def improve_order(plant, order, path):
+def improve_order(plant, order, path, fixed=None):
     """Intercambia estaciones vecinas en el orden mientras baje el costo."""
-    best_pos = place_along(plant, order, path)
+    order = [sid for sid in order if sid not in (fixed or {})]
+    best_pos = place_along(plant, order, path, fixed)
     best = search_cost(plant, best_pos)
     for _ in range(2):
         changed = False
         for i in range(len(order) - 1):
             trial = order[:]
             trial[i], trial[i + 1] = trial[i + 1], trial[i]
-            pos = place_along(plant, trial, path)
+            pos = place_along(plant, trial, path, fixed)
             c = search_cost(plant, pos)
             if c < best - 0.5:
                 order, best, best_pos, changed = trial, c, pos, True
@@ -299,12 +314,14 @@ def keep_swap(plant, positions):
     st = station_map(plant)
     pos = {k: list(v) for k, v in positions.items()}
     best = search_cost(plant, pos)
+    locked = set(units.locked_stations(plant))
     ids = [s for s in pos if s in st]
+    movable = [s for s in ids if s not in locked]
     for _ in range(4):
         changed = False
-        for i in range(len(ids)):
-            for j in range(i + 1, len(ids)):
-                a, b = ids[i], ids[j]
+        for i in range(len(movable)):
+            for j in range(i + 1, len(movable)):
+                a, b = movable[i], movable[j]
                 for ra in (pos[b][2], (pos[b][2] + 90) % 180):
                     for rb in (pos[a][2], (pos[a][2] + 90) % 180):
                         trial = dict(pos)
@@ -382,20 +399,56 @@ ALTERNATIVES = [
 ]
 
 
+def collisions(plant, positions):
+    """Estaciones que quedaron encimadas o fuera de la bodega (no hubo lugar para ellas)."""
+    st = station_map(plant)
+    W, D = plant["size"]["w"], plant["size"]["d"]
+    rects = {k: _rect(st[k], *v) for k, v in positions.items() if k in st}
+    bad = set()
+    for k, r in rects.items():
+        if r[0] < -1e-6 or r[1] < -1e-6 or r[2] > W + 1e-6 or r[3] > D + 1e-6:
+            bad.add(k)
+        if any(_overlap(r, zone_rect(z), 0) for z in plant.get("zones", [])):
+            bad.add(k)
+    ks = list(rects)
+    for i, a in enumerate(ks):
+        for b in ks[i + 1:]:
+            if _overlap(rects[a], rects[b], -1e-6):
+                bad.update((a, b))
+    return bad
+
+
+def locked_respected(plant, positions):
+    return all(positions.get(sid, [None])[:3] == list(plant["layout"][sid])[:3] for sid in units.locked_stations(plant))
+
+
+def _build(plant, aid, order, fixed):
+    if aid == "u":
+        return improve_order(plant, order, u_path(plant), fixed)
+    if aid == "i":
+        return improve_order(plant, order, line_path(plant), fixed)
+    return keep_swap(plant, plant["layout"])
+
+
 def alternatives(plant):
-    base = plant["layout"]
     order = flow_order(plant)
+    fixed = fixed_of(plant)
+    fixed_names = [x["name"] for x in units.locked_items(plant) if x["type"] != "conveyor"]
+    st = station_map(plant)
     out = []
     for aid, name, summary, works, cost in ALTERNATIVES:
-        if aid == "u":
-            pos = improve_order(plant, order, u_path(plant))
-        elif aid == "i":
-            pos = improve_order(plant, order, line_path(plant))
-        else:
-            pos = keep_swap(plant, base)
+        pos = _build(plant, aid, order, fixed)
         ops = rebalance_ops(plant, pos) if plant.get("use_assumptions") else None
         m = evaluate(plant, pos, ops)
-        out.append({"id": aid, "name": name, "summary": summary, "works": works, "works_cost": cost, "positions": pos, "metrics": m})
+        alt = {"id": aid, "name": name, "summary": summary, "works": works, "works_cost": cost, "positions": pos, "metrics": m, "locked_respected": locked_respected(plant, pos)}
+        bad = collisions(plant, pos) - set(fixed)
+        if bad and aid != "keep":
+            names = ", ".join(sorted(st[k]["name"] for k in bad))
+            alt["infeasible"] = {"stations": sorted(st[k]["name"] for k in bad), "blocked_by": [], "text": f"No hay lugar para {names} con este acomodo: quedan encimadas."}
+            # ¿Cabe sin los fijos? Entonces son ellos los que lo impiden (criterios §3.3).
+            if fixed and not collisions(plant, _build({**plant, "stations": [{**s, "locked": False} for s in plant["stations"]]}, aid, order, {})):
+                alt["infeasible"].update(blocked_by=fixed_names, text=f"No hay lugar para {names} sin mover lo fijo: " + ", ".join(fixed_names) + ".")
+        out.append(alt)
     return out
 
 

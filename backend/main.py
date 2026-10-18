@@ -63,7 +63,7 @@ class ChatInterface(BaseModel):
 
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
-FEATURES: list[str] = ["report_validation", "segmented_context"]
+FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked"]
 
 
 def provider_caps(p) -> dict:
