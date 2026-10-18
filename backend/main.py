@@ -16,6 +16,7 @@ from cauce.layout import alternatives, ops_moves, plant_area, score
 from cauce.agents import MIN_CUES, check, detail, prompt, read_spatial
 from cauce.agents.roles import MISSION_SCHEMA
 from cauce.planops import plan_ops
+from cauce.simulate import simulate
 from cauce.compact import compact_alternative, footprint
 from cauce.providers import caps, get_provider
 from cauce.story import STORY_SCHEMA, STORY_SYSTEM, build_plant
@@ -70,7 +71,7 @@ class ChatInterface(BaseModel):
 
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
-FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors"]
+FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors", "simulate"]
 
 
 def provider_caps(p) -> dict:
@@ -354,3 +355,26 @@ class PlanOpsInterface(BaseModel):
 async def plan_ops_route(body: PlanOpsInterface):
     """Asistente del editor: la IA propone en abstracto y el motor resuelve y valida (contrato §6.4)."""
     return await plan_ops(editor, body.plant, body.instruction)
+
+
+class SimulateInterface(BaseModel):
+    plant: dict
+    alternative: str | None = "hoy"
+    replicas: int = 30
+    seed: int = 42
+    days: int = 5
+    positions: dict | None = None
+
+
+@app.post("/api/simulate")
+def simulate_route(body: SimulateInterface):
+    """Simulación con variabilidad de hoy o de una alternativa (contrato §6.5)."""
+    plant = body.plant
+    pos = body.positions
+    if pos is None and body.alternative not in (None, "", "hoy"):
+        alt = next((a for a in alternatives(plant) if a["id"] == body.alternative), None)
+        if not alt:
+            raise HTTPException(status_code=404, detail=f"No existe la alternativa {body.alternative}")
+        pos = alt["positions"]
+    out = simulate(plant, pos or plant["layout"], body.replicas, body.seed, body.days)
+    return {**out, "alternative": body.alternative or "hoy"}
