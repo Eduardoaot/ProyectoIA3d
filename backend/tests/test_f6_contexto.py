@@ -11,7 +11,7 @@ def test_contexto_segmentado_con_historia():
 def test_report_usa_el_contexto_segmentado(client, fake):
     from test_compat import fixture
 
-    fake.text = "Se trabajan 2 turnos. Se trabajan 3 turnos y 99 horas."
+    fake.text = "Se trabajan 2 turnos. Se trabajan 3 turnos y 777 horas."
     body = {**fixture("frontend-report-v2.json"), "context": {"segments": {"operaciones": [{"id": "operaciones-0001", "segment": "operaciones", "version": 1, "key": "turnos", "value": 2, "source": "usuario", "confidence": "alta"}]}}}
     text = client.post("/api/report", json=body).text
-    assert "2 turnos" in text and "99" not in text
+    assert "2 turnos" in text and "777" not in text
