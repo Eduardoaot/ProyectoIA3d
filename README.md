@@ -110,8 +110,9 @@ Sin Ollama la aplicación **funciona igual**: la historia se lee solo con reglas
 ```bash
 cd backend
 python -m venv .venv
-.venv/Scripts/python -m pip install fastapi uvicorn httpx pydantic     # Windows
-# en Linux/macOS: .venv/bin/python -m pip install fastapi uvicorn httpx pydantic
+.venv/Scripts/python -m pip install -r requirements.txt     # Windows (fastapi, uvicorn, httpx, pydantic, simpy)
+# en Linux/macOS: .venv/bin/python -m pip install -r requirements.txt
+# para las pruebas: -r requirements-dev.txt (agrega pytest)
 .venv/Scripts/python -m uvicorn main:app --reload --port 8000
 ```
 
@@ -158,7 +159,19 @@ Variables generales:
 | `CAUCE_PROVIDER` | `ollama` | Cambia el proveedor de los tres papeles a la vez |
 | `OLLAMA_HOST` | `http://localhost:11434` | Dirección del servidor de Ollama |
 
-Las variables específicas (`CAUCE_EXTRACT_*`, `CAUCE_CHAT_*`, `CAUCE_SPATIAL_*`) tienen prioridad sobre las generales. Ejemplo para volver al modelo pequeño (más rápido, menos preciso) solo en el chat:
+Además, cada agente del contrato v3 tiene su propio proveedor y modelo (`cauce/providers/__init__.py`), con su prompt en `backend/cauce/agents/<rol>.md`:
+
+| Rol | Variables | Si no están, usa | Necesita |
+|---|---|---|---|
+| Editor de plano (`/api/plan/ops`) | `CAUCE_EDITOR_PROVIDER`, `CAUCE_EDITOR_MODEL` | las del extractor | JSON |
+| Misiones | `CAUCE_MISSIONS_*` | las del extractor | JSON |
+| Informe | `CAUCE_REPORT_*` | las del chat | texto |
+| Analista y Contexto | `CAUCE_ANALYST_*`, `CAUCE_CONTEXT_*` | las del chat | texto |
+| Visión (imágenes de referencia) | `CAUCE_VISION_*` | las del chat | un modelo con visión (`llava`, `*vision*`…). `llama3.1:8b` **no** tiene visión |
+
+Cada proveedor declara `capabilities = { json_schema, stream, vision, max_context }`; `/api/capabilities` publica `vision` según el proveedor de visión.
+
+Las variables específicas (`CAUCE_EXTRACT_*`, `CAUCE_CHAT_*`, `CAUCE_SPATIAL_*` y las de cada rol) tienen prioridad sobre las generales. Ejemplo para volver al modelo pequeño (más rápido, menos preciso) solo en el chat:
 
 ```bash
 set CAUCE_CHAT_MODEL=llama3.2:3b        # Windows (cmd)
@@ -348,10 +361,18 @@ Crea la app FastAPI, habilita CORS abierto (es una app local) e instancia las do
 | POST | `/api/story` | `{ text }` | `plant`, `assumptions`, `source` (ia/reglas), `notes`, `ai_assumptions`, `rules`, `error`, `extracted` | Leer la historia |
 | POST | `/api/routes` | `{ plant, positions }` | `legs`, `piece_m`, `blocked_legs`, `avoid_hits` | Recorridos en vivo del editor (sin supuestos) |
 | POST | `/api/evaluate` | `{ plant, positions, rebalance }` | Todas las métricas + `ops_moves` | Métricas de "Tu rediseño" |
-| POST | `/api/analyze` | `{ plant }` | `current`, `alternatives` (3), `recommended`, `relations`, `comparison` | Al guardar el plano |
-| POST | `/api/report` | `{ plant, analysis, redesign }` | Texto en **streaming** | Informe del ingeniero / conclusiones del PDF |
-| POST | `/api/chat` | `{ messages, context }` | Texto en **streaming** | Chat con el ingeniero |
-| POST | `/api/missions` | `{ plant, analysis, redesign }` | `{ source, missions[3] }` | Misiones del taller gamificado |
+| GET | `/api/capabilities` | — | `{ schema_version: 3, features, vision }` | El frontend muestra solo lo que el backend anuncia |
+| POST | `/api/analyze` | `{ plant, context?, weights? }` | `current`, `alternatives` (4), `recommended`, `ideal`, `relations`, `comparison`, `plant_version`, `context_version`, `main_metric`, `recommended_reason`, `recommended_tradeoffs`, `weights_used`; por alternativa `method`, `assumptions`, `scores`, `kind`, `sensitivity`, `locked_respected`, `flows` | Al guardar el plano o recalcular con otros pesos |
+| POST | `/api/report` | `{ plant, analysis, redesign, context?, with_validation? }` | Texto en **streaming**, validado oración por oración; con `with_validation` termina con `\u001e{"validation": …}` | Informe del ingeniero / conclusiones del PDF |
+| POST | `/api/chat` | `{ messages, context, with_validation? }` | Texto en **streaming**, validado | Chat con el ingeniero |
+| POST | `/api/missions` | `{ plant, analysis, redesign }` | `{ source, missions[3] }` (sin cifras inventadas) | Misiones del taller gamificado |
+| POST | `/api/plan/ops` | `{ instruction, plant }` | `{ ops, rejected, notes }` (nunca el plano) | Asistente del editor |
+| POST | `/api/simulate` | `{ plant, alternative?, replicas?, seed?, positions? }` | `{ seed, replicas, kpis, bottleneck, notes }` con P10, mediana y P90 | Simulación con variabilidad |
+| POST | `/api/references/read` | `{ image, note }` | Descripción de la imagen, o 422 si el proveedor no tiene visión | Referencias con imagen |
+
+`features` hoy: `report_validation`, `segmented_context`, `count`, `locked`, `plan_ops`, `weights`, `flows`, `conveyors`, `simulate`. El contrato completo está en [coordinacion/CONTRATO-v3.md](coordinacion/CONTRATO-v3.md).
+
+**Validación del informe (`cauce/validate.py`).** Cada oración del informe y del chat se revisa antes de mostrarse: si cita una cifra que no está en `facts()` (con tolerancia de redondeo) o elogia una alternativa que el motor muestra peor que hoy, se descarta y queda en `validation.discarded`.
 
 **Textos del ingeniero.** La función `facts()` convierte la planta y el análisis en un resumen en texto plano ("Hoy una pieza recorre 120 m…", "Cuello de botella: Pulidora al 101 %…"). Ese resumen es lo **único** que ve la IA ingeniera, así no puede inventar cifras. El prompt `REPORT_SYSTEM` pide: un párrafo de diagnóstico, uno del rediseño y tres acciones para la semana, máximo 220 palabras, sin emojis.
 
@@ -828,6 +849,18 @@ Un área sucia (pintura, soldadura, pulido, sierra, horno, prensa) a **menos de 
 ---
 
 ## 15. Pruebas y verificación
+
+### Pruebas automáticas (sin Ollama)
+
+```bash
+cd backend && .venv/Scripts/python -m pytest      # motor, API, agentes con proveedor falso
+cd frontend && npm test                            # módulos puros del frontend (node --test)
+backend/.venv/Scripts/python pruebas/probar_transformadores.py [transformadores-v3.json]
+```
+
+- `pruebas/transformadores.json` (v2) y `pruebas/transformadores-v3.json` (36 máquinas, fijos, lote, retornos, flujos y banda) son los casos de referencia; `pruebas/baseline-transformadores.json` guarda el comportamiento anterior a v3.
+- `backend/tests/test_regresion_5_4.py` tiene las 6 pruebas mínimas de los criterios §5.4; todas pasan.
+- `backend/tests/test_compat.py` asegura que el frontend anterior sigue funcionando con el backend nuevo y que el payload v3 no rompe nada.
 
 ### Historias de prueba
 

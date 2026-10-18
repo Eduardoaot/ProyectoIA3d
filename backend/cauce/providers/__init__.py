@@ -13,6 +13,7 @@ Cada uno se configura con CAUCE_<ROL>_PROVIDER y CAUCE_<ROL>_MODEL:
 | misiones  | CAUCE_MISSIONS_*             | las del extractor         |
 | chat      | CAUCE_CHAT_*                 | CAUCE_PROVIDER / MODEL    |
 | espacial  | CAUCE_SPATIAL_*              | CAUCE_PROVIDER / MODEL    |
+| vision    | CAUCE_VISION_*               | las del chat              |
 
 Todos usan llama3.1:8b de Meta por defecto (`ollama pull llama3.1:8b`). Con un
 solo modelo Ollama no tiene que cambiar de modelo en memoria entre un agente y
@@ -36,6 +37,7 @@ ROLE_CONFIG = {
     "contexto": ("CONTEXT", "chat", 0.2, 180),
     "analista": ("ANALYST", "chat", 0.4, 180),
     "informe": ("REPORT", "chat", 0.5, 180),
+    "vision": ("VISION", "chat", 0.2, 300),  # imágenes de referencia: necesita un modelo con visión
 }
 
 

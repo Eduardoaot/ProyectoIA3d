@@ -50,6 +50,22 @@ class OllamaProvider:
             r.raise_for_status()
             return json.loads(r.json()["message"]["content"])
 
+    async def vision(self, system: str, prompt: str, images: list[str]) -> str:
+        """Lee imágenes (base64 sin encabezado). Solo para modelos con visión."""
+        if not self.capabilities["vision"]:
+            raise RuntimeError(f"{self.model} no tiene visión")
+        body = {
+            "model": self.model,
+            "stream": False,
+            "keep_alive": KEEP_ALIVE,
+            "options": {"temperature": self.temperature},
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt, "images": images}],
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as c:
+            r = await c.post(f"{self.host}/api/chat", json=body)
+            r.raise_for_status()
+            return r.json()["message"]["content"]
+
     async def stream(self, messages: list[dict]) -> AsyncIterator[str]:
         body = {"model": self.model, "stream": True, "keep_alive": KEEP_ALIVE, "options": {"temperature": self.temperature}, "messages": messages}
         async with httpx.AsyncClient(timeout=None) as c:

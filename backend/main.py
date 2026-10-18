@@ -30,6 +30,7 @@ reporter = get_provider("informe")  # texto del informe
 missioner = get_provider("misiones")  # misiones del taller (JSON)
 editor = get_provider("editor")  # asistente del editor: instrucción -> operaciones
 spatial = get_provider("espacial")  # agentes que leen el espacio
+seer = get_provider("vision")  # imágenes de referencia (solo si el modelo tiene visión)
 
 
 async def spatial_or_extractor():
@@ -80,7 +81,8 @@ def provider_caps(p) -> dict:
 
 @app.get("/api/capabilities")
 async def capabilities():
-    return {"schema_version": 3, "features": FEATURES, "vision": bool(provider_caps(engineer)["vision"])}
+    # `vision` es la del proveedor que lee imágenes; llama3.1:8b (por defecto) no tiene.
+    return {"schema_version": 3, "features": FEATURES, "vision": bool(provider_caps(seer)["vision"])}
 
 
 @app.get("/api/health")
@@ -378,3 +380,29 @@ def simulate_route(body: SimulateInterface):
         pos = alt["positions"]
     out = simulate(plant, pos or plant["layout"], body.replicas, body.seed, body.days)
     return {**out, "alternative": body.alternative or "hoy"}
+
+
+class ReferenceInterface(BaseModel):
+    image: str  # data URL o base64
+    note: str = ""
+
+
+REFERENCE_SYSTEM = (
+    "Describes en español, en frases cortas e impersonales, la distribución de planta que muestra la imagen: "
+    "qué áreas se ven, cómo se ordenan y por dónde parece moverse el material. No inventes medidas ni cifras."
+)
+
+
+@app.post("/api/references/read")
+async def read_reference(body: ReferenceInterface):
+    """Lee una imagen de referencia solo si el proveedor tiene visión; si no, lo dice (no finge)."""
+    if not provider_caps(seer)["vision"] or not hasattr(seer, "vision"):
+        raise HTTPException(status_code=422, detail=f"El proveedor actual ({seer.model}) no tiene visión: la imagen se guarda como nota, sin interpretar.")
+    data = body.image.split(",", 1)[1] if body.image.startswith("data:") else body.image
+    try:
+        text = await seer.vision(REFERENCE_SYSTEM, body.note or "Describe la distribución.", [data])
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"No se pudo leer la imagen: {e}") from e
+    # Las cifras que el modelo vea en una foto no son datos del motor: se quitan.
+    v = Validator(body.note or "")
+    return {"interpreted": True, "model": seer.model, "text": v.filter_text(text), "validation": v.result()}
