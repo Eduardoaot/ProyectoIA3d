@@ -8,9 +8,11 @@ import { countOf, fitLabel, unitRects } from '../units'
 import { has } from '../capabilities'
 import { FLOWS, flowOf, lateralOffsets, returnArc, shiftPath } from '../flows'
 import useCaps from '../useCaps'
+import { copyGroup, deleteOps, moveOps, pasteOps, patchRoutes, routesAmong, selectInRect } from '../groups'
+import GroupPanel from './GroupPanel'
 
 const TOOLS_FULL = [
-  { id: 'select', label: 'Mover', key: 'V', tip: 'Selecciona y arrastra máquinas, zonas, paredes y portones. Arrastra el fondo para mover la vista; la rueda acerca y aleja. Las flechas mueven lo seleccionado (Shift: 10 veces más).' },
+  { id: 'select', label: 'Mover', key: 'V', tip: 'Selecciona y arrastra máquinas, zonas, paredes y portones. Shift o Ctrl + clic suma máquinas a la selección; Shift + arrastrar el fondo selecciona por rectángulo. Arrastra el fondo para mover la vista; la rueda acerca y aleja. Las flechas mueven lo seleccionado (Shift: 10 veces más). Ctrl+C, Ctrl+X y Ctrl+V copian, cortan y pegan con las rutas internas.' },
   { id: 'station', label: 'Máquina', key: 'M', tip: 'Clic en el plano para agregar una máquina del tipo elegido.' },
   { id: 'route', label: 'Ruta', key: 'T', tip: 'Clic en la máquina de origen y luego en la de destino. Sigue encadenando; Esc para terminar.' },
   { id: 'wall', label: 'Pared', key: 'P', tip: 'Arrastra para dibujar una pared interior. Se pega a esquinas y muros cercanos y se ajusta a 45°; con Alt queda libre.' },
@@ -106,6 +108,9 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
   const [collapsed, setCollapsed] = useState({})
   const caps = useCaps()
   const [routeFlow, setRouteFlow] = useState('material')
+  // Selección múltiple de estaciones (Shift o Ctrl + clic, o Shift + arrastrar sobre el fondo).
+  const [multi, setMulti] = useState([])
+  const [marquee, setMarquee] = useState(null)
   const drag = useRef(null)
   const lastPt = useRef(null)
   const frozenVB = useRef(null)
@@ -315,6 +320,26 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     setNotice(`«${it.name}» está fijo${it.lock_reason ? `: ${it.lock_reason}` : ''}. Libéralo en el panel para moverlo.`)
     return true
   }
+  /* Un lote de operaciones = un paso de deshacer; lo rechazado (por ejemplo, lo fijo) se avisa. */
+  const applyBatch = (ops, okMsg) => {
+    const out = applyOps({ ...plant, layout: positions }, ops)
+    if (out.applied.length) {
+      const { layout, ...rest } = out.plant
+      commit('layout' in plant ? { ...rest, layout: plant.layout } : rest, layout)
+    }
+    if (out.rejected.length) setNotice(`${out.rejected.length === ops.length ? 'No se aplicó' : 'Se aplicó el resto; no se aplicó'}: ${out.rejected.map((r) => r.reason).join('; ')}.`)
+    else if (okMsg) setNotice(okMsg)
+    return out
+  }
+  const groupDelete = () => {
+    const out = applyBatch(deleteOps(multi), `Se quitaron ${multi.length} estaciones.`)
+    setMulti(out.rejected.map((r) => r.op.id))
+  }
+  const groupLock = (on) => applyBatch(multi.map((id) => (on ? { op: 'lock', id, reason: '' } : { op: 'unlock', id })))
+  const groupRoutes = (patch) => {
+    const ids = routesAmong(plant, multi).map((r) => r.id)
+    if (ids.length) commit(patchRoutes(plant, ids, patch), positions)
+  }
   const isCollapsed = (s) => collapsed[s.id] ?? countOf(s) > 12
   const toggleCollapsed = (s) => setCollapsed((c) => ({ ...c, [s.id]: !isCollapsed(s) }))
 
@@ -490,7 +515,19 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
           return
         }
       }
-      if ((e.ctrlKey || e.metaKey) && k === 'c') {
+      if ((e.ctrlKey || e.metaKey) && (k === 'c' || k === 'x') && multi.length > 1 && full) {
+        e.preventDefault()
+        clipboard = copyGroup(plant, positions, multi)
+        if (k === 'x') groupDelete()
+        else setNotice(`Se copiaron ${multi.length} estaciones y ${clipboard.routes.length} rutas entre ellas.`)
+      } else if ((e.ctrlKey || e.metaKey) && k === 'x' && sel && full) {
+        e.preventDefault()
+        if (copy()) remove()
+      } else if ((e.ctrlKey || e.metaKey) && k === 'a' && full) {
+        e.preventDefault()
+        setMulti(plant.stations.map((q) => q.id))
+        setSel(null)
+      } else if ((e.ctrlKey || e.metaKey) && k === 'c') {
         if (copy()) e.preventDefault()
       } else if ((e.ctrlKey || e.metaKey) && k === 'v') {
         e.preventDefault()
@@ -505,16 +542,24 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       } else if ((e.ctrlKey || e.metaKey) && k === 'y') {
         e.preventDefault()
         doRedo()
+      } else if ((k === 'delete' || k === 'backspace') && multi.length > 1) {
+        e.preventDefault()
+        groupDelete()
       } else if (k === 'delete' || k === 'backspace') {
         e.preventDefault()
         remove()
       } else if (k.startsWith('arrow')) {
         const step = grid * (e.shiftKey ? 10 : 1)
         const [dx, dz] = { arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, -step], arrowdown: [0, step] }[k] || [0, 0]
-        if (nudge(dx, dz)) e.preventDefault()
+        if (multi.length > 1 && full) {
+          e.preventDefault()
+          applyBatch(moveOps(positions, multi.filter((id) => !st[id]?.locked), dx, dz))
+        } else if (nudge(dx, dz)) e.preventDefault()
       } else if (k === 'r' && sel?.type === 'station') rotate(sel.id)
       else if (k === 'r' && sel?.type === 'part') ops.rotatePart(sel.id, 90)
       else if (k === 'escape') {
+        setMulti([])
+        setMarquee(null)
         setRouteFrom(null)
         setDraft(null)
         cancelShape()
@@ -571,9 +616,22 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     box.current.focus({ preventScroll: true })
     if (tool === 'route') return routeClick(s.id)
     if (tool !== 'select') return
+    if (full && (e.shiftKey || e.ctrlKey || e.metaKey)) {
+      // Sumar o quitar de la selección (la estación ya elegida entra también).
+      const base = multi.length ? multi : sel?.type === 'station' ? [sel.id] : []
+      const next = base.includes(s.id) ? base.filter((q) => q !== s.id) : [...base, s.id]
+      setMulti(next)
+      setSel(next.length === 1 ? { type: 'station', id: next[0] } : null)
+      return
+    }
+    const [x, z] = toPt(e)
+    if (full && multi.length > 1 && multi.includes(s.id)) {
+      // Mover el grupo: los fijos se quedan donde están.
+      return startDrag(e, { type: 'group', ids: multi.filter((id) => !st[id]?.locked), x0: x, z0: z, base: positions })
+    }
+    setMulti([])
     setSel({ type: 'station', id: s.id })
     if (s.locked) return blockedByLock('station', s.id)
-    const [x, z] = toPt(e)
     const p = positions[s.id]
     startDrag(e, { type: 'station', id: s.id, dx: x - p[0], dz: z - p[1] })
   }
@@ -671,8 +729,15 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     box.current.focus({ preventScroll: true })
     const [x, z] = toPt(e)
     if (tool === 'shape' && arm) return placeArm(e)
+    if (tool === 'select' && full && e.shiftKey) {
+      setSel(null)
+      setMarquee({ x1: x, z1: z, x2: x, z2: z })
+      svg.current.setPointerCapture?.(e.pointerId)
+      return
+    }
     if (tool === 'select' || tool === 'shape') {
       setSel(null)
+      setMulti([])
       return startPan(e)
     }
     if (tool === 'station') {
@@ -729,7 +794,25 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       } else setDraft({ ...draft, x2: Math.min(W, Math.max(0, g(x))), z2: Math.min(D, Math.max(0, g(z))) })
       return
     }
+    if (marquee) {
+      setMarquee({ ...marquee, x2: x, z2: z })
+      return
+    }
     if (!d) return
+    if (d.type === 'group') {
+      const dx = g(x - d.x0)
+      const dz = g(z - d.z0)
+      if (!dx && !dz && !d.moved) return
+      markMoved(d)
+      const next = { ...positions }
+      for (const id of d.ids) {
+        const b = d.base[id]
+        const [nx, nz] = clampStation(st[id], b[0] + dx, b[1] + dz, b[2])
+        next[id] = [nx, nz, b[2] || 0]
+      }
+      onChange(plant, next)
+      return
+    }
     if (d.type === 'station') {
       const p = positions[d.id]
       const [nx, nz] = clampStation(st[d.id], x - d.dx, z - d.dz, p[2])
@@ -846,6 +929,13 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
   }
 
   const onUp = () => {
+    if (marquee) {
+      const ids = selectInRect(plant, positions, marquee)
+      setMulti(ids)
+      setSel(ids.length === 1 ? { type: 'station', id: ids[0] } : null)
+      setMarquee(null)
+      return
+    }
     if (draft) {
       const { type, x1, z1, x2, z2 } = draft
       if (type === 'wall' && Math.hypot(x2 - x1, z2 - z1) >= 0.3) {
@@ -911,6 +1001,17 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
 
   const paste = () => {
     if (!clipboard || !full) return
+    if (clipboard.type === 'group') {
+      clipboard.n += 1
+      const off = Math.max(1, grid * 4) * clipboard.n
+      const { ops: batch, ids } = pasteOps(clipboard, plant, [off, off], uid)
+      const out = applyBatch(batch, `Se pegaron ${ids.length} estaciones con sus rutas internas.`)
+      if (out.applied.length) {
+        setMulti(ids)
+        setSel(null)
+      }
+      return
+    }
     clipboard.n += 1
     const off = clipboard.n
     // Con el puntero sobre el plano se pega donde está el puntero; si no, corrido 1 m por cada copia.
@@ -1217,7 +1318,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
               const p = positions[s.id]
               if (!p) return null
               const r = rectOf(s, p)
-              const on = sel?.type === 'station' && sel.id === s.id
+              const on = (sel?.type === 'station' && sel.id === s.id) || multi.includes(s.id)
               const start = routeFrom === s.id
               const dark = on || start
               const n = countOf(s)
@@ -1353,6 +1454,9 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
               ),
             )}
 
+            {marquee && (
+              <rect x={Math.min(marquee.x1, marquee.x2)} y={Math.min(marquee.z1, marquee.z2)} width={Math.abs(marquee.x2 - marquee.x1)} height={Math.abs(marquee.z2 - marquee.z1)} fill="#000" fillOpacity={0.06} stroke="#000" strokeWidth={u * 0.08} strokeDasharray={`${u * 0.4} ${u * 0.3}`} pointerEvents="none" />
+            )}
             {routeFrom && cursor && positions[routeFrom] && (
               <line x1={positions[routeFrom][0]} y1={positions[routeFrom][1]} x2={cursor[0]} y2={cursor[1]} stroke="#000" strokeWidth={0.15} strokeDasharray="0.4 0.3" pointerEvents="none" />
             )}
@@ -1412,6 +1516,9 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
           </p>
         </div>
 
+        {multi.length > 1 ? (
+          <GroupPanel plant={plant} ids={multi} onClear={() => setMulti([])} onDelete={groupDelete} onLock={groupLock} onRoutes={groupRoutes} />
+        ) : (
         <Inspector
           plant={plant}
           positions={positions}
@@ -1433,6 +1540,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
           lock={lock}
           group={{ isCollapsed, toggle: toggleCollapsed }}
         />
+        )}
       </div>
         {full && (
           <div className="editor-assistant">

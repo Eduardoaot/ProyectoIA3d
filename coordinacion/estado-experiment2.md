@@ -158,3 +158,12 @@ Con `pruebas/transformadores.json` el motor **no** recomienda la línea recta:
 
 ### Motor
 - Un contexto segmentado puede traer `story`; `facts()` lo incluye como «Contexto del usuario». Pruebas: `test_f6_contexto.py`.
+
+## F7. Selección múltiple, copiar y pegar, rutas por grupo (H8)
+
+### Interfaz
+- Shift o Ctrl + clic suma o quita máquinas; Shift + arrastrar el fondo selecciona por rectángulo; Ctrl+A selecciona todas; Esc limpia. Arrastrar el fondo sin Shift sigue moviendo la vista.
+- Arrastrar una seleccionada mueve el grupo (los fijos se quedan) en un paso de deshacer; las flechas mueven el grupo con un lote de `move`.
+- Ctrl+C / Ctrl+X / Ctrl+V del grupo: copia las estaciones y solo las rutas entre ellas; al pegar, ids nuevos, desplazamiento y rutas apuntando a las copias, en un lote de `add` + `connect` (un paso de deshacer). Cortar y borrar respetan lo fijo y avisan. Ctrl+X también funciona con un solo elemento.
+- Panel del grupo: fijar o liberar todas, quitar, y para las rutas entre ellas cambiar el flujo o el porcentaje de todas a la vez.
+- `groups.js` (puro) con `selectInRect`, `copyGroup`, `pasteOps`, `deleteOps`, `moveOps`, `routesAmong`, `patchRoutes`. Pruebas: `f7-grupos.test.js` (copiar 3 estaciones conectadas y pegarlas da 3 estaciones y sus rutas internas; deshacer las quita en un paso).
