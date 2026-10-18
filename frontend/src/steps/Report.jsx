@@ -48,6 +48,20 @@ export default function Report({ plant, analysis, chosen, notes, report, catalog
             <div className="skip-report">
                 <Appear className="doc-preview">{doc}</Appear>
 
+                {report.validation?.discarded?.length > 0 && (
+                    <div className="discarded small">
+                        <strong>Afirmaciones descartadas</strong>
+                        <p>El texto de la IA se revisa contra los números del motor. Estas frases no se incluyeron en el reporte:</p>
+                        <ul>
+                            {report.validation.discarded.map((d, i) => (
+                                <li key={i}>
+                                    <s>{d.text}</s> — {d.reason}.
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+
                 <Appear className="report-summary-action">
                     <Btn onClick={onNext}>
                         Saltar a resumen

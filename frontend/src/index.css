@@ -2668,3 +2668,92 @@ details.how ul {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---------- Contrato v3: trazabilidad y propuestas ---------- */
+.stale-note {
+  margin: 24px 48px 0;
+  padding: 12px 16px;
+  border: 2px solid var(--black);
+  background: var(--white);
+  max-width: none;
+}
+
+.why {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-left: 4px solid var(--black);
+  background: var(--g100);
+  max-width: none;
+}
+
+.why ul {
+  margin: 6px 0 0 18px;
+}
+
+.alt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.discarded {
+  margin-top: 24px;
+  padding: 14px 16px;
+  border: 1px dashed var(--g500);
+}
+
+.discarded li {
+  margin-top: 6px;
+}
+
+.discarded s {
+  color: var(--g500);
+}
+
+.skip-report .discarded {
+  max-width: 900px;
+  margin: 24px auto 0;
+}
+
+.alt {
+  cursor: pointer;
+}
+
+.alt[data-on='true'] {
+  background: var(--black);
+  color: var(--white);
+}
+
+.alt[data-on='true'] h3,
+.alt[data-on='true'] p,
+.alt[data-on='true'] .small {
+  color: var(--white);
+}
+
+.alt-act {
+  min-height: 34px;
+  padding: 0 0.9rem;
+  border: 1.5px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--t-14);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.alt-act:hover,
+.alt-act[aria-pressed='true'] {
+  background: currentColor;
+}
+
+.alt-act:hover {
+  color: var(--white);
+  background: var(--black);
+}
+
+.alt[data-on='true'] .alt-act:hover {
+  color: var(--black);
+  background: var(--white);
+}

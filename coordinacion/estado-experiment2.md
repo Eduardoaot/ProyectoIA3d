@@ -54,3 +54,23 @@ Con `pruebas/transformadores.json` el motor **no** recomienda la línea recta:
 ### API nueva
 
 - `GET /api/capabilities` → `{ "schema_version": 3, "features": [], "vision": false }`.
+
+## F1. Consistencia y trazabilidad (H1, H10, H7)
+
+### Motor
+- `cauce/decision.py`: `main_metric` (sin supuestos: costo de manejo en m por pieza; con supuestos: tiempo por pieza, con capacidad como segunda), `recommended_reason` y `recommended_tradeoffs` por plantilla. Si la recomendada empeora la métrica principal, la razón lo dice y nombra las alternativas mejores en esa métrica.
+- `cauce/validate.py`: revisa cada oración del informe y del chat. Descarta las que traen una cifra que no está en `facts()` (tolerancia de redondeo de 0,5 o 1 %; entiende "1.304" como miles, porcentajes, rangos y números de lista) y las que elogian una alternativa que el motor muestra peor que hoy o llaman "la mejor" a otra que no es la recomendada. Trabaja sobre el flujo, oración por oración, así el informe sigue apareciendo mientras se escribe.
+- `facts()` ahora dice cuál es la recomendada y por qué, qué alternativas hacen caminar más que hoy, el porcentaje frente a hoy de cada una, los elementos fijos y los datos vigentes del contexto. El prompt del informe pide no calcular porcentajes.
+- `/api/analyze`: `plant_version`, `context_version`, `main_metric`, `recommended_reason`, `recommended_tradeoffs`. Acepta `context` (texto u objeto segmentado) y `weights` (se usan en F4).
+- `/api/report` y `/api/chat`: validados siempre. Con `with_validation: true` el flujo termina con `\n\u001e{"validation": {...}}` (contrato §6.3); sin ese campo el texto es igual que antes (frontend actual). En el chat, las cifras que escribió el usuario también cuentan como respaldo.
+- `features`: `report_validation`, `segmented_context`.
+- Pruebas: `test_f1_trazabilidad.py`; §5.4 #6 y la contrapartida de #1 pasan.
+
+### Interfaz
+- Guardar el plano en el paso 1 ya no borra «Tu rediseño» (era el "me manda a mover plano"). Si se hizo sobre un plano anterior, se avisa.
+- `draftRev` sube con cada edición del plano; el análisis guarda `analysisRev`. Si no coinciden: "Desactualizado: el plano cambió" (con `plant_version` si viene). No depende del backend.
+- Alternativas con «Ver» y «Aplicar». Aplicar copia la propuesta a «Tu rediseño» en un paso y «Deshacer lo aplicado» lo revierte. Los fijos conservan su lugar aunque la respuesta los mueva (`proposals.protectLocked`).
+- Panel «Por qué se recomienda» con `recommended_reason`, métrica principal y contrapartidas, solo si vienen.
+- El informe pide `with_validation` solo si el backend anuncia `report_validation`; las frases descartadas se muestran en «Afirmaciones descartadas».
+- `slim()` envía `recommended`, su razón y el texto de la historia como `context`.
+- Pruebas: `frontend/tests/f1-propuestas.test.js`.

@@ -1,7 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { api } from './api'
-import { NO_CAPS } from './capabilities'
+import { has, NO_CAPS } from './capabilities'
+import { isStale } from './proposals'
 import FlowMark from './brand/FlowMark'
 import EngineerChat from './components/EngineerChat'
 import useReport from './components/useReport'
@@ -33,8 +34,16 @@ function slim(project, ch) {
 
     return {
         plant: { ...plant, layout: undefined },
-        analysis: analysis && { current: pick(analysis.current), alternatives: analysis.alternatives.map((a) => ({ id: a.id, name: a.name, metrics: { piece_m: a.metrics.piece_m } })) },
+        analysis: analysis && {
+            current: pick(analysis.current),
+            alternatives: analysis.alternatives.map((a) => ({ id: a.id, name: a.name, metrics: { piece_m: a.metrics.piece_m, daily_m: a.metrics.daily_m, capacity: a.metrics.capacity, lead_h: a.metrics.lead_h } })),
+            // La recomendada y su razón son del motor: el informe no la elige.
+            recommended: analysis.recommended,
+            recommended_reason: analysis.recommended_reason,
+            recommended_tradeoffs: analysis.recommended_tradeoffs,
+        },
         redesign: ch && ch.metrics ? { name: ch.name, metrics: pick(ch.metrics) } : null,
+        context: project.text?.trim() ? project.text.trim().slice(0, 2000) : undefined,
     }
 }
 
@@ -56,7 +65,8 @@ export default function App() {
     const ch = useMemo(() => chosenOf(project), [project])
     const context = useMemo(() => slim(project, ch), [project, ch])
     const version = `${analysis?.current?.piece_m}-${ch?.id}-${ch?.metrics?.piece_m}`
-    const report = useReport(context, version)
+    const report = useReport(context, version, has(caps, 'report_validation'))
+    const stale = isStale(project)
 
     useEffect(() => {
         if (window.requestIdleCallback) window.requestIdleCallback(preload)
@@ -112,8 +122,16 @@ export default function App() {
         setError(null)
 
         try {
-            const out = await api.analyze(draft)
-            update({ plant: draft, analysis: out, redesign: { choice: null, custom: null, metrics: null }, printed: false, game: EMPTY_GAME })
+            const out = await api.analyze(draft, { context: context?.context })
+            update((p) => ({
+                plant: draft,
+                analysis: out,
+                analysisRev: p.draftRev || 0,
+                // El rediseño hecho a mano no se borra al volver a analizar (H7): se conserva y se avisa.
+                redesign: p.redesign?.custom ? { ...p.redesign, choice: p.redesign.choice === 'propio' ? 'propio' : null, metrics: null } : { choice: null, custom: null, metrics: null },
+                printed: false,
+                game: EMPTY_GAME,
+            }))
             go(1)
         } catch {
             setError('Error al analizar el plano.')
@@ -148,7 +166,7 @@ export default function App() {
             setText={(t) => update((p) => ({ text: typeof t === 'function' ? t(p.text) : t }))}
             info={info}
             draft={draft}
-            setDraft={(d) => update({ draft: d })}
+            setDraft={(d) => update((p) => ({ draft: d, draftRev: (p.draftRev || 0) + 1 }))}
             catalog={catalog}
             reading={reading}
             error={error}
@@ -161,7 +179,7 @@ export default function App() {
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
         if (step === 2) return <Diagnosis plant={plant} analysis={analysis} report={report} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} onNext={() => go(4)} />
+        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} onNext={() => go(4)} />
         if (step === 4) return <Report plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
         if (step === 5) return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onWorkshop={() => go(6)} onRestart={restart} />
 
@@ -220,6 +238,11 @@ export default function App() {
                 <main className="stage" ref={stage}>
                     <AnimatePresence mode="wait">
                         <motion.div key={ready ? step : 0} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                          {ready && step > 0 && stale && (
+                              <p className="stale-note small" role="status">
+                                  <strong>Desactualizado: el plano cambió.</strong> Estos resultados son del plano analizado antes{analysis?.plant_version ? ` (versión ${analysis.plant_version.slice(0, 8)})` : ''}. Vuelve al paso 1 y pulsa «Guardar y ver en 3D» para recalcular.
+                              </p>
+                          )}
                           <Suspense fallback={<p className="small" style={{ padding: 48 }}>Cargando…</p>}>{view}</Suspense>
                         </motion.div>
                     </AnimatePresence>

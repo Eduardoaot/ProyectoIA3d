@@ -26,7 +26,8 @@ export const api = {
     story: (text) => post('/api/story', { text }),
     routes: (plant, positions, signal) => post('/api/routes', { plant, positions }, signal),
     evaluate: (plant, positions, rebalance = true, signal) => post('/api/evaluate', { plant, positions, rebalance }, signal),
-    analyze: (plant) => post('/api/analyze', { plant }),
+    // extra: campos nuevos del contrato v3 (context, weights); el backend viejo los ignora.
+    analyze: (plant, extra = {}) => post('/api/analyze', { plant, ...extra }),
     compact: (plant) => post('/api/compact', { plant }),
     missions: (context) => post('/api/missions', context),
 }

@@ -7,6 +7,7 @@ import { startWait } from '../components/wait'
 import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
+import { protectLocked } from '../proposals'
 import PlantView from '../three/PlantView'
 
 export function Delta({ label, unit, before, after, decimals = 0, goodWhenUp }) {
@@ -67,7 +68,7 @@ function worksDiff(base, other) {
 	return n
 }
 
-export default function Redesign({ plant, analysis, redesign, setRedesign, onAddAlternative, catalog, onNext }) {
+export default function Redesign({ plant, analysis, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, notify = () => {}, onNext }) {
 	const cur = analysis.current
 	const alts = analysis.alternatives
 	const full = plant.use_assumptions && cur.daily_m != null
@@ -151,8 +152,30 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 	}
 
 	const onEdit = (np, pos) => {
-		setRedesign({ choice: 'propio', custom: { plant: np, positions: pos }, metrics: choice === 'propio' ? redesign.metrics : null })
+		setRedesign({ choice: 'propio', custom: { plant: np, positions: pos }, metrics: choice === 'propio' ? redesign.metrics : null, basedOnRev: analysisRev })
 		setShowOriginal(false)
+	}
+
+	// Aplicar copia la propuesta a «Tu rediseño» en un solo paso que se puede deshacer.
+	// Lo fijo conserva su lugar aunque la propuesta lo haya movido (funciona con cualquier backend).
+	const apply = (a) => {
+		const { positions: pos, moved } = protectLocked(plant, plant.layout, a.positions)
+		const prev = { choice: redesign.choice ?? null, custom: redesign.custom ?? null, metrics: redesign.metrics ?? null, basedOnRev: redesign.basedOnRev }
+		setRedesign({ choice: 'propio', custom: { plant, positions: pos }, metrics: null, basedOnRev: analysisRev, undoApply: [...(redesign.undoApply || []), prev].slice(-20) })
+		setShowOriginal(false)
+		view.current?.setLayout(pos, { legs: moved.length ? undefined : a.metrics.legs })
+		notify(moved.length ? `Se aplicó «${a.name}». ${moved.join(', ')} ${moved.length > 1 ? 'están fijos y se quedaron' : 'está fijo y se quedó'} en su lugar.` : `Se aplicó «${a.name}» a tu rediseño. Puedes deshacerlo.`)
+	}
+
+	const undoApply = () => {
+		const stack = redesign.undoApply || []
+		const prev = stack[stack.length - 1]
+		if (!prev) return
+		setRedesign({ ...prev, undoApply: stack.slice(0, -1) })
+		const pos = prev.choice === 'propio' ? (prev.custom?.positions || prev.custom) : alts.find((x) => x.id === prev.choice)?.positions
+		if (pos) view.current?.setLayout(pos, {})
+		else setShowOriginal(true)
+		notify('Se deshizo la última propuesta aplicada.')
 	}
 
 	const onLive = (live) => {
@@ -211,7 +234,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 						)
 
 					return (
-						<button key={a.id} type="button" className="alt" aria-pressed={a.id === choice && !showOriginal} onClick={() => pick(a.id)}>
+						<div key={a.id} className="alt" data-on={a.id === choice && !showOriginal} onClick={() => pick(a.id)}>
 							{a.id === analysis.recommended && <span className="alt-best">RECOMENDADA</span>}
 							{a.id === 'propio' && <span className="alt-best">TUYA</span>}
 							{a.id === 'ia' && <span className="alt-best">{a.source === 'ia' ? 'IA' : 'SIN IA: ORDEN DEL FLUJO'}</span>}
@@ -231,10 +254,48 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 							)}
 							<p className="small">{a.summary}</p>
 							<p className="small">Obra: {a.works}</p>
-						</button>
+							<div className="alt-actions">
+								<button type="button" className="alt-act" aria-pressed={a.id === choice && !showOriginal} onClick={(e) => (e.stopPropagation(), pick(a.id))}>
+									Ver
+								</button>
+								{a.id !== 'propio' && a.m?.legs && (
+									<button type="button" className="alt-act" onClick={(e) => (e.stopPropagation(), apply(alts.find((x) => x.id === a.id)))} title="Copia esta propuesta a «Tu rediseño» para ajustarla. Se puede deshacer.">
+										Aplicar
+									</button>
+								)}
+							</div>
+						</div>
 					)
 				})}
 			</Appear>
+
+			{analysis.recommended_reason && (
+				<div className="why small">
+					<strong>Por qué se recomienda.</strong> {analysis.recommended_reason}
+					{analysis.main_metric && <> Métrica principal: {analysis.main_metric.label.toLowerCase()}.</>}
+					{analysis.recommended_tradeoffs?.length > 0 && (
+						<>
+							{' '}A cambio, empeora:
+							<ul>
+								{analysis.recommended_tradeoffs.map((t) => (
+									<li key={t.metric}>{t.note}</li>
+								))}
+							</ul>
+						</>
+					)}
+				</div>
+			)}
+
+			{(redesign.undoApply?.length > 0 || (custom && redesign.basedOnRev != null && redesign.basedOnRev !== analysisRev)) && (
+				<div className="row small" style={{ marginTop: 12 }}>
+					{custom && redesign.basedOnRev != null && redesign.basedOnRev !== analysisRev && <span>«Tu rediseño» se hizo sobre una versión anterior del plano: se conservó tal cual, revísalo.</span>}
+					{redesign.undoApply?.length > 0 && (
+						<button type="button" className="btn btn--ghost btn--small" onClick={undoApply}>
+							Deshacer lo aplicado
+						</button>
+					)}
+				</div>
+			)}
 
 			{/* La explicación de la opción con IA va aparte, para que su tarjeta mida lo mismo que las demás. */}
 			<div className="alt-note small">
