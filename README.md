@@ -474,7 +474,9 @@ No depende de supuestos.
 
 `nearest_free()` busca el lugar factible más cercano a un punto, probando las dos orientaciones.
 
-**Orden del flujo (`flow_order`).** Ordenamiento topológico (algoritmo de Kahn) de las estaciones según las rutas; los empates respetan el orden de la lista y los ciclos van al final.
+**Orden del flujo (`flow_order` → `flows.ordered`).** Ordenamiento topológico sobre las componentes fuertemente conexas (Tarjan) del flujo de material, sin las rutas marcadas `is_return`; los empates respetan el orden de la lista. Un ciclo (por ejemplo pruebas → configuración) ya no manda sus estaciones al final: queda en su lugar del proceso. Sin ciclos da el mismo orden que el Kahn de antes.
+
+**Flujos y bandas (`cauce/flows.py`).** Cada ruta tiene `flow`: `material` (por defecto), `personas`, `vehiculos` o `carga`. Las métricas de siempre (`piece_m`, `daily_m`, capacidad, tiempo) son solo del material; cada flujo tiene sus metros en `flows` y las alternativas traen `flows` por flujo. En el costo de búsqueda pesan material y carga 1, vehículos 0,5 y personas 0,3. `cycles` lista los ciclos del material (con retornos). Una ruta con `conveyor` va por la banda: su distancia es la banda más la carga y descarga, nadie camina el tramo en banda (no suma a `daily_m`), su tiempo usa `speed_mpm` y `conveyor_load` compara las piezas por minuto con `capacity_ppm`.
 
 **Costo de búsqueda (`search_cost`).** Para comparar acomodos rápido sin trazar rutas: distancia rectilínea ponderada por el flujo + 40 de castigo por cada área sucia a menos de 8 m de una limpia + distancia de recepción y despacho a sus portones.
 

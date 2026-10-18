@@ -79,7 +79,6 @@ def test_count_n_servidores(client, plant):
 
 
 # 5. Una planta con retornos se resuelve sin error y muestra los ciclos.
-@pytest.mark.xfail(strict=True, reason="F5: aún no hay retornos (is_return) ni flujos")
 def test_planta_con_retornos(client):
     p = load("transformadores-v3.json")
     out = analyze(client, p)

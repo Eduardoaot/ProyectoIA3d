@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
-from . import units
+from . import flows, units
 from .catalog import CLEAN, DIRTY
 from .engine import dims, evaluate, gate_pt, gate_x, manhattan, outline, params, point_in_poly, poly_area, poly_edges, rebalance_ops, seg_dist, station_map, zone_rect
 
@@ -132,26 +132,10 @@ def nearest_free(plant, st, target, placed, prefer_rot=0):
 # ---------- Orden del flujo ----------
 
 def flow_order(plant):
-    """Orden topológico de las estaciones según las rutas (Kahn, desempate por lista)."""
-    ids = [s["id"] for s in plant["stations"]]
-    idx = {s: i for i, s in enumerate(ids)}
-    inc = {s: 0 for s in ids}
-    adj = {s: [] for s in ids}
-    for r in plant.get("routes", []):
-        if r["from"] in adj and r["to"] in inc and r["from"] != r["to"]:
-            adj[r["from"]].append(r["to"])
-            inc[r["to"]] += 1
-    order, ready = [], sorted([s for s in ids if inc[s] == 0], key=idx.get)
-    while ready:
-        s = ready.pop(0)
-        order.append(s)
-        for t in adj[s]:
-            inc[t] -= 1
-            if inc[t] == 0:
-                ready.append(t)
-                ready.sort(key=idx.get)
-    order += [s for s in ids if s not in order]  # ciclos
-    return order
+    """Orden del proceso (flows.ordered): topológico sobre componentes fuertemente conexas,
+    sin los retornos. Para un flujo sin ciclos es el mismo orden de Kahn de antes; los
+    ciclos ya no se mandan al final."""
+    return flows.ordered(plant)
 
 
 def search_cost(plant, positions):
@@ -159,7 +143,8 @@ def search_cost(plant, positions):
     c = 0.0
     for r in plant.get("routes", []):
         if r["from"] in positions and r["to"] in positions:
-            c += float(r.get("frac", 1) or 0) * manhattan(positions[r["from"]], positions[r["to"]])
+            # Cada flujo pesa distinto: la pieza y la carga más que las personas (flows.SEARCH_WEIGHT).
+            c += flows.SEARCH_WEIGHT[flows.flow_of(r)] * float(r.get("frac", 1) or 0) * manhattan(positions[r["from"]], positions[r["to"]])
     kinds = {s["id"]: s["kind"] for s in plant["stations"]}
     # Áreas que ensucian (polvo, ruido, calor) lejos de las que deben quedar limpias.
     dirty = [p for sid, p in positions.items() if kinds.get(sid) in DIRTY]
@@ -525,12 +510,20 @@ def alternatives(plant):
     fixed = fixed_of(plant)
     fixed_names = [x["name"] for x in units.locked_items(plant) if x["type"] != "conveyor"]
     st = station_map(plant)
+    returns = sum(1 for r in plant.get("routes", []) if r.get("is_return"))
+    loops = flows.has_cycles_without_returns(plant)
     out = []
     for aid, name, summary, works, cost in ALTERNATIVES:
         pos = _build(plant, aid, order, fixed)
         ops = rebalance_ops(plant, pos) if plant.get("use_assumptions") else None
         m = evaluate(plant, pos, ops)
         alt = {"id": aid, "name": name, "summary": summary, "works": works, "works_cost": cost, "positions": pos, "metrics": m, "locked_respected": locked_respected(plant, pos), "method": METHODS[aid], "assumptions": list(ASSUMPTIONS[aid])}
+        if "flows" in m:
+            alt["flows"] = m["flows"]
+        if aid in ("u", "i") and returns:
+            alt["assumptions"].append(f"Los retornos ({returns}) se recorren como regreso; no cambian el orden del proceso.")
+        if aid in ("u", "i") and loops:
+            alt["assumptions"].append("El flujo tiene ciclos sin marcar como retorno: la línea los recorre en el orden de la lista.")
         if plant.get("use_assumptions"):
             alt["assumptions"].append("Tiempos, producción y lotes son supuestos del usuario; los operarios se reparten de nuevo para la mayor capacidad.")
         bad = collisions(plant, pos) - set(fixed)

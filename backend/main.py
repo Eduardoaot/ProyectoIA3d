@@ -70,7 +70,7 @@ class ChatInterface(BaseModel):
 
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
-FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights"]
+FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors"]
 
 
 def provider_caps(p) -> dict:
@@ -215,9 +215,13 @@ def facts(ctx: ContextInterface) -> str:
     lines = [
         f"Planta: {plant.get('name')}. Bodega de {plant['size']['w']} x {plant['size']['d']} m.",
         "Estaciones en orden: " + ", ".join(s["name"] + (f" (x{s['count']})" if int(s.get("count") or 1) > 1 else "") for s in plant["stations"]) + ".",
-        "Flujo: " + "; ".join(f"{names.get(r['from'])} -> {names.get(r['to'])} ({round(float(r.get('frac', 1)) * 100)} %)" for r in plant.get("routes", [])) + ".",
+        "Flujo del material: " + "; ".join(f"{names.get(r['from'])} -> {names.get(r['to'])} ({round(float(r.get('frac', 1)) * 100)} %)" + (" [retorno]" if r.get("is_return") else "") + (" [en banda]" if r.get("conveyor") else "") for r in plant.get("routes", []) if (r.get("flow") or "material") == "material") + ".",
         "Zonas donde no pasa material: " + (", ".join(z["name"] for z in plant.get("zones", [])) or "ninguna") + ".",
     ]
+    for fl, label in (("personas", "Recorridos de personas"), ("vehiculos", "Recorridos de vehículos"), ("carga", "Movimiento de carga")):
+        rs = [r for r in plant.get("routes", []) if r.get("flow") == fl]
+        if rs:
+            lines.append(f"{label}: " + "; ".join(f"{names.get(r['from'])} -> {names.get(r['to'])}" for r in rs) + ".")
     fixed = [s["name"] for s in plant["stations"] if s.get("locked")] + [z["name"] for z in plant.get("zones", []) if z.get("locked")]
     if fixed:
         lines.append("Elementos fijos (no se mueven): " + ", ".join(fixed) + ".")

@@ -17,7 +17,7 @@ import heapq
 import math
 from functools import lru_cache
 
-from . import units
+from . import flows, units
 from .catalog import CLEAN, DEFAULT_PARAMS, DIRTY
 
 STEP = 0.5      # resolución de la malla (m)
@@ -286,7 +286,8 @@ def valid_routes(plant, positions):
 def shares(plant):
     """Fracción de las piezas que pasa por cada estación, según las rutas."""
     inc = {}
-    for r in plant.get("routes", []):
+    # Solo el flujo de material dice por dónde pasan las piezas (personas y vehículos no).
+    for r in flows.material_routes(plant):
         inc[r["to"]] = inc.get(r["to"], 0.0) + float(r.get("frac", 1) or 0)
     return {s["id"]: min(1.0, inc[s["id"]]) if s["id"] in inc else 1.0 for s in plant["stations"]}
 
@@ -295,8 +296,8 @@ def ends(plant):
     """Estación donde entra el material y estación donde sale."""
     ids = [s["id"] for s in plant["stations"]]
     kinds = {s["id"]: s["kind"] for s in plant["stations"]}
-    inc = {r["to"] for r in plant.get("routes", [])}
-    out = {r["from"] for r in plant.get("routes", [])}
+    inc = {r["to"] for r in flows.material_routes(plant)}
+    out = {r["from"] for r in flows.material_routes(plant)}
     first = next((i for i in ids if kinds[i] == "recepcion"), None) or next((i for i in ids if i in out and i not in inc), None)
     last = next((i for i in ids if kinds[i] == "despacho"), None) or next((i for i in reversed(ids) if i in inc and i not in out), None)
     return first, last
@@ -338,11 +339,30 @@ def evaluate(plant, positions, ops=None):
     st = station_map(plant)
     legs = []
     piece_m = 0.0
+    belts = flows.conveyors(plant)
+    by_flow = {}
     for r in valid_routes(plant, positions):
-        d, path, ok = route_leg(plant, positions, r["from"], r["to"])
         frac = float(r.get("frac", 1) or 0)
-        piece_m += frac * d
-        legs.append({"id": r["id"], "from": r["from"], "to": r["to"], "frac": frac, "dist": round(d, 1), "path": path, "ok": ok, "meters": round(frac * d, 1)})
+        belt = belts.get(r.get("conveyor"))
+        if belt:
+            d, on_belt, path = flows.belt_leg(positions, r, belt)
+            ok = True
+        else:
+            d, path, ok = route_leg(plant, positions, r["from"], r["to"])
+            on_belt = 0.0
+        fl = flows.flow_of(r)
+        leg = {"id": r["id"], "from": r["from"], "to": r["to"], "frac": frac, "dist": round(d, 1), "path": path, "ok": ok, "meters": round(frac * d, 1), "flow": fl}
+        if r.get("is_return"):
+            leg["is_return"] = True
+        if belt:
+            leg.update(conveyor=belt["id"], belt_m=round(on_belt, 1))
+        # Las métricas de siempre son del material; los demás flujos van aparte en `flows`.
+        if fl == "material":
+            piece_m += frac * d
+        f = by_flow.setdefault(fl, {"legs": 0, "piece_m": 0.0})
+        f["legs"] += 1
+        f["piece_m"] += frac * d
+        legs.append(leg)
 
     out = {
         "legs": legs,
@@ -351,6 +371,9 @@ def evaluate(plant, positions, ops=None):
         "blocked_legs": sum(1 for x in legs if not x["ok"]),
         "use_assumptions": bool(plant.get("use_assumptions")),
     }
+    if len(by_flow) > 1 or belts or any(leg.get("is_return") for leg in legs):
+        out["flows"] = {k: {"legs": v["legs"], "piece_m": round(v["piece_m"], 1)} for k, v in by_flow.items()}
+        out["cycles"] = flows.cycles(plant)
     if not plant.get("use_assumptions") or not plant["stations"]:
         return out
 
@@ -361,12 +384,23 @@ def evaluate(plant, positions, ops=None):
     demand = max(float(p["demand"]), 1e-6)
     handling = {sid: 0.0 for sid in st}
     daily_m = 0.0
-    for leg in legs:
+    mat = [leg for leg in legs if leg["flow"] == "material"]
+    for leg in mat:
         trips = demand * leg["frac"] / p["batch"]
         leg["trips"] = round(trips, 1)
-        leg["meters"] = round(trips * leg["dist"], 1)
-        daily_m += trips * leg["dist"]
-        handling[leg["from"]] += trips * 2 * leg["dist"] / p["speed"]
+        # En banda nadie camina el tramo: solo cuentan la carga y la descarga.
+        walked = leg["dist"] - leg.get("belt_m", 0.0)
+        leg["meters"] = round(trips * walked, 1)
+        daily_m += trips * walked
+        handling[leg["from"]] += trips * 2 * walked / p["speed"]
+    for leg in legs:
+        if leg["flow"] != "material":
+            # Personas, vehículos y carga: un recorrido por pieza según su fracción.
+            leg["trips"] = round(demand * leg["frac"], 1)
+            leg["meters"] = round(demand * leg["frac"] * leg["dist"], 1)
+    if "flows" in out:
+        for fl, f in out["flows"].items():
+            f["daily_m"] = round(daily_m if fl == "material" else sum(leg["meters"] for leg in legs if leg["flow"] == fl), 0)
 
     stations = []
     for s in plant["stations"]:
@@ -396,10 +430,28 @@ def evaluate(plant, positions, ops=None):
         sh = max(share[x["id"]], 1e-9)
         te = x["load_min"] / (demand * sh)
         queue += sakasegawa_wq(x["util"], max(x["servers"], 1), te, p["cv2"]) * sh
-    batch_wait = sum((p["batch"] - 1) / 2 * takt * min(1.0, leg["frac"]) for leg in legs)
+    batch_wait = sum((p["batch"] - 1) / 2 * takt * min(1.0, leg["frac"]) for leg in mat if not leg.get("conveyor"))
     # Horno o secado por lote: la pieza espera a que se junte el lote (criterios §3.4). No es tiempo de máquina.
     fill_wait = sum((b["size"] - 1) / 2 * takt * share[s["id"]] for s in plant["stations"] if (b := units.batch(s)))
-    transport = sum(leg["frac"] * leg["dist"] / p["speed"] for leg in legs)
+    def minutes(leg):
+        """Traslado de una pieza: a pie con el carro y, si va en banda, a la velocidad de la banda."""
+        belt_m = leg.get("belt_m", 0.0)
+        walk = (leg["dist"] - belt_m) / p["speed"]
+        if not belt_m:
+            return walk
+        return walk + belt_m / max(float(belts[leg["conveyor"]].get("speed_mpm") or p["speed"]), 1e-6)
+
+    transport = sum(leg["frac"] * minutes(leg) for leg in mat)
+    if belts:
+        # Carga de cada banda: piezas por minuto que le llegan frente a su capacidad.
+        load = {}
+        for leg in mat:
+            if leg.get("conveyor"):
+                load[leg["conveyor"]] = load.get(leg["conveyor"], 0.0) + demand * leg["frac"] / avail
+        out["conveyor_load"] = [
+            {"id": b["id"], "name": b.get("name", b["id"]), "ppm": round(load.get(b["id"], 0.0), 3), "capacity_ppm": b.get("capacity_ppm"), "util": round(load.get(b["id"], 0.0) / b["capacity_ppm"], 3) if b.get("capacity_ppm") else None}
+            for b in belts.values()
+        ]
     lead_min = proc + queue + batch_wait + fill_wait + transport
 
     parts = {"proceso": round(proc, 1), "cola": round(queue, 1), "lote": round(batch_wait, 1), "transporte": round(transport, 1)}
@@ -454,9 +506,13 @@ def relations(plant):
     kinds = {s["id"]: s["kind"] for s in plant["stations"]}
     kinds.update({z["id"]: z["kind"] for z in zones})
     flow = {}
+    others = {}
     for r in plant.get("routes", []):
         k = tuple(sorted([r["from"], r["to"]]))
-        flow[k] = flow.get(k, 0) + float(r.get("frac", 1) or 0)
+        if flows.is_material(r):
+            flow[k] = flow.get(k, 0) + float(r.get("frac", 1) or 0)
+        else:
+            others.setdefault(k, set()).add(flows.flow_of(r))
     top = max(flow.values()) if flow else 1
     cells = []
     for i, a in enumerate(ids):
@@ -470,6 +526,8 @@ def relations(plant):
                 ratio = flow[k] / top
                 r = "A" if ratio >= 0.6 else "E" if ratio >= 0.3 else "I"
                 why = f"El material pasa directo ({round(flow[k] * 100)} % de las piezas)"
+            elif k in others:
+                r, why = "I", "Pasan " + " y ".join(sorted(others[k])) + " entre estas áreas"
             elif {ka, kb} == {"oficina", "despacho"}:
                 r, why = "I", "Remisiones y facturas de cada salida"
             elif {ka, kb} == {"oficina", "recepcion"}:
