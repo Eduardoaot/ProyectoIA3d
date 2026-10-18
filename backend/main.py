@@ -51,6 +51,20 @@ class ChatInterface(BaseModel):
     context: ContextInterface | None = None
 
 
+# Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
+# en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
+FEATURES: list[str] = []
+
+
+def provider_caps(p) -> dict:
+    return {"json_schema": False, "stream": True, "vision": False, "max_context": 0, **getattr(p, "capabilities", {})}
+
+
+@app.get("/api/capabilities")
+async def capabilities():
+    return {"schema_version": 3, "features": FEATURES, "vision": bool(provider_caps(engineer)["vision"])}
+
+
 @app.get("/api/health")
 async def health():
     ex, en, sp = await extractor.status(), await engineer.status(), await spatial.status()

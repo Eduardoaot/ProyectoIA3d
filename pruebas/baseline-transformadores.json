@@ -1,0 +1,556 @@
+{
+ "recommended": "keep",
+ "current": {
+  "piece_m": 163.0,
+  "daily_m": 1304.0,
+  "capacity": 9.3,
+  "lead_h": 17.51,
+  "loading_min": 163.0,
+  "bottleneck": "pintura",
+  "bottleneck_util": 0.8583,
+  "blocked_legs": 0
+ },
+ "current_legs": [
+  {
+   "id": "r1",
+   "from": "recepcion",
+   "to": "corte",
+   "dist": 8
+  },
+  {
+   "id": "r2",
+   "from": "corte",
+   "to": "nucleo",
+   "dist": 7
+  },
+  {
+   "id": "r3",
+   "from": "recepcion",
+   "to": "embobinado",
+   "dist": 27.0
+  },
+  {
+   "id": "r4",
+   "from": "nucleo",
+   "to": "ensamble",
+   "dist": 18.0
+  },
+  {
+   "id": "r5",
+   "from": "embobinado",
+   "to": "ensamble",
+   "dist": 8
+  },
+  {
+   "id": "r6",
+   "from": "ensamble",
+   "to": "horno",
+   "dist": 19.0
+  },
+  {
+   "id": "r7",
+   "from": "recepcion",
+   "to": "soldadura",
+   "dist": 11
+  },
+  {
+   "id": "r8",
+   "from": "soldadura",
+   "to": "pintura",
+   "dist": 18.0
+  },
+  {
+   "id": "r9",
+   "from": "horno",
+   "to": "config",
+   "dist": 15.0
+  },
+  {
+   "id": "r10",
+   "from": "pintura",
+   "to": "config",
+   "dist": 15.0
+  },
+  {
+   "id": "r11",
+   "from": "config",
+   "to": "pruebas",
+   "dist": 8
+  },
+  {
+   "id": "r12",
+   "from": "pruebas",
+   "to": "despacho",
+   "dist": 9.0
+  },
+  {
+   "id": "r13",
+   "from": "pruebas",
+   "to": "config",
+   "dist": 8
+  }
+ ],
+ "alternatives": [
+  {
+   "id": "u",
+   "name": "Flujo en U",
+   "score": 1.111,
+   "works_cost": 1,
+   "metrics": {
+    "piece_m": 199.5,
+    "daily_m": 1595.0,
+    "capacity": 12.2,
+    "lead_h": 12.49,
+    "loading_min": 162.0,
+    "bottleneck": "corte"
+   },
+   "positions": {
+    "recepcion": [
+     5.9,
+     21.15,
+     0
+    ],
+    "despacho": [
+     40.9,
+     21.15,
+     0
+    ],
+    "corte": [
+     6.0,
+     14.5,
+     90
+    ],
+    "embobinado": [
+     6.0,
+     6.0,
+     90
+    ],
+    "nucleo": [
+     11.75,
+     3.0,
+     0
+    ],
+    "ensamble": [
+     18.5,
+     3.0,
+     0
+    ],
+    "soldadura": [
+     25.0,
+     3.0,
+     0
+    ],
+    "horno": [
+     41.0,
+     11.0,
+     90
+    ],
+    "pintura": [
+     33.9,
+     21.15,
+     0
+    ],
+    "config": [
+     35.4,
+     15.4,
+     0
+    ],
+    "pruebas": [
+     45.4,
+     15.4,
+     90
+    ]
+   }
+  },
+  {
+   "id": "i",
+   "name": "Línea recta",
+   "score": 1.089,
+   "works_cost": 1,
+   "metrics": {
+    "piece_m": 232.4,
+    "daily_m": 1860.0,
+    "capacity": 11.8,
+    "lead_h": 12.57,
+    "loading_min": 162.0,
+    "bottleneck": "horno"
+   },
+   "positions": {
+    "recepcion": [
+     5.9,
+     21.15,
+     0
+    ],
+    "despacho": [
+     40.9,
+     21.15,
+     0
+    ],
+    "corte": [
+     6.0,
+     10.0,
+     0
+    ],
+    "nucleo": [
+     12.75,
+     10.0,
+     0
+    ],
+    "embobinado": [
+     29.5,
+     10.0,
+     0
+    ],
+    "ensamble": [
+     38.0,
+     10.0,
+     0
+    ],
+    "horno": [
+     45.0,
+     11.0,
+     90
+    ],
+    "pintura": [
+     34.0,
+     18.75,
+     0
+    ],
+    "soldadura": [
+     28.0,
+     18.5,
+     0
+    ],
+    "config": [
+     19.0,
+     18.5,
+     0
+    ],
+    "pruebas": [
+     13.0,
+     18.5,
+     0
+    ]
+   }
+  },
+  {
+   "id": "keep",
+   "name": "Reordenar en su lugar",
+   "score": 0.732,
+   "works_cost": 0,
+   "metrics": {
+    "piece_m": 141.0,
+    "daily_m": 1128.0,
+    "capacity": 12.3,
+    "lead_h": 12.3,
+    "loading_min": 163.0,
+    "bottleneck": "horno"
+   },
+   "positions": {
+    "recepcion": [
+     5,
+     20,
+     0
+    ],
+    "corte": [
+     5,
+     12,
+     0
+    ],
+    "nucleo": [
+     5,
+     5,
+     0
+    ],
+    "embobinado": [
+     16,
+     12,
+     0
+    ],
+    "ensamble": [
+     16,
+     4,
+     0
+    ],
+    "horno": [
+     27,
+     4,
+     0
+    ],
+    "soldadura": [
+     16,
+     20,
+     0
+    ],
+    "pintura": [
+     27,
+     20,
+     0
+    ],
+    "config": [
+     34,
+     12,
+     0
+    ],
+    "pruebas": [
+     42,
+     12,
+     0
+    ],
+    "despacho": [
+     41,
+     20,
+     0
+    ]
+   }
+  }
+ ],
+ "report_text_fake_provider": "Hoy una pieza recorre 163 m dentro de la planta. La Línea recta es más eficiente y conviene aplicarla. Con ella se ahorran 47 m por pieza.\n\nAcciones para esta semana:\n1. Marcar en el piso los nuevos lugares antes de mover nada.\n2. Mover primero las estaciones que más recorrido ahorran.\n",
+ "shape": {
+  "analyze": {
+   "current": {
+    "legs": [
+     {
+      "id": "str",
+      "from": "str",
+      "to": "str",
+      "frac": "number",
+      "dist": "number",
+      "path": [
+       [
+        "number"
+       ]
+      ],
+      "ok": "bool",
+      "meters": "number",
+      "trips": "number"
+     }
+    ],
+    "piece_m": "number",
+    "avoid_hits": [],
+    "blocked_legs": "number",
+    "use_assumptions": "bool",
+    "daily_m": "number",
+    "demand": "number",
+    "lead_h": "number",
+    "lead_parts": {
+     "proceso": "number",
+     "cola": "number",
+     "lote": "number",
+     "transporte": "number"
+    },
+    "stations": [
+     {
+      "id": "str",
+      "name": "str",
+      "ops": "number",
+      "auto": "bool",
+      "load_min": "number",
+      "handling_min": "number",
+      "util": "number",
+      "required": "number",
+      "capacity": "number"
+     }
+    ],
+    "ops": {
+     "recepcion": "number",
+     "corte": "number",
+     "nucleo": "number",
+     "embobinado": "number",
+     "ensamble": "number",
+     "horno": "number",
+     "soldadura": "number",
+     "pintura": "number",
+     "config": "number",
+     "pruebas": "number",
+     "despacho": "number"
+    },
+    "bottleneck": "str",
+    "bottleneck_util": "number",
+    "capacity": "number",
+    "d_truck": "number",
+    "loading_min": "number",
+    "footprint_m2": "number"
+   },
+   "alternatives": [
+    {
+     "id": "str",
+     "name": "str",
+     "summary": "str",
+     "works": "str",
+     "works_cost": "number",
+     "positions": {
+      "recepcion": [
+       "number"
+      ],
+      "despacho": [
+       "number"
+      ],
+      "corte": [
+       "number"
+      ],
+      "embobinado": [
+       "number"
+      ],
+      "nucleo": [
+       "number"
+      ],
+      "ensamble": [
+       "number"
+      ],
+      "soldadura": [
+       "number"
+      ],
+      "horno": [
+       "number"
+      ],
+      "pintura": [
+       "number"
+      ],
+      "config": [
+       "number"
+      ],
+      "pruebas": [
+       "number"
+      ]
+     },
+     "metrics": {
+      "legs": [
+       {
+        "id": "str",
+        "from": "str",
+        "to": "str",
+        "frac": "number",
+        "dist": "number",
+        "path": [
+         [
+          "number"
+         ]
+        ],
+        "ok": "bool",
+        "meters": "number",
+        "trips": "number"
+       }
+      ],
+      "piece_m": "number",
+      "avoid_hits": [
+       {
+        "a": "str",
+        "b": "str",
+        "text": "str"
+       }
+      ],
+      "blocked_legs": "number",
+      "use_assumptions": "bool",
+      "daily_m": "number",
+      "demand": "number",
+      "lead_h": "number",
+      "lead_parts": {
+       "proceso": "number",
+       "cola": "number",
+       "lote": "number",
+       "transporte": "number"
+      },
+      "stations": [
+       {
+        "id": "str",
+        "name": "str",
+        "ops": "number",
+        "auto": "bool",
+        "load_min": "number",
+        "handling_min": "number",
+        "util": "number",
+        "required": "number",
+        "capacity": "number"
+       }
+      ],
+      "ops": {
+       "recepcion": "number",
+       "corte": "number",
+       "nucleo": "number",
+       "embobinado": "number",
+       "ensamble": "number",
+       "horno": "number",
+       "soldadura": "number",
+       "pintura": "number",
+       "config": "number",
+       "pruebas": "number",
+       "despacho": "number"
+      },
+      "bottleneck": "str",
+      "bottleneck_util": "number",
+      "capacity": "number",
+      "d_truck": "number",
+      "loading_min": "number",
+      "footprint_m2": "number"
+     },
+     "score": "number",
+     "ops_moves": [
+      {
+       "id": "str",
+       "name": "str",
+       "before": "number",
+       "after": "number"
+      }
+     ]
+    }
+   ],
+   "recommended": "str",
+   "relations": {
+    "ids": [
+     "str"
+    ],
+    "names": {
+     "recepcion": "str",
+     "corte": "str",
+     "nucleo": "str",
+     "embobinado": "str",
+     "ensamble": "str",
+     "horno": "str",
+     "soldadura": "str",
+     "pintura": "str",
+     "config": "str",
+     "pruebas": "str",
+     "despacho": "str",
+     "oficina": "str",
+     "banos": "str"
+    },
+    "cells": [
+     {
+      "a": "str",
+      "b": "str",
+      "r": "str",
+      "why": "str"
+     }
+    ]
+   },
+   "comparison": {
+    "piece_m": {
+     "before": "number",
+     "after": "number",
+     "pct": "number"
+    },
+    "daily_m": {
+     "before": "number",
+     "after": "number",
+     "pct": "number"
+    },
+    "capacity": {
+     "before": "number",
+     "after": "number",
+     "pct": "number"
+    },
+    "lead_h": {
+     "before": "number",
+     "after": "number",
+     "pct": "number"
+    },
+    "loading_min": {
+     "before": "number",
+     "after": "number",
+     "pct": "number"
+    }
+   }
+  }
+ }
+}

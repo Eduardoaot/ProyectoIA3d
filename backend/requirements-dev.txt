@@ -1,0 +1,3 @@
+# Desarrollo y pruebas: las pruebas no necesitan Ollama (usan un proveedor falso).
+-r requirements.txt
+pytest>=8
