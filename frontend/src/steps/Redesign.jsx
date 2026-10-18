@@ -225,7 +225,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 			<header className="step-head">
 				<span className="step-index"><b>Paso 4 de 6</b><span>Rediseño</span></span>
 				<RevealTitle text="Elige cómo ordenar la planta." />
-				<p className="lede">Tres acomodos calculados para tu flujo y uno que la IA busca para ocupar el menor espacio, siempre respetando tu planta. Selecciona una opción para ver cómo se mueven las máquinas.</p>
+				<p className="lede">Cuatro acomodos calculados para tu flujo y uno que la IA busca para ocupar el menor espacio, siempre respetando tu planta y lo que fijaste. Selecciona una opción para ver cómo se mueven las máquinas.</p>
 			</header>
 
 			<Appear className="alts" style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }}>
