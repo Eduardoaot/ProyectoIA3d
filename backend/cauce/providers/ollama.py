@@ -7,6 +7,8 @@ import httpx
 
 # Deja el modelo cargado entre llamadas: recargar uno de 8B tarda varios segundos.
 KEEP_ALIVE = "30m"
+# Modelos de Ollama que leen imágenes. llama3.1:8b (el de por defecto) no tiene visión.
+VISION_HINTS = ("llava", "vision", "bakllava", "moondream", "minicpm-v", "qwen2.5vl", "qwen2-vl", "gemma3")
 
 
 class OllamaProvider:
@@ -17,6 +19,12 @@ class OllamaProvider:
         self.timeout = timeout
         self.host = host.rstrip("/")
         self.temperature = temperature
+        self.capabilities = {
+            "json_schema": True,  # Ollama acepta un esquema en `format`
+            "stream": True,
+            "vision": any(h in model.lower() for h in VISION_HINTS),
+            "max_context": 8192,
+        }
 
     async def status(self) -> dict:
         try:

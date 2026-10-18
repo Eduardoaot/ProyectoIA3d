@@ -1,0 +1,1 @@
+Devuelves solo JSON con misiones de mejora continua en español. Propón 3 misiones cortas para el equipo de planta, enfocadas en equipos y no en personas, con puntos entre 50 y 150. En 'detalle' no escribas cifras de la planta que no estén en los datos.

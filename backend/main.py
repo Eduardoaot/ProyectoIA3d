@@ -12,16 +12,22 @@ from cauce.validate import Validator, claims_from, trailer
 from cauce.versions import context_version, plant_version
 from cauce.engine import compare, evaluate, rebalance_ops, relations
 from cauce.layout import alternatives, ops_moves, score
-from cauce.agents import MIN_CUES, detail, read_spatial
+from cauce.agents import MIN_CUES, check, detail, prompt, read_spatial
+from cauce.agents.roles import MISSION_SCHEMA
+from cauce.planops import plan_ops
 from cauce.compact import compact_alternative, footprint
-from cauce.providers import get_engineer, get_extractor, get_spatial
+from cauce.providers import caps, get_provider
 from cauce.story import STORY_SCHEMA, STORY_SYSTEM, build_plant
 
 app = FastAPI(title="Cauce")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-extractor = get_extractor()   # devuelve JSON
-engineer = get_engineer()     # escribe informes
-spatial = get_spatial()       # agentes que leen el espacio (modelo más capaz)
+# Un proveedor por rol (criterios §7.3); cada uno se configura con CAUCE_<ROL>_PROVIDER/MODEL.
+extractor = get_provider("extractor")  # historia -> JSON
+engineer = get_provider("chat")  # chat del ingeniero
+reporter = get_provider("informe")  # texto del informe
+missioner = get_provider("misiones")  # misiones del taller (JSON)
+editor = get_provider("editor")  # asistente del editor: instrucción -> operaciones
+spatial = get_provider("espacial")  # agentes que leen el espacio
 
 
 async def spatial_or_extractor():
@@ -63,11 +69,11 @@ class ChatInterface(BaseModel):
 
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
-FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked"]
+FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops"]
 
 
 def provider_caps(p) -> dict:
-    return {"json_schema": False, "stream": True, "vision": False, "max_context": 0, **getattr(p, "capabilities", {})}
+    return caps(p)
 
 
 @app.get("/api/capabilities")
@@ -82,6 +88,7 @@ async def health():
         "extractor": {"provider": extractor.name, "model": extractor.model, **ex},
         "engineer": {"provider": engineer.name, "model": engineer.model, **en},
         "spatial": {"provider": spatial.name, "model": spatial.model, **sp},
+        "roles": {k: {"provider": v.name, "model": v.model, "capabilities": caps(v)} for k, v in (("informe", reporter), ("misiones", missioner), ("editor", editor))},
     }
 
 
@@ -96,6 +103,12 @@ async def story(body: StoryInterface):
     
     try:
         extracted = await extractor.json(STORY_SYSTEM, body.text, STORY_SCHEMA)
+        problems = check(extracted, STORY_SCHEMA)
+        if problems:
+            # Un reintento con los errores a la vista; build_plant descarta lo que siga mal.
+            retry = await extractor.json(STORY_SYSTEM, body.text + "\n\nTu respuesta anterior no cumplía el esquema: " + "; ".join(problems[:6]), STORY_SCHEMA)
+            if not check(retry, STORY_SCHEMA) or len(check(retry, STORY_SCHEMA)) < len(problems):
+                extracted = retry
     except Exception as e:
         error = str(e)
 
@@ -223,14 +236,7 @@ def facts(ctx: ContextInterface) -> str:
     return "\n".join(lines)
 
 
-REPORT_SYSTEM = (
-    "Eres un ingeniero de procesos que le habla al dueño de un taller pequeño. "
-    "Escribe en español, claro y directo, sin jerga innecesaria y sin inventar cifras: usa solo los datos dados. "
-    "No calcules porcentajes ni diferencias: cita solo las cifras escritas en los datos. "
-    "La alternativa recomendada la decide el motor y está en los datos; no elogies otra. "
-    "Estructura: un párrafo de diagnóstico, uno sobre el rediseño elegido y una lista de 3 acciones para la semana. "
-    "Si no hay tiempos ni producción, habla solo de recorridos y cercanía entre áreas. No uses emojis. Máximo 220 palabras."
-)
+REPORT_SYSTEM = prompt("informe")  # cauce/agents/informe.md
 
 
 def fallback_report(ctx: ContextInterface) -> str:
@@ -255,9 +261,9 @@ def fallback_report(ctx: ContextInterface) -> str:
     return txt
 
 
-async def stream_or_fallback(messages: list[dict], fallback: str):
+async def stream_or_fallback(messages: list[dict], fallback: str, provider=None):
     try:
-        async for tok in engineer.stream(messages):
+        async for tok in (provider or engineer).stream(messages):
             yield tok
     except Exception:
         for word in fallback.split(" "):
@@ -278,39 +284,19 @@ async def report(body: ContextInterface):
     f = facts(body)
     msgs = [{"role": "system", "content": REPORT_SYSTEM}, {"role": "user", "content": f}]
     v = Validator(f, claims_from(body.model_dump()))
-    return StreamingResponse(validated(stream_or_fallback(msgs, fallback_report(body)), v, body.with_validation), media_type="text/plain; charset=utf-8")
+    return StreamingResponse(validated(stream_or_fallback(msgs, fallback_report(body), reporter), v, body.with_validation), media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/chat")
 async def chat(body: ChatInterface):
     f = facts(body.context) if body.context else "Aún no hay planta."
-    system = (
-        "Eres el ingeniero de procesos de Cauce. Respondes en español, breve y concreto, sin emojis. "
-        "Cita solo cifras que estén en los datos; no calcules otras. "
-        "Si te preguntan algo que los datos no cubren, dilo y sugiere qué medir. Datos de la planta:\n" + f
-    )
+    system = prompt("chat") + "\n" + f  # cauce/agents/chat.md
     msgs = [{"role": "system", "content": system}] + body.messages[-12:]
     fallback = "El modelo de IA no está respondiendo. Inícialo con 'ollama serve' y vuelve a preguntar."
     # Las cifras que escribió el usuario también cuentan como respaldo.
     said = [str(m.get("content", "")) for m in body.messages if m.get("role") == "user"]
     v = Validator(f, claims_from(body.context.model_dump()) if body.context else None, said)
     return StreamingResponse(validated(stream_or_fallback(msgs, fallback), v, body.with_validation), media_type="text/plain; charset=utf-8")
-
-
-MISSION_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "misiones": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {"titulo": {"type": "string"}, "detalle": {"type": "string"}, "puntos": {"type": "integer"}, "turno": {"type": "string"}},
-                "required": ["titulo", "detalle", "puntos"],
-            },
-        }
-    },
-    "required": ["misiones"],
-}
 
 
 def fallback_missions() -> list[dict]:
@@ -323,13 +309,25 @@ def fallback_missions() -> list[dict]:
 
 @app.post("/api/missions")
 async def missions(body: ContextInterface):
-    prompt = "Propón 3 misiones cortas para el equipo de planta, enfocadas en equipos y no en personas, con puntos entre 50 y 150. Datos:\n" + facts(body)
+    f = facts(body)
     try:
-        # Las misiones son datos que usa el programa: las pide el extractor.
-        out = await extractor.json("Devuelves solo JSON con misiones de mejora continua en español.", prompt, MISSION_SCHEMA)
-        items = [m for m in out.get("misiones", []) if m.get("titulo")][:3]
+        out = await missioner.json(prompt("misiones"), "Datos:\n" + f, MISSION_SCHEMA)
+        # Sin cifras inventadas: una misión cuyo detalle cita un número que no está en los hechos se descarta.
+        v = Validator(f)
+        items = [m for m in out.get("misiones", []) if m.get("titulo") and v.check(str(m.get("detalle", ""))) is None][:3]
         if len(items) == 3:
             return {"source": "ia", "missions": items}
     except Exception:  # noqa: BLE001
         pass
     return {"source": "reglas", "missions": fallback_missions()}
+
+
+class PlanOpsInterface(BaseModel):
+    instruction: str
+    plant: dict
+
+
+@app.post("/api/plan/ops")
+async def plan_ops_route(body: PlanOpsInterface):
+    """Asistente del editor: la IA propone en abstracto y el motor resuelve y valida (contrato §6.4)."""
+    return await plan_ops(editor, body.plant, body.instruction)

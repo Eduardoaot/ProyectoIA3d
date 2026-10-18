@@ -18,9 +18,9 @@ from __future__ import annotations
 import math
 import re
 
-from .catalog import ZONE
-from .engine import gate_pt, outline, point_in_poly, rect_at, station_map, zone_rect
-from .layout import EDGE, nearest_free, shape_outline
+from ..catalog import ZONE
+from ..engine import gate_pt, outline, point_in_poly, rect_at, station_map, zone_rect
+from ..layout import EDGE, nearest_free, shape_outline
 
 # La planta se describe como si se viera desde arriba con la calle abajo:
 # "frente" es el lado de la calle y "fondo" el lado opuesto.
@@ -151,13 +151,13 @@ AGENTS = {
 
 
 def normalize(text):
-    from .story import normalize as n  # story importa este módulo: se evita el ciclo al cargar
+    from ..story import normalize as n  # story importa este módulo: se evita el ciclo al cargar
 
     return n(text)
 
 
 def _match(name, stations):
-    from .story import _match as m
+    from ..story import _match as m
 
     return m(name, stations)
 
@@ -233,14 +233,14 @@ def _together(t, names, words):
 
 
 def _station_words(s):
-    from .catalog import KIND
-    from .story import _stems
+    from ..catalog import KIND
+    from ..story import _stems
 
     return _stems(s["name"]) + (KIND[s["kind"]]["keywords"] if s["kind"] in KIND else [])
 
 
 def _stems_of(name):
-    from .story import _stems
+    from ..story import _stems
 
     return _stems(name)
 
@@ -484,7 +484,7 @@ def apply_walls(plant, t, data, notes):
 def _enclose(x0, z0, x1, z1, W, D, prefix, door=1.2, poly=None):
     """Muros en los lados de un rectángulo que no tocan la bodega, con una puerta en el lado más largo hacia adentro.
     Un lado pegado al contorno (también el de una L o una U) ya es muro: no se duplica."""
-    from .engine import seg_dist
+    from ..engine import seg_dist
 
     x0, z0, x1, z1 = max(0, x0), max(0, z0), min(W, x1), min(D, z1)
     edges = [(a, poly[(k + 1) % len(poly)]) for k, a in enumerate(poly)] if poly else [((0, 0), (W, 0)), ((W, 0), (W, D)), ((W, D), (0, D)), ((0, D), (0, 0))]

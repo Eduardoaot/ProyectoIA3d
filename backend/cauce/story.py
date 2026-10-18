@@ -17,6 +17,8 @@ import re
 import unicodedata
 
 from .catalog import ASSUMPTIONS, DEFAULT_PARAMS, KIND, ZONE
+from . import units
+from .agents import prompt
 from .agents import apply_building, apply_walls, apply_zones, fit_zones, place_with_targets, station_targets
 from .layout import EDGE, flow_order, initial_layout
 
@@ -34,6 +36,7 @@ STORY_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "nombre": {"type": "string"},
+                    "cantidad": {"type": "integer"},
                     "tipo": {"type": "string", "enum": KIND_IDS},
                     "minutos_por_pieza": {"type": "number"},
                     "operarios": {"type": "integer"},
@@ -59,22 +62,7 @@ STORY_SCHEMA = {
     "required": ["negocio", "estaciones", "flujo", "supuestos"],
 }
 
-STORY_SYSTEM = (
-    "Eres un extractor de datos. Lees la historia de una planta o taller y devuelves SOLO un objeto JSON "
-    "con el esquema indicado. No conversas, no saludas, no explicas fuera del JSON.\n"
-    "Reglas:\n"
-    "- 'estaciones': cada máquina, proceso o área por donde pasa el material, en el orden en que pasa. "
-    "Usa las palabras de la persona para el nombre (corto, con mayúscula inicial). "
-    "No inventes estaciones que la historia no menciona. La oficina, los baños, los portones y los carros NO son estaciones.\n"
-    "- 'tipo': el más parecido de la lista. Si ninguno se parece, usa 'otro'.\n"
-    "- 'flujo': de qué estación a cuál pasa el material, con los mismos nombres de 'estaciones'. "
-    "'porcentaje' es 100 si pasan todas las piezas; si solo algunas, el porcentaje que se intuya.\n"
-    "- Números escritos con letra conviértelos a cifra. Si un número no aparece, pon 0.\n"
-    "- 'produccion' y 'periodo': cuánto se producía y si era por día, semana o mes.\n"
-    "- 'minutos_por_pieza': si no se dice, estima un valor razonable para ese proceso.\n"
-    "- 'supuestos': frases cortas en español con lo que se supuso, en voz impersonal: cada frase empieza con \"Se\" (se asume, se estima, se toma). Nunca en primera persona.\n"
-    "- 'problemas': desorden o desperdicio que se intuye en la historia, descrito como hallazgo del análisis, en voz impersonal. Nunca en primera persona."
-)
+STORY_SYSTEM = prompt("extractor")  # agents/extractor.md
 
 # Respaldo por si el modelo escribe en primera persona: las notas describen el análisis, no a la IA.
 FIRST_PERSON = [
@@ -249,6 +237,7 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
     # --- Estaciones de la IA, solo si la historia las menciona ---
     zone_kw = [(zid, w[:6]) for zid, z in ZONE.items() for w in z["keywords"]]
     found = []  # (posición en el texto, nombre, tipo, minutos, operarios)
+    qty = {}  # nombre normalizado -> máquinas iguales que dijo la IA
     for x in ai.get("estaciones", []) or []:
         if not isinstance(x, dict) or not str(x.get("nombre", "")).strip():
             continue
@@ -266,6 +255,8 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
         if any(normalize(f[1]) == n for f in found):
             continue
         found.append((pos, name, kind, x.get("minutos_por_pieza"), x.get("operarios")))
+        if isinstance(x.get("cantidad"), int) and x["cantidad"] > 1:
+            qty[n] = x["cantidad"]
     source = "ia" if found else "reglas"
 
     # --- Lo que las reglas encontraron y la IA no ---
@@ -281,6 +272,15 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
     # Lo que entra va primero y lo que sale al final; lo demás en el orden en que se cuenta.
     found.sort(key=lambda f: (f[2] != "recepcion", f[2] == "despacho", f[0]))
     stations = [_station(i, f[1], f[2], f[3], f[4]) for i, f in enumerate(found)]
+    # Máquinas iguales en paralelo (H2): solo si la cifra aparece en la historia.
+    for st_ in stations:
+        q = qty.get(normalize(st_["name"]))
+        if q and re.search(rf"\b{q}\b", t):
+            bw, bd = units.block_size(q, st_["w"], st_["d"], "bloque" if q > 4 else "fila")
+            st_.update(count=q, unit_w=st_["w"], unit_d=st_["d"], arrangement="bloque" if q > 4 else "fila", w=bw, d=bd, ops=st_["ops"] * q)
+            notes.append(f"{st_['name']}: {q} máquinas iguales en paralelo.")
+        elif q:
+            notes.append(f"Se descartó la cantidad de {st_['name']}: la cifra {q} no aparece en la descripción.")
     if dropped:
         notes.append("Se descartó lo que la descripción no menciona: " + ", ".join(dropped) + ".")
     # Sin nada reconocible, una sola caja genérica para empezar a dibujar.
