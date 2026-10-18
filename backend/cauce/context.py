@@ -55,6 +55,9 @@ def lines(context) -> list[str]:
         t = context.strip()
         return [f"Contexto del usuario: {t}"] if t else []
     out = []
+    story = str(context.get("story") or "").strip() if isinstance(context, dict) else ""
+    if story:
+        out.append(f"Contexto del usuario: {story}")
     for e in current(context):
         if e.get("segment") == "referencias" and not e.get("value"):
             continue
