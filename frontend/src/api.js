@@ -1,3 +1,5 @@
+import { loadCapabilities } from './capabilities.js'
+
 async function post(path, body, signal) {
     const r = await fetch(path, {
         method: 'POST',
@@ -18,6 +20,8 @@ const get = (path) =>
 
 export const api = {
     health: () => get('/api/health'),
+    // Nunca falla: si el backend no la conoce, devuelve { features: [] }.
+    getCapabilities: () => loadCapabilities(),
     catalog: () => get('/api/catalog'),
     story: (text) => post('/api/story', { text }),
     routes: (plant, positions, signal) => post('/api/routes', { plant, positions }, signal),

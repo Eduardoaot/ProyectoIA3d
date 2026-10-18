@@ -4,6 +4,7 @@ import WaitPanel from '../components/WaitPanel'
 import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
+import { parseProject } from '../importProject'
 
 function Switch({ on, onChange, children }) {
     return (
@@ -280,10 +281,25 @@ function SpatialNote({ spatial }) {
     )
 }
 
-export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving }) {
+export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onImport, onSave, saving }) {
     const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
+    const [importError, setImportError] = useState(null)
     const editorRef = useRef(null)
+    const fileRef = useRef(null)
+
+    // Carga un proyecto o una planta en JSON (por ejemplo pruebas/transformadores.json) en el editor.
+    const importFile = async (e) => {
+        const file = e.target.files?.[0]
+        e.target.value = ''
+        if (!file) return
+        const out = parseProject(await file.text())
+        setImportError(out.error || null)
+        if (out.error) return
+        if (draft?.stations?.length && !window.confirm('El plano actual se reemplaza por el importado. ¿Seguir?')) return
+        onImport(out.plant, out.warnings)
+        scrollToEditor()
+    }
 
     const scrollToEditor = () => setTimeout(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120)
 
@@ -322,6 +338,8 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                     </div>
 
                     {error && <p className="small">{error}</p>}
+                    {importError && <p className="small">{importError}</p>}
+                    <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={importFile} />
                 </Appear>
 
                 <div className="stack">
@@ -341,6 +359,10 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                                 ¿Prefieres no usar la IA?{' '}
                                 <button type="button" className="link-btn" onClick={() => (onBlank(), scrollToEditor())}>
                                     Dibuja el plano tú mismo
+                                </button>
+                                {' '}o{' '}
+                                <button type="button" className="link-btn" onClick={() => fileRef.current?.click()}>
+                                    Importar proyecto (JSON)
                                 </button>
                             </p>
                         </div>
@@ -382,9 +404,14 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         mode="full"
                         onMetrics={setMetrics}
                         actions={
-                            <button type="button" className="btn btn--ghost btn--small" onClick={restartPlan} title="Borra todo el plano y empieza uno vacío">
-                                Reiniciar plano
-                            </button>
+                            <>
+                                <button type="button" className="btn btn--ghost btn--small" onClick={() => fileRef.current?.click()} title="Carga una planta o un proyecto guardado en JSON">
+                                    Importar JSON
+                                </button>
+                                <button type="button" className="btn btn--ghost btn--small" onClick={restartPlan} title="Borra todo el plano y empieza uno vacío">
+                                    Reiniciar plano
+                                </button>
+                            </>
                         }
                     />
 

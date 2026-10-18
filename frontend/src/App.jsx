@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { api } from './api'
+import { NO_CAPS } from './capabilities'
 import FlowMark from './brand/FlowMark'
 import EngineerChat from './components/EngineerChat'
 import useReport from './components/useReport'
@@ -48,6 +49,7 @@ export default function App() {
     const [chat, setChat] = useState(false)
     const [toast, setToast] = useState(null)
     const [ai, setAi] = useState(null)
+    const [caps, setCaps] = useState(NO_CAPS)
     const stage = useRef(null)
 
     const { plant, analysis, draft, info } = project
@@ -60,6 +62,7 @@ export default function App() {
         if (window.requestIdleCallback) window.requestIdleCallback(preload)
         else setTimeout(preload, 2500)
         api.health().then(setAi).catch(() => setAi(null))
+        api.getCapabilities().then(setCaps)
         api.catalog().then(setCatalog).catch(() => setError('Error conectando con el servidor.'))
     }, [])
 
@@ -99,6 +102,8 @@ export default function App() {
             return false
         }
     }
+
+    const importPlant = (plant, warnings) => update({ draft: plant, info: { source: 'Proyecto importado', notes: warnings } })
 
     const blank = () => update({ draft: blankPlant(defaultParams()), info: { source: 'Plano vacío', notes: [] } })
 
@@ -149,6 +154,7 @@ export default function App() {
             error={error}
             onRead={read}
             onBlank={blank}
+            onImport={importPlant}
             onSave={save}
             saving={saving}
             />
