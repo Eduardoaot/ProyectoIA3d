@@ -12,6 +12,7 @@ que el usuario dibujó. Las alternativas no abren portones ni mueven paredes.
 
 from __future__ import annotations
 
+import heapq
 import math
 from functools import lru_cache
 
@@ -110,18 +111,22 @@ def feasible(plant, r, placed):
 def nearest_free(plant, st, target, placed, prefer_rot=0):
     """El lugar libre más cercano a target, probando las dos orientaciones."""
     W, D = plant["size"]["w"], plant["size"]["d"]
+    tx, tz = target[0], target[1]
     cands = []
     for rot in (prefer_rot, (prefer_rot + 90) % 180):
         w, d = dims(st, rot)
+        pen = 0.01 if rot != prefer_rot else 0
         nx = int((W - w - 2 * EDGE) / 0.5) + 1
         nz = int((D - d - 2 * EDGE) / 0.5) + 1
-        for i in range(max(nx, 0)):
-            x = w / 2 + EDGE + i * 0.5
-            for j in range(max(nz, 0)):
-                z = d / 2 + EDGE + j * 0.5
-                cands.append((manhattan((x, z), target) + (0.01 if rot != prefer_rot else 0), x, z, rot))
-    cands.sort()
-    for _, x, z, rot in cands:
+        xs = [(w / 2 + EDGE + i * 0.5) for i in range(max(nx, 0))]
+        zs = [(z, abs(z - tz)) for z in (d / 2 + EDGE + j * 0.5 for j in range(max(nz, 0)))]
+        for x in xs:
+            dx = abs(x - tx)
+            cands += [(dx + dz + pen, x, z, rot) for z, dz in zs]
+    # Mismo orden que ordenar todo, pero solo se saca lo que hace falta probar.
+    heapq.heapify(cands)
+    while cands:
+        _, x, z, rot = heapq.heappop(cands)
         r = _rect(st, x, z, rot)
         if feasible(plant, r, placed):
             return [round(x, 2), round(z, 2), rot], r
@@ -411,11 +416,25 @@ def initial_layout(plant):
     W, D = plant["size"]["w"], plant["size"]["d"]
     positions, placed = {}, []
     x, z, row_d = EDGE + 0.5, EDGE + 0.5, 0.0
-    for sid in flow_order(plant):
+    order = flow_order(plant)
+    # Las ramas de una familia (10 bobinadoras) van juntas, en su propia fila y en orden.
+    fam_of = {s["id"]: s.get("family") for s in plant["stations"]}
+    seen, grouped = set(), []
+    for sid in order:
+        if sid in seen:
+            continue
+        fam = fam_of.get(sid)
+        group = sorted((k for k in order if fam and fam_of.get(k) == fam), key=lambda k: st[k].get("lane") or 0) or [sid]
+        grouped += group
+        seen.update(group)
+    prev_fam = None
+    for sid in grouped:
         s = st[sid]
         w, d = dims(s, 0)
-        if x + w > W - EDGE:
+        fam = fam_of.get(sid)
+        if x + w > W - EDGE or (x > EDGE + 0.5 and fam != prev_fam and (fam or prev_fam)):
             x, z, row_d = EDGE + 0.5, z + row_d + 2.5, 0.0
+        prev_fam = fam
         target = (x + w / 2, z + d / 2)
         pos, r = nearest_free(plant, s, target, placed)
         positions[sid] = pos

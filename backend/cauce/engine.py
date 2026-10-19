@@ -287,7 +287,10 @@ def shares(plant):
     """Fracción de las piezas que pasa por cada estación, según las rutas."""
     inc = {}
     # Solo el flujo de material dice por dónde pasan las piezas (personas y vehículos no).
+    # Un componente de ensamble se junta con la pieza: no son piezas de más en la estación.
     for r in flows.material_routes(plant):
+        if flows.is_component(r):
+            continue
         inc[r["to"]] = inc.get(r["to"], 0.0) + float(r.get("frac", 1) or 0)
     return {s["id"]: min(1.0, inc[s["id"]]) if s["id"] in inc else 1.0 for s in plant["stations"]}
 

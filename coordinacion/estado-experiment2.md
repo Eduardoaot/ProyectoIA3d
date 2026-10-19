@@ -191,3 +191,20 @@ Con `pruebas/transformadores.json` el motor **no** recomienda la línea recta:
 ### Interfaz
 - «Referencias con imagen» en el paso 1: imagen (hasta 1 MB, porque el proyecto vive en el navegador) con nota, como entrada del segmento `referencias`. Sin visión dice «No interpretada: el proveedor actual no tiene visión»; con visión, «Interpretar» guarda la lectura como versión nueva. La imagen nunca viaja en `context`, solo la nota.
 - Pruebas: `f9-referencias.test.js`.
+
+## Rama feature/experimentoZonas: procesos que se ramifican
+
+### Motor
+- `cauce/branches.py`: una estación con `count` de 2 a 20 se separa en N estaciones de una familia (`family`, `family_name`, `lane`), cada una con sus rutas. Reparto equilibrado entre familias (iguales: 1 a 1; distintas: parejo, por ejemplo 10 → 4 da 3, 2, 3, 2). La fracción de cada rama es la de la ruta original entre las ramas, así la convergencia suma 100 %.
+- Ensamble: si a una estación le llega más del 100 % (núcleo y bobina al armado), la entrada que viene de más atrás queda `component: true`: se cuenta su traslado, pero no suma piezas (`engine.shares`) ni la simulación la espera.
+- Simulación: un ensamble espera solo las entradas por las que pasa toda la pieza; las ramas que convergen no se esperan entre sí. En una división en paralelo se toma una sola rama por familia.
+- Banda común: si la historia menciona una banda, las ramas que convergen en una estación descargan en una banda (`merge: true`) que cada rama carga en su punto más cercano. La estación «Banda» deja de ser una máquina.
+- `cauce/textplace.py` (sin IA): coordenadas del centro (`x=10, y=4`, `(10, 4)`; origen arriba a la izquierda, y hacia abajo), distancia a una pared, pared, esquina, centro, tamaño («mide 6x3»), fijos («no se puede mover», «fijo», «anclado») con la oración como motivo, y portones de entrada y salida. Una familia se pone en fila a lo largo de la pared.
+- Historia: el flujo de la IA se conserva aunque las reglas agreguen estaciones (antes se descartaba y todo quedaba en línea); el orden de las estaciones sigue el flujo. Volver a nombrar algo ya no lo duplica (solo «otra sierra»); las medidas tras una palabra completa («lijadora de 4x2») ya se leen. Cantidad sin IA: la cifra antes del nombre («10 bobinadoras»). Tipo nuevo `bobinado`.
+- `nearest_free` usa un montículo (mismo orden): con 37 estaciones la línea recta baja de 217 s a ~10 s.
+- Pruebas: `test_ramas.py`, y `test_story_zone_dimensions.py` traída de develop.
+
+### Interfaz
+- Portones: «Fijar en su lugar», no se arrastran ni se quitan si están fijos (borde punteado y candado).
+- Inspector: «Rama i de N de …» con «Seleccionar todas»; en las rutas, «Es un componente que se junta».
+- Pruebas: `f10-ramas-portones.test.js`.

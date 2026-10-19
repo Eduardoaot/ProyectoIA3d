@@ -32,6 +32,11 @@ def material_routes(plant: dict) -> list[dict]:
     return [r for r in plant.get("routes", []) if is_material(r)]
 
 
+def is_component(r: dict) -> bool:
+    """Entrada de ensamble (núcleo que se junta con la bobina): se traslada, pero no suma piezas."""
+    return bool(r.get("component"))
+
+
 # ---------- Bandas ----------
 
 def conveyors(plant: dict) -> dict:
@@ -47,11 +52,29 @@ def poly_len(pts) -> float:
     return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:]))
 
 
+def _load_point(pts, x, z):
+    """Punto de la banda más cercano a (x, z): índice del tramo y el punto."""
+    best = None
+    for i, (p, q) in enumerate(zip(pts, pts[1:])):
+        dx, dz = q[0] - p[0], q[1] - p[1]
+        L2 = dx * dx + dz * dz or 1e-9
+        t = min(1.0, max(0.0, ((x - p[0]) * dx + (z - p[1]) * dz) / L2))
+        c = [p[0] + dx * t, p[1] + dz * t]
+        d = abs(x - c[0]) + abs(z - c[1])
+        if best is None or d < best[0]:
+            best = (d, i, c)
+    return best[1], best[2]
+
+
 def belt_leg(positions: dict, r: dict, belt: dict):
     """Tramo en banda: de la estación al inicio de la banda, la banda, y del final a la estación.
-    Las puntas se cuentan en línea rectilínea (son tramos cortos de carga y descarga)."""
+    Las puntas se cuentan en línea rectilínea (son tramos cortos de carga y descarga).
+    Una banda común de ramas (`merge`) se carga en el punto más cercano a cada rama."""
     a, b = positions[r["from"]], positions[r["to"]]
     pts = [list(p) for p in belt["points"]]
+    if belt.get("merge") and len(pts) >= 2:
+        i, c = _load_point(pts, a[0], a[1])
+        pts = [c] + pts[i + 1:]
     reach = abs(a[0] - pts[0][0]) + abs(a[1] - pts[0][1]) + abs(b[0] - pts[-1][0]) + abs(b[1] - pts[-1][1])
     on = poly_len(pts)
     path = [[round(a[0], 2), round(a[1], 2)]] + [[round(x, 2), round(z, 2)] for x, z in pts] + [[round(b[0], 2), round(b[1], 2)]]

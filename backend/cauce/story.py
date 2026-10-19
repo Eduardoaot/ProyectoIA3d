@@ -17,7 +17,7 @@ import re
 import unicodedata
 
 from .catalog import ASSUMPTIONS, DEFAULT_PARAMS, KIND, ZONE
-from . import units
+from . import branches, textplace, units
 from .agents import prompt
 from .agents import apply_building, apply_walls, apply_zones, fit_zones, place_with_targets, station_targets
 from .layout import EDGE, flow_order, initial_layout
@@ -107,8 +107,9 @@ def words_to_digits(t: str) -> str:
 
 
 WORD_START = r"(?<![a-z])"
+# La palabra clave puede ser una raíz ("lij" de lijadora): primero se salta el resto de la palabra.
 DIMENSIONS_AFTER_MENTION = re.compile(
-    r"^[\s(,:-]*(?:(?:con\s+dimensiones?\s+de|dimensiones?\s+de|area\s+de|de|mide|es|tiene|con)\s*)?"
+    r"^[a-z]*[\s(,:-]*(?:(?:con\s+dimensiones?\s+de|dimensiones?\s+de|area\s+de|de|mide|es|tiene|con)\s*)?"
     r"(?P<w>\d+(?:[.,]\d+)?)\s*(?:m(?:etros?)?\s*)?(?:x|×|por)\s*"
     r"(?P<d>\d+(?:[.,]\d+)?)\s*(?:m(?:etros?)?)?"
 )
@@ -156,7 +157,7 @@ def _zone_instances(text: str, zone_id: str) -> list[tuple[str, float, float]]:
         return []
 
     _, keyword, _ = min(mentions, key=lambda item: (item[0], -len(item[1])))
-    instances = []
+    instances, explicit = [], []
     for mention in re.finditer(WORD_START + re.escape(keyword) + r"(?:s|es)?", text):
         match = DIMENSIONS_AFTER_MENTION.match(text[mention.end():mention.end() + 64])
         dimensions = None
@@ -165,8 +166,14 @@ def _zone_instances(text: str, zone_id: str) -> list[tuple[str, float, float]]:
             depth = float(match.group("d").replace(",", "."))
             if width > 0 and depth > 0:
                 dimensions = (width, depth)
+        if instances and not _another(text, mention.start()):
+            if dimensions and not explicit[-1]:
+                instances[-1] = (ZONE[zone_id]["name"], *dimensions)
+                explicit[-1] = True
+            continue
         width, depth = dimensions or (ZONE[zone_id]["w"], ZONE[zone_id]["d"])
         instances.append((ZONE[zone_id]["name"], width, depth))
+        explicit.append(dimensions is not None)
     return instances
 
 
@@ -186,8 +193,18 @@ def _station_instances(text: str, kind: str) -> list[tuple[int, tuple[float, flo
             depth = float(match.group("d").replace(",", "."))
             if width > 0 and depth > 0:
                 dimensions = (width, depth)
+        # Volver a nombrarla ("cada armado pasa a su soldadura", "el horno mide 6x3") no es
+        # otra máquina: solo "otra sierra". Si la mención trae medidas, son de la anterior.
+        if instances and not _another(text, mention.start()):
+            if dimensions and instances[-1][1] is None:
+                instances[-1] = (instances[-1][0], dimensions)
+            continue
         instances.append((mention.start(), dimensions))
     return instances
+
+
+def _another(text: str, pos: int) -> bool:
+    return bool(re.search(r"(?<![a-z])otr[oa]s?\s+(?:[a-z]+\s+)?$", text[max(0, pos - 24):pos]))
 
 
 def by_rules(text: str) -> dict:
@@ -296,6 +313,56 @@ def _station(i, name, kind, t=None, ops=None, dimensions=None):
     }
 
 
+def _reaches(routes, a, b):
+    """¿Se llega de a a b siguiendo las rutas?"""
+    seen, todo = set(), [a]
+    while todo:
+        k = todo.pop()
+        if k == b:
+            return True
+        if k not in seen:
+            seen.add(k)
+            todo += [r["to"] for r in routes if r["from"] == k]
+    return False
+
+
+def _topo(stations, routes):
+    """Estaciones en el orden del flujo (Kahn); a la par, en el orden de la historia.
+    La recepción va primero y el despacho al final."""
+    idx = {s["id"]: i for i, s in enumerate(stations)}
+    inc = {s["id"]: 0 for s in stations}
+    for r in routes:
+        inc[r["to"]] += 1
+    key = lambda s: (s["kind"] != "recepcion", s["kind"] == "despacho", idx[s["id"]])
+    ready = sorted((s for s in stations if inc[s["id"]] == 0), key=key)
+    by_id = {s["id"]: s for s in stations}
+    out = []
+    while ready:
+        s = ready.pop(0)
+        out.append(s)
+        for r in routes:
+            if r["from"] == s["id"]:
+                inc[r["to"]] -= 1
+                if inc[r["to"]] == 0:
+                    ready.append(by_id[r["to"]])
+        ready.sort(key=key)
+    return out + [s for s in stations if s not in out]
+
+
+def _bypass_belt_station(stations, routes):
+    """La banda que la historia menciona será una banda común, no una estación: sus rutas se puentean."""
+    belt = {s["id"] for s in stations if s["kind"] == "banda"}
+    if not belt:
+        return stations, routes
+    keep = [r for r in routes if r["from"] not in belt and r["to"] not in belt]
+    for b in belt:
+        for a in (r for r in routes if r["to"] == b):
+            for c in (r for r in routes if r["from"] == b):
+                if a["from"] != c["to"] and not any(r["from"] == a["from"] and r["to"] == c["to"] for r in keep):
+                    keep.append({"from": a["from"], "to": c["to"], "frac": min(float(a.get("frac", 1) or 0), float(c.get("frac", 1) or 0))})
+    return [s for s in stations if s["id"] not in belt], [{**r, "id": f"r{i + 1}"} for i, r in enumerate(keep)]
+
+
 def place_zones_default(plant, zone_instances):
     """Zonas en fila contra el frente derecho, como punto de partida.
 
@@ -345,7 +412,6 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
     source = "ia" if found else "reglas"
 
     # --- Lo que las reglas encontraron y la IA no ---
-    added = False
     covered = {f[2] for f in found}
     names_norm = " ".join(normalize(f[1]) for f in found)
     for kid in rules["kinds"]:
@@ -353,7 +419,6 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
             continue
         pos = _where(KIND[kid]["name"], kid, t)
         found.append((pos if pos is not None else len(t), KIND[kid]["name"], kid, None, None))
-        added = True
     # Lo que entra va primero y lo que sale al final; lo demás en el orden en que se cuenta.
     found.sort(key=lambda f: (f[2] != "recepcion", f[2] == "despacho", f[0]))
     station_entries = []
@@ -363,6 +428,10 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
         if not entries and not mentions:
             continue
 
+        # Sin estación aceptada de este tipo, las menciones sueltas no crean una (la IA o las
+        # reglas ya la cubrieron con otro nombre, como "sierras de corte" en Corte).
+        if not entries:
+            continue
         count = max(len(entries), len(mentions))
         for i in range(count):
             if i < len(entries):
@@ -386,7 +455,14 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
         if kind_counts[kind] > 1 and name == KIND[kind]["name"]:
             name = f"{name} {kind_indices[kind]}"
         stations.append(_station(len(stations), name, kind, minutes, operators, dimensions))
-    # Máquinas iguales en paralelo (H2): solo si la cifra aparece en la historia.
+    # Máquinas iguales en paralelo (H2): solo si la cifra aparece en la historia. Sin cifra de
+    # la IA, la que la historia pone justo antes del nombre ("10 bobinadoras").
+    product = set(_stems(str(ai.get("producto") or "")))
+    for st_ in stations:
+        if normalize(st_["name"]) not in qty and st_["kind"] not in ("recepcion", "despacho"):
+            q = textplace.quantity(t, [w for w in _stems(st_["name"]) + KIND[st_["kind"]]["keywords"] if w not in product])
+            if q:
+                qty[normalize(st_["name"])] = q
     for st_ in stations:
         q = qty.get(normalize(st_["name"]))
         if q and re.search(rf"\b{q}\b", t):
@@ -402,27 +478,50 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
         stations.append(_station(0, "Proceso 1", "otro", None, 1))
 
     # --- Flujo: el de la IA si es coherente; si no, en el orden de la historia ---
-    order = {s["id"]: i for i, s in enumerate(stations)}
     routes = []
-    if not added:
-        for x in ai.get("flujo", []) or []:
-            if not isinstance(x, dict):
-                continue
-            a, b = _match(str(x.get("de", "")), stations), _match(str(x.get("a", "")), stations)
-            # Una ruta que regresa a una estación anterior casi siempre es un error de lectura.
-            if a and b and order[a] < order[b] and not any(r["from"] == a and r["to"] == b for r in routes):
-                pct = x.get("porcentaje")
-                frac = pct / 100 if isinstance(pct, (int, float)) and 0 < pct <= 100 else 1.0
-                routes.append({"id": f"r{len(routes) + 1}", "from": a, "to": b, "frac": round(frac, 2)})
+    for x in ai.get("flujo", []) or []:
+        if not isinstance(x, dict):
+            continue
+        a, b = _match(str(x.get("de", "")), stations), _match(str(x.get("a", "")), stations)
+        # Una ruta que cierra un ciclo casi siempre es un error de lectura; tampoco se entra a la
+        # recepción ni se sale del despacho.
+        if not a or not b or a == b or any(r["from"] == a and r["to"] == b for r in routes):
+            continue
+        kinds = {s["id"]: s["kind"] for s in stations}
+        if kinds[b] == "recepcion" or kinds[a] == "despacho" or _reaches(routes, b, a):
+            continue
+        pct = x.get("porcentaje")
+        frac = pct / 100 if isinstance(pct, (int, float)) and 0 < pct <= 100 else 1.0
+        routes.append({"id": f"r{len(routes) + 1}", "from": a, "to": b, "frac": round(frac, 2)})
+    # El orden de las estaciones sigue el flujo; lo que el flujo no ordena, el de la historia.
+    stations = _topo(stations, routes)
+    # Lo que quedó sin conectar (lo que agregaron las reglas): la recepción alimenta los inicios
+    # del flujo, los finales van al despacho y lo demás sigue a la anterior en el orden.
     connected = {r["from"] for r in routes} | {r["to"] for r in routes}
+    ins, outs = {r["to"] for r in routes}, {r["from"] for r in routes}
     prev = None
     for s in stations:
-        if s["id"] not in connected and prev:
-            routes.append({"id": f"r{len(routes) + 1}", "from": prev, "to": s["id"], "frac": 1.0})
-        prev = s["id"]
+        sid = s["id"]
+        if sid not in connected:
+            if s["kind"] == "recepcion" and routes:
+                links = [(sid, k) for k in outs - ins] or ([(sid, stations[1]["id"])] if len(stations) > 1 else [])
+            elif s["kind"] == "despacho" and routes:
+                links = [(k, sid) for k in ins - outs]
+            else:
+                links = [(prev, sid)] if prev else []
+            for a, b in links:
+                routes.append({"id": f"r{len(routes) + 1}", "from": a, "to": b, "frac": 1.0})
+        prev = sid
     if not routes:
         for a, b in zip(stations, stations[1:]):
             routes.append({"id": f"r{len(routes) + 1}", "from": a["id"], "to": b["id"], "frac": 1.0})
+
+    # --- Ramas: cada máquina de una familia con su propia ruta (branches.py) ---
+    belt_words = re.search(WORD_START + r"(?:banda|transportador)", t)
+    if belt_words and any(units.count(s) > 1 for s in stations):
+        stations, routes = _bypass_belt_station(stations, routes)
+    stations, routes, branch_notes = branches.expand(stations, routes)
+    notes += branch_notes
 
     # --- Zonas: solo las que la historia menciona ---
     zkinds = [(zid, ZONE[zid]["name"]) for zid in rules["zones"]]
@@ -504,18 +603,30 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
     if spatial:
         apply_building(plant, t, (spatial.get("edificio") or {}).get("data"), spatial_notes)
     plant["zones"] = place_zones_default(plant, zone_instances)
+    # Lo que la historia dice con palabras de cada elemento: tamaño, lugar y fijos (textplace.py).
+    said = textplace.read(plant, t)
+    spatial_notes += textplace.apply_sizes(plant, said)
+    spatial_notes += textplace.apply_gates(plant, said)
     if spatial:
         apply_zones(plant, t, (spatial.get("zonas") or {}).get("data"), spatial_notes)
+    spatial_notes += textplace.apply_zones(plant, said)
+    if spatial or said:
         fit_zones(plant)
     plant["layout"] = initial_layout(plant)
+    targets, near = station_targets(plant, t, (spatial.get("acomodo") or {}).get("data")) if spatial else ({}, {})
+    told = textplace.station_targets(plant, said)
+    targets.update(told)
+    if targets or near:
+        plant["layout"] = place_with_targets(plant, targets, near)
+        textplace.exact(plant, told)
+        where = dict.fromkeys(s.get("family_name") or s["name"] for s in plant["stations"] if s["id"] in targets or s["id"] in near)
+        spatial_notes.append("Ubicación tomada de la descripción: " + ", ".join(where) + ".")
     if spatial:
-        targets, near = station_targets(plant, t, (spatial.get("acomodo") or {}).get("data"))
-        if targets or near:
-            plant["layout"] = place_with_targets(plant, targets, near)
-            where = [s["name"] for s in plant["stations"] if s["id"] in targets or s["id"] in near]
-            spatial_notes.append("Ubicación tomada de la descripción: " + ", ".join(where) + ".")
         apply_walls(plant, t, (spatial.get("paredes") or {}).get("data"), spatial_notes)
         used = [k for k, v in spatial.items() if v.get("data") is not None]
+    spatial_notes += textplace.apply_locks(plant, said)
+    if belt_words:
+        spatial_notes += branches.convergence_belts(plant, plant["layout"])
     # El acomodo inicial sigue el flujo; se guarda en ese orden.
     order = {sid: i for i, sid in enumerate(flow_order(plant))}
     plant["stations"].sort(key=lambda s: order.get(s["id"], 0))

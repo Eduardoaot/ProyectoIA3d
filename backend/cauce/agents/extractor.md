@@ -4,6 +4,9 @@ Reglas:
 - 'cantidad': cuántas máquinas iguales hay de esa estación si la historia lo dice (por ejemplo "10 embobinadoras" es una estación con cantidad 10). Si no lo dice, 1. No separes máquinas iguales en varias estaciones.
 - 'tipo': el más parecido de la lista. Si ninguno se parece, usa 'otro'.
 - 'flujo': de qué estación a cuál pasa el material, con los mismos nombres de 'estaciones'. 'porcentaje' es 100 si pasan todas las piezas; si solo algunas, el porcentaje que se intuya.
+- El proceso no tiene que ser una sola línea. Si "10 bobinadoras pasan a 10 armados", pon un flujo Bobinado → Armado con 100: el programa reparte las 10 ramas. Si varias ramas se juntan en una estación ("todo llega a inspección"), un flujo de esa estación a la que las junta.
+- Si dos cosas se juntan en una estación (el núcleo y la bobina entran al armado), pon un flujo de cada una a esa estación, ambos con 100.
+- Una banda transportadora no es una estación: no la pongas en 'estaciones' ni en 'flujo'; une directo las estaciones que conecta.
 - Números escritos con letra conviértelos a cifra. Si un número no aparece, pon 0.
 - 'produccion' y 'periodo': cuánto se producía y si era por día, semana o mes.
 - 'minutos_por_pieza': si no se dice, estima un valor razonable para ese proceso.

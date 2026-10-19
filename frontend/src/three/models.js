@@ -396,7 +396,7 @@ const builders = {
 /* De cada tipo del catálogo a su maqueta. Los nombres viejos siguen funcionando. */
 const MODEL = {
   recepcion: 'receiving', despacho: 'dispatch', almacen: 'storage', almacen_piso: 'floor', corte: 'gantry', sierra: 'saw',
-  cnc: 'cnc', torno: 'lathe', prensa: 'press', soldadura: 'welding', pulido: 'line', pintura: 'cabin', horno: 'oven',
+  cnc: 'cnc', torno: 'lathe', bobinado: 'lathe', prensa: 'press', soldadura: 'welding', pulido: 'line', pintura: 'cabin', horno: 'oven',
   lavado: 'tunnel', secado: 'dryer', mesa: 'workbench', ensamble: 'assembly', costura: 'sewing', mezcla: 'tanks',
   banda: 'conveyor', grua: 'hoistStation', inspeccion: 'inspection', empaque: 'packing', otro: 'generic',
   oficina: 'office', banos: 'restroom', comedor: 'canteen', bloqueado: 'blocked',

@@ -16,6 +16,7 @@ KINDS = [
     ("sierra", "Sierra", 4, 3, 2.5, 1, ["sierra", "escuadradora", "tronzad"]),
     ("cnc", "Máquina CNC", 4, 3, 6.0, 1, ["cnc", "router", "fresad", "mecaniz"]),
     ("torno", "Torno", 3.5, 1.8, 6.0, 1, ["torno", "tornead"]),
+    ("bobinado", "Bobinadora", 2.5, 2.5, 30.0, 1, ["bobin", "embobin"]),
     ("prensa", "Prensa o troquel", 2.6, 2.6, 1.5, 1, ["prensa", "troquel", "doblad", "punzon", "estampad"]),
     ("soldadura", "Soldadura", 4, 4, 5.0, 1, ["sold"]),
     ("pulido", "Pulido o lijado", 6, 2.6, 4.0, 1, ["pulid", "pulidora", "lij", "bisel", "esmeril", "canto"]),

@@ -13,7 +13,7 @@
 const ZONE_KINDS = new Set(['oficina', 'banos', 'comedor', 'bloqueado', 'obstaculo'])
 // Cambiar cualquiera de estos campos mueve o cambia de tamaño el elemento: no se permite si está fijo.
 const GEOMETRY = new Set(['x', 'z', 'w', 'd', 'rot', 'unit_w', 'unit_d', 'count', 'arrangement', 'points', 'x1', 'z1', 'x2', 'z2'])
-const LISTS = { station: 'stations', zone: 'zones', conveyor: 'conveyors', wall: 'walls' }
+const LISTS = { station: 'stations', zone: 'zones', conveyor: 'conveyors', wall: 'walls', gate: 'gates' }
 
 const clone = (x) => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)))
 const uid = (p) => `${p}-${Math.random().toString(36).slice(2, 8)}`
@@ -34,7 +34,7 @@ export function findElement(plant, id) {
     return null
 }
 
-const label = (item) => `«${item.name || item.id}»`
+const label = (item) => `«${item.name || item.label || item.id}»`
 const lockedMsg = (item) => `${label(item)} está fijo${item.lock_reason ? `: ${item.lock_reason}` : ''}`
 
 function insert(p, name, item, at) {

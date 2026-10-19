@@ -20,7 +20,7 @@ import statistics
 import simpy
 
 from . import flows, units
-from .engine import ends, evaluate, params
+from .engine import ends, evaluate, params, shares
 
 
 def _pct(values: list[float], q: float) -> float:
@@ -73,20 +73,21 @@ def _run(plant: dict, legs: dict, seed: int, days: int) -> dict | None:
     if not first or demand <= 0:
         return None
     nxt, joins = {}, {}
-    mat = [r for r in flows.material_routes(plant) if r["from"] in st and r["to"] in st and r["from"] != r["to"]]
-    out_total = {}
+    # Los componentes de ensamble se suponen a la mano: su traslado está en las métricas, no en la pieza.
+    mat = [r for r in flows.material_routes(plant) if r["from"] in st and r["to"] in st and r["from"] != r["to"] and not flows.is_component(r)]
     # Retorno: el marcado con is_return o el que vuelve hacia atrás en el orden del proceso.
     rank = {k: i for i, k in enumerate(flows.ordered(plant))}
     back = {r["id"] for r in mat if r.get("is_return") or rank.get(r["to"], 0) <= rank.get(r["from"], 0)}
     for r in mat:
         nxt.setdefault(r["from"], []).append((r["to"], float(r.get("frac", 1) or 0), r["id"], r["id"] in back))
-        out_total[r["from"]] = out_total.get(r["from"], 0.0) + float(r.get("frac", 1) or 0)
+    share = shares(plant)
     for r in mat:
-        # Un ensamble espera a cada entrada que seguro llega: la que sale de una elección
-        # exclusiva (las salidas suman 100 % o menos; tarde o temprano se toma) o la segura
-        # de una bifurcación. Los retornos no se esperan.
-        if r["id"] not in back and (out_total[r["from"]] <= 1.0001 or float(r.get("frac", 1) or 0) >= 0.999):
+        # Un ensamble espera a cada entrada por la que pasan todas las piezas que llegan a la
+        # estación. Si las entradas son ramas (cada una con una parte), convergen: no se espera
+        # a las demás. Los retornos no se esperan.
+        if r["id"] not in back and float(r.get("frac", 1) or 0) >= share.get(r["to"], 1.0) - 1e-3:
             joins[r["to"]] = joins.get(r["to"], 0) + 1
+    family = {sid: s.get("family") or sid for sid, s in st.items()}
     servers = {sid: max(1, units.servers(s)) for sid, s in st.items()}
     res = {sid: simpy.Resource(env, capacity=servers[sid]) for sid in st}
     sample = {sid: _sampler(s, rng) for sid, s in st.items()}
@@ -126,6 +127,15 @@ def _run(plant: dict, legs: dict, seed: int, days: int) -> dict | None:
         for _, ev in group:
             ev.succeed()
 
+    def pick(opts, total):
+        """Una opción elegida según sus porcentajes (elección exclusiva)."""
+        x, acc = rng.random() * max(total, 1e-9), 0.0
+        for o in opts:
+            acc += o[1]
+            if x <= acc:
+                return o
+        return opts[-1]
+
     def token(cur, ps, via_return=False, delay=0.0):
         """Una parte de la pieza llega a `cur`. Con varias entradas (ensamble) se espera a
         todas; un retorno (retrabajo) no espera. Con más de 100 % de salida, se divide."""
@@ -152,14 +162,19 @@ def _run(plant: dict, legs: dict, seed: int, days: int) -> dict | None:
             return
         total = sum(o[1] for o in opts)
         if total > 1.0001:
-            chosen = [o for o in opts if o[1] >= 0.999 or rng.random() < o[1]] or [max(opts, key=lambda o: o[1])]
-        else:
-            x, acc, chosen = rng.random() * max(total, 1e-9), 0.0, [opts[-1]]
+            # Se divide en paralelo: cada destino (o cada familia de ramas, de la que se toma
+            # una sola rama) se toma si es seguro o con su probabilidad.
+            groups = {}
             for o in opts:
-                acc += o[1]
-                if x <= acc:
-                    chosen = [o]
-                    break
+                groups.setdefault(family[o[0]], []).append(o)
+            chosen = []
+            for g in groups.values():
+                gsum = sum(o[1] for o in g)
+                if gsum >= 0.999 or rng.random() < gsum:
+                    chosen.append(pick(g, min(gsum, 1.0)))
+            chosen = chosen or [max(opts, key=lambda o: o[1])]
+        else:
+            chosen = [pick(opts, total)]
         for o in chosen:
             env.process(token(o[0], ps, o[3], legs.get(o[2], 0.0)))
 

@@ -89,8 +89,11 @@ def test_extractor_reintenta_y_no_inventa_estaciones_ni_cantidades(client, fake)
     assert len(fake.calls) >= 2 and "no cumplía el esquema" in fake.calls[1]["prompt"]
     names = [s["name"] for s in out["plant"]["stations"]]
     assert not any("Horno" in n for n in names)  # la historia no lo menciona
-    emb = next(s for s in out["plant"]["stations"] if "mbobin" in s["name"])
-    assert emb["count"] == 10
+    # Las 10 embobinadoras son 10 ramas de una misma familia, cada una con su ruta desde Corte.
+    emb = [s for s in out["plant"]["stations"] if "mbobin" in s["name"]]
+    assert len(emb) == 10 and len({s["family"] for s in emb}) == 1 and [s["lane"] for s in emb] == list(range(1, 11))
+    ids = {s["id"] for s in emb}
+    assert sum(1 for r in out["plant"]["routes"] if r["to"] in ids) == 10
 
 
 def test_misiones_con_cifras_inventadas_se_descartan(client, fake):
