@@ -408,13 +408,14 @@ Es la parte que convierte un relato libre en una planta editable. Combina **dos 
 | Paso | Qué hace |
 |---|---|
 | Filtrar estaciones | Descarta lo que **no es estación** (portones, puertas, carros, pasillos, patio) y lo que es zona (oficina, baños). |
+| Zonas y dimensiones | Se crea una zona por cada mención del mismo tipo (por ejemplo, dos baños); las medidas indicadas junto a cada mención (como "baño de 12x2m") se usan individualmente. Las dimensiones indicadas junto a una estación (como "sierra de 6x8m") también se respetan. Si no se indican medidas, se conservan las dimensiones predeterminadas del catálogo. |
 | Validar contra el texto | Cada estación de la IA debe aparecer en la historia (por raíz de su nombre o palabra clave de su tipo). Si no, se descarta y se avisa: *"No incluí lo que la historia no menciona: …"*. |
 | Corregir el tipo | Si el nombre contiene una palabra clave, ese tipo manda sobre el que dijo la IA. |
 | Completar | Lo que las reglas encontraron y la IA no, se agrega. |
 | Flujo | Se usa el de la IA solo si es coherente: las rutas que **regresan** a una estación anterior se descartan (casi siempre son errores de lectura). Las estaciones sueltas se encadenan en orden. |
 | Números | Para producción, camiones y personas se prefiere lo que dicen las reglas (sale literal de la historia) y luego lo de la IA, siempre dentro de rangos razonables. La producción semanal se divide entre 5 y la mensual entre 22. |
 | Personas | Se reparten 1 por estación empezando por las más lentas; las sobrantes, en ronda. |
-| Bodega | El tamaño se estima como 3,2 veces el área de máquinas y zonas (mínimo 300 m²), en proporción 2:1. Se crean dos portones (A entra, B sale). |
+| Bodega | Si la historia indica las medidas de la planta, el taller o la fábrica, se usan esas dimensiones; si no, se estima el tamaño como 3,2 veces el área de máquinas y zonas (mínimo 300 m²), en proporción 2:1, respetando que las zonas quepan dentro. Se crean dos portones (A entra, B sale). |
 | Acomodo inicial | `initial_layout()` coloca las estaciones en filas siguiendo el flujo. **No pretende ser la planta real**: el usuario la corrige. |
 
 Si no se reconoce nada, se crea una sola caja genérica "Proceso 1" para empezar a dibujar. Todo empieza con `use_assumptions: false`.

@@ -86,6 +86,87 @@ def words_to_digits(t: str) -> str:
 
 
 WORD_START = r"(?<![a-z])"
+DIMENSIONS_AFTER_MENTION = re.compile(
+    r"^[\s(,:-]*(?:(?:con\s+dimensiones?\s+de|dimensiones?\s+de|area\s+de|de|mide|es|tiene|con)\s*)?"
+    r"(?P<w>\d+(?:[.,]\d+)?)\s*(?:m(?:etros?)?\s*)?(?:x|×|por)\s*"
+    r"(?P<d>\d+(?:[.,]\d+)?)\s*(?:m(?:etros?)?)?"
+)
+FACILITY_DIMENSIONS = re.compile(
+    r"^\s*(?P<context>(?:(?:[a-z0-9]+\s+){0,6}?)"
+    r"(?:que\s+)?(?:mide|tiene|es|de|con\s+dimensiones?\s+de)\s*)"
+    r"(?P<w>\d+(?:[.,]\d+)?)\s*(?:m(?:etros?)?\s*)?(?:x|×|por)\s*"
+    r"(?P<d>\d+(?:[.,]\d+)?)\s*(?:m(?:etros?)?)?"
+)
+
+
+def _facility_dimensions(text: str) -> tuple[float, float] | None:
+    """Extrae las medidas explícitas de la planta, taller o fábrica."""
+    facility_terms = ("planta", "fabrica", "taller", "carpinteria", "tamaleria")
+    intervening_keywords = [
+        keyword
+        for catalog in (KIND, ZONE)
+        for item in catalog.values()
+        for keyword in item["keywords"]
+    ]
+    for term in facility_terms:
+        for mention in re.finditer(WORD_START + re.escape(term), text):
+            match = FACILITY_DIMENSIONS.match(text[mention.end():mention.end() + 100])
+            if not match:
+                continue
+            context = match.group("context")
+            if any(re.search(WORD_START + re.escape(keyword), context) for keyword in intervening_keywords):
+                continue
+            width = float(match.group("w").replace(",", "."))
+            depth = float(match.group("d").replace(",", "."))
+            if width > 0 and depth > 0:
+                return width, depth
+    return None
+
+
+def _zone_instances(text: str, zone_id: str) -> list[tuple[str, float, float]]:
+    """Devuelve una instancia por mención del primer nombre detectado para la zona."""
+    keywords = ZONE[zone_id]["keywords"]
+    mentions = [
+        (match.start(), keyword, match.end())
+        for keyword in keywords
+        for match in re.finditer(WORD_START + re.escape(keyword) + r"(?:s|es)?", text)
+    ]
+    if not mentions:
+        return []
+
+    _, keyword, _ = min(mentions, key=lambda item: (item[0], -len(item[1])))
+    instances = []
+    for mention in re.finditer(WORD_START + re.escape(keyword) + r"(?:s|es)?", text):
+        match = DIMENSIONS_AFTER_MENTION.match(text[mention.end():mention.end() + 64])
+        dimensions = None
+        if match:
+            width = float(match.group("w").replace(",", "."))
+            depth = float(match.group("d").replace(",", "."))
+            if width > 0 and depth > 0:
+                dimensions = (width, depth)
+        width, depth = dimensions or (ZONE[zone_id]["w"], ZONE[zone_id]["d"])
+        instances.append((ZONE[zone_id]["name"], width, depth))
+    return instances
+
+
+def _station_instances(text: str, kind: str) -> list[tuple[int, tuple[float, float] | None]]:
+    """Devuelve cada mención de una estación y las medidas asociadas a esa mención."""
+    mentions = {}
+    for keyword in KIND[kind]["keywords"]:
+        for mention in re.finditer(WORD_START + re.escape(keyword), text):
+            mentions[mention.start()] = mention
+
+    instances = []
+    for mention in sorted(mentions.values(), key=lambda item: item.start()):
+        match = DIMENSIONS_AFTER_MENTION.match(text[mention.end():mention.end() + 64])
+        dimensions = None
+        if match:
+            width = float(match.group("w").replace(",", "."))
+            depth = float(match.group("d").replace(",", "."))
+            if width > 0 and depth > 0:
+                dimensions = (width, depth)
+        instances.append((mention.start(), dimensions))
+    return instances
 
 
 def by_rules(text: str) -> dict:
@@ -185,11 +266,12 @@ def _nice(name):
     return name[:1].upper() + name[1:].lower() if name.isupper() else name[:1].upper() + name[1:]
 
 
-def _station(i, name, kind, t=None, ops=None):
+def _station(i, name, kind, t=None, ops=None, dimensions=None):
     k = KIND[kind]
     ok_t = isinstance(t, (int, float)) and 0 < t < 600
+    w, d = dimensions or (k["w"], k["d"])
     return {
-        "id": _uid("s", i), "name": name, "kind": kind, "w": k["w"], "d": k["d"],
+        "id": _uid("s", i), "name": name, "kind": kind, "w": w, "d": d,
         "t": float(t) if ok_t else k["t"],
         "ops": int(ops) if isinstance(ops, int) and 0 <= ops < 50 else k["ops"],
         "t_source": "ia" if ok_t else "supuesto",
@@ -238,7 +320,36 @@ def build_plant(text: str, ai: dict | None) -> dict:
         added = True
     # Lo que entra va primero y lo que sale al final; lo demás en el orden en que se cuenta.
     found.sort(key=lambda f: (f[2] != "recepcion", f[2] == "despacho", f[0]))
-    stations = [_station(i, f[1], f[2], f[3], f[4]) for i, f in enumerate(found)]
+    station_entries = []
+    for kind in KIND:
+        entries = sorted((entry for entry in found if entry[2] == kind), key=lambda entry: entry[0])
+        mentions = _station_instances(t, kind)
+        if not entries and not mentions:
+            continue
+
+        count = max(len(entries), len(mentions))
+        for i in range(count):
+            if i < len(entries):
+                entry = entries[i]
+                _, name, _, minutes, operators = entry
+            else:
+                name, minutes, operators = KIND[kind]["name"], None, None
+            if i < len(mentions):
+                position, dimensions = mentions[i]
+            else:
+                position, dimensions = entry[0], None
+            station_entries.append((position, name, kind, minutes, operators, dimensions))
+
+    station_entries.sort(key=lambda entry: (entry[2] != "recepcion", entry[2] == "despacho", entry[0]))
+    kind_counts = {kind: sum(entry[2] == kind for entry in station_entries) for kind in KIND}
+    kind_indices = {kind: 0 for kind in KIND}
+    stations = []
+    for entry in station_entries:
+        _, name, kind, minutes, operators, dimensions = entry
+        kind_indices[kind] += 1
+        if kind_counts[kind] > 1 and name == KIND[kind]["name"]:
+            name = f"{name} {kind_indices[kind]}"
+        stations.append(_station(len(stations), name, kind, minutes, operators, dimensions))
     if dropped:
         notes.append("No incluí lo que la historia no menciona: " + ", ".join(dropped) + ".")
     # Sin nada reconocible, una sola caja genérica para empezar a dibujar.
@@ -313,16 +424,27 @@ def build_plant(text: str, ai: dict | None) -> dict:
         assumptions.append({"key": key, "label": label, "unit": unit, "why": "Tomado de tu historia." if val else why, "value": p[key], "source": val[2] if val else "supuesto"})
 
     # --- Bodega, portones y acomodo inicial ---
-    area = sum(s["w"] * s["d"] for s in stations) + sum(ZONE[k]["w"] * ZONE[k]["d"] for k, _ in zkinds)
+    zone_instances = [
+        (kind, name, width, depth)
+        for kind, _ in zkinds
+        for name, width, depth in _zone_instances(t, kind)
+    ]
+    area = sum(s["w"] * s["d"] for s in stations) + sum(w * d for _, _, w, d in zone_instances)
     total = max(area * 3.2, 300)
     D = max(14, math.ceil(math.sqrt(total / 2) / 2) * 2)
     W = max(24, math.ceil(total / D / 2) * 2)
+    facility_size = _facility_dimensions(t)
+    if facility_size:
+        W, D = facility_size
+    W = max(W, math.ceil((sum(w for _, _, w, _ in zone_instances) + max(0, len(zone_instances) - 1) + 2 * EDGE) / 2) * 2)
+    D = max(D, math.ceil((max((d for _, _, _, d in zone_instances), default=0) + 2 * EDGE) / 2) * 2)
     zones = []
     x = W - EDGE
-    for i, (k, name) in enumerate(zkinds):
-        z = ZONE[k]
-        zones.append({"id": f"z{i + 1}", "name": name, "kind": k, "x": round(x - z["w"] / 2, 1), "z": round(D - EDGE - z["d"] / 2, 1), "w": z["w"], "d": z["d"]})
-        x -= z["w"] + 1
+    for i, (kind, name, w, d) in enumerate(zone_instances):
+        if sum(1 for item in zone_instances if item[0] == kind) > 1:
+            name = f"{name} {sum(1 for item in zone_instances[:i] if item[0] == kind) + 1}"
+        zones.append({"id": f"z{i + 1}", "name": name, "kind": kind, "x": round(x - w / 2, 1), "z": round(D - EDGE - d / 2, 1), "w": w, "d": d})
+        x -= w + 1
 
     plant = {
         "name": str(ai.get("negocio") or "Mi planta").strip()[:60],
