@@ -6,6 +6,7 @@ import LoadChart from '../charts/LoadChart'
 import RelChart from '../charts/RelChart'
 import Btn from '../fx/Btn'
 import { Appear, CountUp, RevealTitle, Tilt } from '../fx/Reveal'
+import ResultDetails, { DiscardedClaims } from '../components/ResultDetails'
 
 function Kpi({ value, decimals = 0, unit, label, sub }) {
 	return (
@@ -44,6 +45,8 @@ export default function Diagnosis({ plant, analysis, report, onNext }) {
 
 	return (
 		<section className="step">
+			<ResultDetails analysis={analysis} />
+			<DiscardedClaims validation={report.validation} />
 			<header className="step-head">
 				<span className="step-index">03 / Diagnóstico</span>
 

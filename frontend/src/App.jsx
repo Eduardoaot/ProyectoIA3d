@@ -15,6 +15,11 @@ import Report from './steps/Report'
 import Story from './steps/Story'
 import Summary from './steps/Summary'
 import Workshop from './steps/Workshop'
+import { isStale } from './revisions'
+import { migratePlant } from './storage'
+import { applyOps, diffOps } from './editor/operations'
+import { analyzeConfirmed, contextSignature, isConfirmed } from './context'
+import { DEFAULT_WEIGHTS, hasFeature, validWeights } from './features'
 
 const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen', 'Taller de mejora (extra)']
 
@@ -34,11 +39,13 @@ function slim(project, ch) {
 
 export default function App() {
     const [intro, setIntro] = useState(true)
-    const [project, update, reset] = useProject()
+    const [project, update, reset, saveError] = useProject()
     const [step, setStep] = useState(() => (project.plant ? 1 : 0))
     const [catalog, setCatalog] = useState(null)
+    const [capabilities, setCapabilities] = useState({ features: [] })
     const [reading, setReading] = useState(false)
     const [saving, setSaving] = useState(false)
+    const [confirmation, setConfirmation] = useState(null)
     const [error, setError] = useState(null)
     const [chat, setChat] = useState(false)
     const [toast, setToast] = useState(null)
@@ -48,12 +55,14 @@ export default function App() {
     const { plant, analysis, draft, info } = project
     const ch = useMemo(() => chosenOf(project), [project])
     const context = useMemo(() => slim(project, ch), [project, ch])
-    const version = `${analysis?.current?.piece_m}-${ch?.id}-${ch?.metrics?.piece_m}`
+    const version = `${project.analysis_revision}-${project.plant_revision}-${ch?.id}`
     const report = useReport(context, version)
 
     useEffect(() => {
         api.health().then(setAi).catch(() => setAi(null))
         api.catalog().then(setCatalog).catch(() => setError('Error conectando con el servidor.'))
+        // Warm the shared cache. Unsupported features remain disabled.
+        api.getCapabilities().then(setCapabilities)
     }, [])
 
     const notify = useCallback((msg) => setToast({ msg, id: Date.now() }), [])
@@ -80,7 +89,7 @@ export default function App() {
 
         try {
             const r = await api.story(project.text)
-            update({ draft: r.plant, info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error } })
+            update({ draft: migratePlant(r.plant), info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error } })
             setReading(false)
 
             return true
@@ -93,13 +102,23 @@ export default function App() {
 
     const blank = () => update({ draft: blankPlant(defaultParams()), info: { source: 'Plano vacío', notes: [] } })
 
+    const importPlant = (imported, filename) => {
+        update({ draft: migratePlant(imported), info: { source: 'Archivo JSON', notes: [`Importado de ${filename}. Revisa el plano antes de analizarlo.`] } })
+        setError(null)
+        notify(`Proyecto importado: ${imported.name}`)
+    }
+
     const save = async () => {
+        if (saving || !isConfirmed(draft, confirmation) || (hasFeature(capabilities, 'weights') && !validWeights(project.weights || DEFAULT_WEIGHTS))) return
+        const revision = project.plant_revision || 0
+        const snapshot = structuredClone(draft)
         setSaving(true)
         setError(null)
 
         try {
-            const out = await api.analyze(draft)
-            update({ plant: draft, analysis: out, redesign: { choice: null, custom: null, metrics: null }, printed: false, game: EMPTY_GAME })
+            const out = await analyzeConfirmed(snapshot, confirmation, (p) => api.analyze(p, project.weights))
+            update((current) => ({ plant: snapshot, analysis: out, analysis_revision: revision,
+                ...(current.plant_revision === revision ? { redesign: { choice: null, custom: null, metrics: null } } : {}), printed: false, game: EMPTY_GAME }))
             go(1)
         } catch {
             setError('Error al analizar el plano.')
@@ -131,19 +150,29 @@ export default function App() {
             setText={(t) => update((p) => ({ text: typeof t === 'function' ? t(p.text) : t }))}
             info={info}
             draft={draft}
-            setDraft={(d) => update({ draft: d })}
+            setDraft={(d) => {
+                try { update({ draft: draft ? applyOps(draft, diffOps(draft, d)).plant : d }); setConfirmation(null) }
+                catch (failure) { notify(failure.message) }
+            }}
             catalog={catalog}
             reading={reading}
             error={error}
             onRead={read}
             onBlank={blank}
+            onImport={importPlant}
             onSave={save}
             saving={saving}
+            baseline={plant}
+            capabilities={capabilities}
+            weights={project.weights || DEFAULT_WEIGHTS}
+            onWeights={(weights) => { update({ weights }); setConfirmation(null) }}
+            contextConfirmed={isConfirmed(draft, confirmation)}
+            onConfirmContext={() => setConfirmation(contextSignature(draft))}
             />
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
         if (step === 2) return <Diagnosis plant={plant} analysis={analysis} report={report} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} catalog={catalog} onNext={() => go(4)} />
+        if (step === 3) return <Redesign capabilities={capabilities} plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} catalog={catalog} onNext={() => go(4)} />
         if (step === 4) return <Report plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
         if (step === 5) return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onWorkshop={() => go(6)} onRestart={restart} />
 
@@ -200,6 +229,17 @@ export default function App() {
                 </nav>
 
                 <main className="stage" ref={stage}>
+                    {saveError && <div role="alert" className="editor-notice">{saveError} <button type="button" className="btn btn--small" onClick={() => {
+                        const url = URL.createObjectURL(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }))
+                        const link = document.createElement('a'); link.href = url; link.download = 'cauce-proyecto.json'; link.click()
+                        setTimeout(() => URL.revokeObjectURL(url), 1000)
+                    }}>Descargar copia JSON</button></div>}
+                    {analysis && <div className="analysis-status" role="status">
+                        {isStale(project) ? 'Desactualizado: el plano cambió' : 'Análisis del plano guardado'}
+                        <span className="small"> · Revisión {project.analysis_revision ?? 0} / actual {project.plant_revision || 0}</span>
+                        {analysis.plant_version && <details><summary>Versión del motor</summary><code>{analysis.plant_version}</code></details>}
+                        {analysis.context_version && <details><summary>Versión del contexto analizado</summary><code>{analysis.context_version}</code></details>}
+                    </div>}
                     <AnimatePresence mode="wait">
                         <motion.div key={ready ? step : 0} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
                           {view}

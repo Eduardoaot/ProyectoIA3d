@@ -16,7 +16,7 @@ export default function Report({ plant, analysis, chosen, notes, report, catalog
         return () => window.removeEventListener('afterprint', after)
     }, [onPrinted])
 
-    const doc = <ReportDoc plant={plant} analysis={analysis} chosen={chosen} notes={notes} reportText={report.state === 'running' ? '' : report.text} catalog={catalog} />
+    const doc = <ReportDoc plant={plant} analysis={analysis} chosen={chosen} notes={notes} validation={report.validation} reportText={report.state === 'running' ? '' : report.text} catalog={catalog} />
 
     return (
         <section className="step">

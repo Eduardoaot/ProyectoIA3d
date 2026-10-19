@@ -154,7 +154,7 @@ export default class PlantScene {
       g.traverse((o) => (o.userData.pick = s.id))
       this.root.add(g)
       this.stations.set(s.id, g)
-      this.addLabel(s.id, s.name)
+      this.addLabel(s.id, s.name + ((s.count || 1) > 1 ? ` ×${s.count}` : ''))
     }
     for (const f of plant.zones || []) {
       const g = makeMachine(f.kind, f.w, f.d)

@@ -4,6 +4,7 @@ import FlowMark from '../brand/FlowMark'
 import Wordmark from '../brand/Wordmark'
 import FlowPlan from '../charts/FlowPlan'
 import RelChart from '../charts/RelChart'
+import ResultDetails, { DiscardedClaims } from '../components/ResultDetails'
 
 const Delta = ({ before, after, up }) => {
 	const p = pct(before, after)
@@ -18,7 +19,7 @@ const Delta = ({ before, after, up }) => {
 	)
 }
 
-export default function ReportDoc({ plant, analysis, chosen, notes = [], reportText, catalog }) {
+export default function ReportDoc({ plant, analysis, chosen, notes = [], reportText, catalog, validation }) {
 	const cur = analysis.current
 	const m = chosen?.metrics
 	const full = plant.use_assumptions && cur.daily_m != null
@@ -230,6 +231,9 @@ export default function ReportDoc({ plant, analysis, chosen, notes = [], reportT
 				</section>
 			)}
 
+			<ResultDetails analysis={analysis} />
+			{chosen && <ResultDetails alternative={analysis.alternatives.find((a) => a.id === chosen.id) || {}} />}
+			<DiscardedClaims validation={validation} />
 			<footer className="doc-foot">
 				<span>Cauce · el recorrido de tu planta, en orden.</span>
 				<span>Los números salen del plano y de los supuestos indicados; confírmalos con datos medidos.</span>
