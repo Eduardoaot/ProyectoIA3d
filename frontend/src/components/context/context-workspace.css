@@ -105,6 +105,7 @@
 .cw-history { font-size: 11px; color: #777; margin-top: 12px; }
 .cw-history summary, .cw-file summary, .cw-processed summary { cursor: pointer; font-weight: 600; }
 .cw-history p { padding: 10px 0 0 12px; }
+.cw-history pre { max-height: 360px; overflow: auto; padding: 12px; background: var(--g100); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cw-manual-form { border: 1px solid #aaa; padding: 26px; margin-top: 20px; }
 .cw-manual-form > p { margin: 7px 0 22px; }
 .cw-manual-form > .cw-button { margin-top: 22px; }

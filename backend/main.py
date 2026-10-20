@@ -15,6 +15,7 @@ from cauce.engine import compare, evaluate, rebalance_ops, relations
 from cauce.layout import alternatives, ops_moves, plant_area, score
 from cauce.agents import MIN_CUES, check, detail, prompt, read_spatial
 from cauce.agents.roles import MISSION_SCHEMA
+from cauce.agents.context_workspace import organize_context
 from cauce.planops import plan_ops
 from cauce.simulate import simulate
 from cauce.compact import compact_alternative, footprint
@@ -31,6 +32,7 @@ missioner = get_provider("misiones")  # misiones del taller (JSON)
 editor = get_provider("editor")  # asistente del editor: instrucción -> operaciones
 spatial = get_provider("espacial")  # agentes que leen el espacio
 seer = get_provider("vision")  # imágenes de referencia (solo si el modelo tiene visión)
+context_organizer = get_provider("contexto")  # especialistas por tema y consolidador
 
 
 async def spatial_or_extractor():
@@ -40,6 +42,10 @@ async def spatial_or_extractor():
 
 
 class StoryInterface(BaseModel):
+    text: str
+
+
+class OrganizeContextInterface(BaseModel):
     text: str
 
 
@@ -72,7 +78,7 @@ class ChatInterface(BaseModel):
 
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
-FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors", "simulate"]
+FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors", "simulate", "context_agents"]
 
 
 def provider_caps(p) -> dict:
@@ -99,6 +105,16 @@ async def health():
 @app.get("/api/catalog")
 async def catalog_route():
     return catalog.public()
+
+
+@app.post("/api/context/organize")
+async def context_organize(body: OrganizeContextInterface):
+    text = body.text.strip()
+    if not text or len(text) > 8000:
+        raise HTTPException(422, "Describe la planta con entre 1 y 8000 caracteres por envío.")
+    if not (await context_organizer.status()).get("ready"):
+        raise HTTPException(503, "El proveedor de contexto no está disponible.")
+    return await organize_context(text, context_organizer)
 
 
 @app.post("/api/story")

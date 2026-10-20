@@ -359,6 +359,7 @@ Crea la app FastAPI, habilita CORS abierto (es una app local) e instancia las do
 | GET | `/api/catalog` | — | Tipos de estación, tipos de zona, supuestos, listas de áreas sucias y limpias | Editor y supuestos |
 | GET | `/api/example` | — | La planta de ejemplo (taller de vidrio) | Botón "Cargar el taller de vidrio" |
 | POST | `/api/story` | `{ text }` | `plant`, `assumptions`, `source` (ia/reglas), `notes`, `ai_assumptions`, `rules`, `error`, `extracted` | Leer la historia |
+| POST | `/api/context/organize` | `{ text }` (1–8000 caracteres) | `proposals`, `master` (`draft`), `errors` por especialista | Diez especialistas por tema y un consolidador preparan contexto revisable; requiere proveedor listo |
 | POST | `/api/routes` | `{ plant, positions }` | `legs`, `piece_m`, `blocked_legs`, `avoid_hits` | Recorridos en vivo del editor (sin supuestos) |
 | POST | `/api/evaluate` | `{ plant, positions, rebalance }` | Todas las métricas + `ops_moves` | Métricas de "Tu rediseño" |
 | GET | `/api/capabilities` | — | `{ schema_version: 3, features, vision }` | El frontend muestra solo lo que el backend anuncia |
@@ -370,7 +371,7 @@ Crea la app FastAPI, habilita CORS abierto (es una app local) e instancia las do
 | POST | `/api/simulate` | `{ plant, alternative?, replicas?, seed?, positions? }` | `{ seed, replicas, kpis, bottleneck, notes }` con P10, mediana y P90 | Simulación con variabilidad |
 | POST | `/api/references/read` | `{ image, note }` | Descripción de la imagen, o 422 si el proveedor no tiene visión | Referencias con imagen |
 
-`features` hoy: `report_validation`, `segmented_context`, `count`, `locked`, `plan_ops`, `weights`, `flows`, `conveyors`, `simulate`. El contrato completo está en [coordinacion/CONTRATO-v3.md](coordinacion/CONTRATO-v3.md).
+`features` hoy: `report_validation`, `segmented_context`, `count`, `locked`, `plan_ops`, `weights`, `flows`, `conveyors`, `simulate`, `context_agents`. El contrato completo está en [coordinacion/CONTRATO-v3.md](coordinacion/CONTRATO-v3.md). El JSON maestro de `/api/context/organize` es un borrador que no modifica el plano; cada propuesta requiere revisión. Si la IA de contexto no está lista, la interfaz usa la clasificación local por palabras clave e informa esa limitación.
 
 **Validación del informe (`cauce/validate.py`).** Cada oración del informe y del chat se revisa antes de mostrarse: si cita una cifra que no está en `facts()` (con tolerancia de redondeo) o elogia una alternativa que el motor muestra peor que hoy, se descarta y queda en `validation.discarded`.
 

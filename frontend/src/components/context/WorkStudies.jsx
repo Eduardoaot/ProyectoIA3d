@@ -1,4 +1,5 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
+import { displayEntry, entryLabel } from '../../contextWorkspace'
 import './work-studies.css'
 
 const TYPES = [
@@ -24,8 +25,9 @@ function studyRoutes(routes = []) {
     })
 }
 
-export default function WorkStudies({ plant, activities = [], attachments = [], onChange, onAttach }) {
+export default function WorkStudies({ plant, activities = [], attachments = [], notes = [], onChange, onAttach }) {
     const prefix = useId()
+    const [expanded, setExpanded] = useState(null)
     const stations = plant?.stations || []
     const routes = studyRoutes(plant?.routes)
     const studies = attachments.filter((file) => file.topic === 'estudios')
@@ -35,10 +37,12 @@ export default function WorkStudies({ plant, activities = [], attachments = [], 
 
     function addActivity() {
         const sequence = Math.max(0, ...activities.map((activity) => Number(activity.sequence) || 0)) + 1
+        const id = newId()
         onChange([...activities, {
-            id: newId(), sequence, type: 'operacion', description: '',
+            id, sequence, type: 'operacion', description: '',
             time: '', timeUnit: 'min', distance: '', stationId: '', routeId: '', sourceId: '',
         }])
+        setExpanded(id)
     }
 
     return (
@@ -67,6 +71,8 @@ export default function WorkStudies({ plant, activities = [], attachments = [], 
                 </div>
             )}
 
+            {notes.length > 0 && <div className="work-studies__sources"><span className="work-studies__eyebrow">Información confirmada sobre estudios</span>{notes.map((entry) => <div className="work-studies__source" key={entry.id}><strong>{entryLabel(entry)}</strong><span>{displayEntry(entry)}</span></div>)}</div>}
+
             <div className="work-studies__heading">
                 <div>
                     <h3>Actividades</h3>
@@ -92,12 +98,15 @@ export default function WorkStudies({ plant, activities = [], attachments = [], 
                     const sourceMissing = activity.sourceId && !studies.some((file) => file.id === activity.sourceId)
                     return (
                         <article key={activity.id} className="work-studies__activity" aria-label={`Actividad ${index + 1}`}>
-                            <div className="work-studies__activity-top">
+                            <button type="button" className="work-studies__activity-top" aria-expanded={expanded === activity.id} onClick={() => setExpanded(expanded === activity.id ? null : activity.id)}>
+                                <span className="work-studies__step">{String(activity.sequence || index + 1).padStart(2, '0')}</span>
                                 <span className="work-studies__activity-symbol" aria-hidden="true">{type.symbol}</span>
                                 <strong>{activity.description || `Actividad ${index + 1}`}</strong>
-                                <button type="button" className="work-studies__remove" onClick={() => onChange(activities.filter((item) => item.id !== activity.id))} aria-label={`Eliminar actividad ${index + 1}`}>Eliminar</button>
-                            </div>
-                            <div className="work-studies__fields">
+                                <span className="work-studies__activity-kind">{type.label}</span>
+                                {activity.time !== '' && activity.time != null && <span className="work-studies__activity-kind">{activity.time} {activity.timeUnit || 'min'}</span>}
+                                <span className="work-studies__activity-expand" aria-hidden="true">{expanded === activity.id ? '−' : '+'}</span>
+                            </button>
+                            {expanded === activity.id && <div className="work-studies__fields">
                                 <label htmlFor={`${id}-sequence`} className="work-studies__field work-studies__field--sequence">
                                     Secuencia
                                     <input id={`${id}-sequence`} type="number" min="1" step="1" value={activity.sequence ?? ''} onChange={(event) => patch(activity.id, { sequence: event.target.value === '' ? '' : Math.max(1, Math.round(Number(event.target.value))) })} />
@@ -154,31 +163,15 @@ export default function WorkStudies({ plant, activities = [], attachments = [], 
                                         {studies.map((file) => <option key={file.id} value={file.id}>{file.name}</option>)}
                                     </select>
                                 </label>
-                            </div>
+                            </div>}
+                            {expanded === activity.id && <div className="work-studies__activity-actions"><button type="button" className="work-studies__remove" onClick={() => { onChange(activities.filter((item) => item.id !== activity.id)); setExpanded(null) }} aria-label={`Eliminar actividad ${index + 1}`}>Eliminar actividad</button></div>}
                             {(stationMissing || routeMissing || sourceMissing) && <p className="work-studies__missing" role="status">Una referencia ya no está disponible. Revísala antes de usar este estudio.</p>}
                         </article>
                     )
                 })}
             </div>
 
-            {activities.length > 0 && (
-                <div className="work-studies__preview">
-                    <h3>Vista preliminar del estudio</h3>
-                    <p className="small">Orden de las actividades capturadas. Este borrador requiere validación y todavía no representa las ramas ni las uniones del proceso.</p>
-                    <ol className="work-studies__strip">
-                        {sorted.map((activity) => {
-                            const type = TYPES.find((item) => item.id === activity.type) || TYPES[0]
-                            return (
-                                <li key={activity.id}>
-                                    <span className="work-studies__preview-type"><b aria-hidden="true">{type.symbol}</b>{type.label}</span>
-                                    <strong>{activity.sequence || '—'}. {activity.description || 'Sin descripción'}</strong>
-                                    <span>{activity.time === '' || activity.time == null ? 'Tiempo sin dato' : `${activity.time} ${activity.timeUnit || 'min'}`} · {activity.distance === '' || activity.distance == null ? 'Distancia sin dato' : `${activity.distance} m`}</span>
-                                </li>
-                            )
-                        })}
-                    </ol>
-                </div>
-            )}
+            {activities.length > 0 && <p className="small">Las filas siguen el orden indicado. Este borrador requiere revisión y aún no representa ramas ni uniones del proceso.</p>}
         </section>
     )
 }

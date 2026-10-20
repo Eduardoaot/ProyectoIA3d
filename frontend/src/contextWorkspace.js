@@ -1,15 +1,15 @@
 /* Borrador de interfaz: no cambia el contrato de la planta ni la API. */
 export const TOPICS = [
-    { id: 'negocio', label: 'Negocio', hint: 'Qué produces, para quién y cuánto necesitas entregar.', example: 'Fabricamos muebles bajo pedido para comercios.' },
-    { id: 'operaciones', label: 'Operaciones', hint: 'Procesos, productos y la forma de trabajar.', example: 'Primero cortamos, después ensamblamos y al final empacamos.' },
-    { id: 'tiempos', label: 'Tiempos', hint: 'Ciclos, turnos, esperas y tiempos de cambio.', example: 'El ensamble tarda entre 20 y 30 minutos por pieza.' },
-    { id: 'maquinas', label: 'Máquinas y espacio', hint: 'Equipos, cantidades, dimensiones y distribución.', example: 'Tenemos tres cortadoras y un área de ensamble.' },
-    { id: 'flujo', label: 'Flujo de materiales', hint: 'Recorridos, transportes, regresos y almacenamiento.', example: 'La materia prima entra por el portón norte.' },
-    { id: 'personal', label: 'Personal', hint: 'Personas, roles, horarios y organización.', example: 'Trabajan seis personas en el turno de la mañana.' },
-    { id: 'calidad', label: 'Calidad', hint: 'Inspecciones, defectos y retrabajos.', example: 'Revisamos cada pieza antes del empaque.' },
-    { id: 'restricciones', label: 'Restricciones', hint: 'Lo que debe permanecer fijo y los límites del cambio.', example: 'El horno no se puede mover por su conexión de gas.' },
-    { id: 'estudios', label: 'Estudios del trabajo', hint: 'Actividades observadas y documentos del proceso.', example: 'Registra una operación, un transporte o una espera.' },
-    { id: 'referencias', label: 'Imágenes y layouts', hint: 'Fotos, planos y ejemplos con sus notas.', example: 'Adjunta el plano actual o una distribución de referencia.' },
+    { id: 'negocio', label: 'Negocio', hint: 'Qué produces, para quién y cuánto necesitas entregar.', example: 'Vendemos unos 80 transformadores por mes; es un estimado de Ana, responsable de ventas.' },
+    { id: 'operaciones', label: 'Operaciones', hint: 'Procesos, productos y la forma de trabajar.', example: 'Primero cortamos lámina y luego ensamblamos; lo describió Luis, supervisor del turno matutino.' },
+    { id: 'tiempos', label: 'Tiempos', hint: 'Ciclos, turnos, esperas y tiempos de cambio.', example: 'El corte tarda aproximadamente 12 minutos por pieza; Laura lo midió la semana pasada.' },
+    { id: 'maquinas', label: 'Máquinas y espacio', hint: 'Equipos, cantidades, dimensiones y distribución.', example: 'Tenemos tres cortadoras junto a recepción; lo confirmó Marta, jefa de planta.' },
+    { id: 'flujo', label: 'Flujo de materiales', hint: 'Recorridos, transportes, regresos y almacenamiento.', example: 'Cada lote de 20 piezas va del corte al ensamble; lo observó Pedro en el turno de mañana.' },
+    { id: 'personal', label: 'Personal', hint: 'Personas, roles, horarios y organización.', example: 'Trabajan seis personas en el turno de 8 horas; dato proporcionado por Recursos Humanos.' },
+    { id: 'calidad', label: 'Calidad', hint: 'Inspecciones, defectos y retrabajos.', example: 'Revisamos cada pieza antes del empaque; según el registro de calidad, unas 2 de cada 100 se retrabajan.' },
+    { id: 'restricciones', label: 'Restricciones', hint: 'Lo que debe permanecer fijo y los límites del cambio.', example: 'El horno no puede moverse por la conexión de gas; lo confirmó el responsable de mantenimiento.' },
+    { id: 'estudios', label: 'Estudios del trabajo', hint: 'Actividades observadas y documentos del proceso.', example: 'En el estudio de Laura, transportar cada lote al horno tomó unos 4 minutos; fue medido el lunes.' },
+    { id: 'referencias', label: 'Imágenes y layouts', hint: 'Fotos, planos y ejemplos con sus notas.', example: 'Este plano lo entregó mantenimiento en mayo; las medidas están en metros y faltan por comprobar.' },
 ]
 
 // Huella local para detectar cambios, no es una firma de seguridad.

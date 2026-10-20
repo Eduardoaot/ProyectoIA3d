@@ -23,6 +23,14 @@ Para revisar: `cd frontend`, `npm ci`, `npm run dev`; abrir el enlace local y en
 
 Verificación de esta entrega: 58 pruebas unitarias, compilación y prueba en Chrome con el caso de transformadores, API simulada y perfil aislado. Se comprobaron propuestas, historial, archivos TXT/PDF, estudios, prioridades, confirmación, persistencia tras recarga, foco de teclado y seis vistas a 390 px. La prueba de navegador se ejecuta con Vite activo mediante `node tests/context-workspace.browser.mjs`; `CAUCE_BROWSER` permite indicar otro Chromium. El lint conserva advertencias previas del proyecto.
 
+## Avance mínimo posterior: captura simple y borrador multiagente
+
+- La captura manual de cada tema pide solo **«¿De qué se trata?»** y **«Descripción»**. Los ejemplos incorporan cantidad, unidad, procedencia y responsable cuando corresponden. Se conservan los metadatos históricos, pero la interfaz ya no obliga a llenarlos como campos separados.
+- Las actividades de estudios aparecen como filas verticales compactas. Al abrir una fila se editan tipo, descripción, tiempo, distancia y vínculos; los datos desconocidos continúan vacíos.
+- `POST /api/context/organize` consulta un especialista de IA por cada uno de los diez temas y luego un consolidador. Devuelve propuestas con fragmento literal del texto y un **JSON maestro en estado `draft`**. El consolidador solo puede referir propuestas producidas por especialistas; los datos inventados sin fragmento literal se descartan. Los fallos parciales se informan.
+- El frontend usa esa ruta cuando el backend anuncia `context_agents`. Si no hay proveedor listo o el backend es anterior, conserva la clasificación local por palabras clave e indica esa limitación. Las propuestas requieren confirmación humana; el JSON maestro se puede consultar en «Así entendimos tu planta» y no modifica el plano.
+- Este avance **no sustituye D0–D8**: el JSON maestro todavía no es una versión aceptada y persistida en backend, no se ha conectado con el constructor del plano, ni se han generado cursogramas finales. El límite inicial de esta ruta es de 8000 caracteres por envío; el procesamiento recuperable de documentos largos sigue en D3–D4.
+
 ## Revisión con el usuario: acuerdos e ideas pendientes (20 de octubre de 2026)
 
 Esta sección registra la conversación posterior a la revisión del prototipo. Distingue requisitos acordados de propuestas técnicas que todavía deben cerrarse. Lo descrito como próximo trabajo **no está implementado**. La solicitud de esta revisión es actualizar el plan, sin comenzar cambios de código.

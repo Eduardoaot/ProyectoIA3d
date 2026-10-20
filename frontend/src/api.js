@@ -24,6 +24,7 @@ export const api = {
     getCapabilities: () => loadCapabilities(),
     catalog: () => get('/api/catalog'),
     story: (text) => post('/api/story', { text }),
+    organizeContext: (text) => post('/api/context/organize', { text }),
     routes: (plant, positions, signal) => post('/api/routes', { plant, positions }, signal),
     evaluate: (plant, positions, rebalance = true, signal) => post('/api/evaluate', { plant, positions, rebalance }, signal),
     // extra: campos nuevos del contrato v3 (context, weights); el backend viejo los ignora.
