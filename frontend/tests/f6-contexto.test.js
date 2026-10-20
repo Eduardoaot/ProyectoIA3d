@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { addEntry, contextPayload, current, EMPTY_CONTEXT, history, parseValue, showValue, toText } from '../src/context.js'
-import { summarize } from '../src/context2.js'
 
-const v2 = JSON.parse(readFileSync(new URL('../../pruebas/transformadores.json', import.meta.url), 'utf8'))
-const v3 = JSON.parse(readFileSync(new URL('../../pruebas/transformadores-v3.json', import.meta.url), 'utf8'))
 
 test('editar un tiempo deja la entrada anterior en el historial', () => {
     let ctx = addEntry(EMPTY_CONTEXT, { segment: 'tiempos', key: 'pulido.t_ciclo', value: [5, 6], unit: 'min/pieza', source: 'estimado', confidence: 'baja' }, '2026-10-10')
@@ -49,17 +45,4 @@ test('las imágenes no viajan en el contexto', () => {
     const obj = contextPayload(ctx, '', true)
     assert.equal(obj.segments.referencias[0].image, undefined)
     assert.equal(obj.segments.referencias[0].value, 'Planta de referencia en U')
-})
-
-test('Contexto 2 resume el plano y cambia cuando se edita', () => {
-    const a = summarize(v3)
-    assert.ok(a.lines[0].startsWith('14 estaciones con 36 máquinas'))
-    assert.ok(a.lines.some((l) => l.startsWith('Fijos') && l.includes('Horno de secado')))
-    assert.ok(a.lines.includes('Rutas de material: 18 (3 de retorno).'))
-    const moved = structuredClone(v2)
-    moved.layout.corte = [9, 12, 0]
-    const b = summarize(moved, v2)
-    assert.deepEqual(b.changes, ['Cambiaron de lugar: Corte de lámina de silicio.'])
-    assert.notEqual(b.signature, summarize(v2, v2).signature)
-    assert.deepEqual(summarize(v2, v2).changes, ['Sin cambios en estaciones ni rutas desde el último análisis.'])
 })

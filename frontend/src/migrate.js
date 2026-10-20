@@ -9,8 +9,11 @@ export const KEY_V3 = 'cauce-proyecto-v3'
    cuando el usuario cambia los operarios. */
 export function upgradePlant(plant) {
     if (!plant || !Array.isArray(plant.stations)) return plant
+    // Sin supuestos: el análisis cubre recorridos y cercanía entre áreas.
+    // eslint-disable-next-line no-unused-vars
+    const { use_assumptions, ...rest } = plant
     return {
-        ...plant,
+        ...rest,
         schema_version: 3,
         conveyors: plant.conveyors || [],
         stations: plant.stations.map((s) => ({

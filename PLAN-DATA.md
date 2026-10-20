@@ -1,8 +1,28 @@
-# Plan de `feature/data`: contexto inicial y reporte de ingeniería
+# Plan de `feature/data1`: contexto inicial y reporte de ingeniería
 
 ## Objetivo
 
 Dar al usuario un solo lugar, al inicio del proyecto, para contar cómo funciona su planta, adjuntar evidencia y comprobar qué entendió el sistema antes de analizar. Reunir allí las opciones que hoy están dispersas entre «Datos de la planta», «Referencias con imagen» y «Qué pesa más para ti». Ampliar el reporte con entregables de estudio del trabajo, especialmente cuando el usuario no subió uno.
+
+## Integración de GitHub y punto de continuación (20 de octubre de 2026)
+
+La rama de continuación es **`feature/data1`**, creada en el repositorio de `bdiazsofttek-oss` desde `feature/data` (`d2da671`). Se revisaron y actualizaron los remotos `origin` y `eduardo` antes de integrar:
+
+- **`eduardo/feature/experimentoData1` (`925bfcf`):** su contenido coincide exactamente con el commit `696e841` ya incorporado. Se integra su historial y se resuelven los 14 conflictos conservando los avances DATA posteriores, incluidos expedientes, documentos, operadores y estudios.
+- **`eduardo/feature/experimentoMergeData1Zona2_1` (`4f88bad`):** incluida por autorización adicional del usuario. Aporta lectura de recinto, portones y especificaciones, revisión del flujo con un segundo agente, mejoras de áreas/pasillos y elementos fijos, editor y presentación del rediseño, diálogos, cursograma gráfico y arranque local. Sus siete archivos en conflicto se combinan con el backend DATA conectado.
+- **Criterios de la combinación:** conservar las rutas y capacidades DATA, los límites de salida del organizador, la entrada de contexto aceptado y los entregables del reporte. Mantener «Sí, confirmar esta versión» antes de analizar y la edición de prioridades en el contexto, con interruptor y pesos base al desactivarlas. El ranking de Eduardo conserva sus detalles; cambiar prioridades requiere revisar y recalcular por el mismo recorrido.
+- **Estudios en el reporte:** las actividades aceptadas conservan los entregables estructurados y su procedencia. Cuando todavía no hay actividades aceptadas, el cursograma gráfico derivado del plano se presenta como borrador inferido, sin atribuirle observaciones ni una secuencia única de un proceso ramificado.
+- **Proveedor acordado:** Ollama local; el usuario configurará el modelo después. `iniciar.ps1` reutiliza el entorno `.venv` existente y no descarga modelos automáticamente; la descarga queda disponible mediante `-DescargarModelo`.
+
+Verificación de esta integración: **102 pruebas del backend y 57 del frontend aprobadas**, compilación de producción y comprobaciones en Chrome del panel compatible y del flujo HTTP conectado con proveedor simulado (120 actividades, operadores, revisión, confirmaciones, proyectos y vistas móviles). La reducción del número de pruebas del frontend corresponde a funciones retiradas en la rama de Eduardo, como el importador anterior. La interpretación con Ollama real sigue pendiente de configurar el modelo; estas pruebas no la sustituyen.
+
+### Próximo trabajo en esta rama
+
+1. Configurar Ollama local y ensayar textos y documentos reales, registrando calidad, duración y errores de interpretación; verificar también la revisión de flujo añadida por Eduardo.
+2. Revisar juntos la experiencia combinada: contexto, construcción del plano, edición, rediseño y reporte. Corregir discrepancias observadas sin perder datos aceptados ni propuestas manuales.
+3. Continuar con las extensiones todavía pendientes: definición de eficiencia individual, otros tipos de estudios y formatos, y el diagrama interactivo previo al plano. Requieren cerrar las decisiones de cada apartado antes de implementar sus cálculos o navegación.
+
+El estado operativo de la conexión se describe a continuación. Las secciones del prototipo y de acuerdos anteriores se conservan como historial; no significan que haya que reiniciar D0–D8.
 
 ## Primera entrega: validar el frontend
 
@@ -328,4 +348,4 @@ Estas dudas no bloquean esta actualización documental. Deben aclararse cuando s
 
 ## Prompt para retomar en casa
 
-> Trabaja en `feature/data` de ProyectoIA3d. Lee `PLAN-DATA.md`, especialmente los acuerdos del 20 de octubre y las decisiones pendientes, junto con `coordinacion/CONTRATO-v3.md`, `CRITERIOS-IMPLEMENTACION-1.1.md` y el código actual. El prototipo frontend ya está entregado; esta revisión solo documentó próximos pasos. Cuando el usuario autorice continuar la implementación, comienza por D0 y prepara una extensión compatible del contrato antes de programar D1. Distingue requisitos aceptados de propuestas pendientes: no fijes sin acuerdo la semántica de prioridades apagadas, fórmulas de operadores, catálogo de especialistas ni ubicación de preguntas. Desarrolla por fases D0–D8, conectando y verificando frontend/backend en cada una, con commit y push por fase terminada. Permite texto completo, captura breve, propuestas con evidencia y confirmación masiva; estudios de más de cien actividades en tabla editable; operadores importados con indicadores bien definidos; consolidación compartida y construcción de plano desde contexto aceptado. Conserva proyectos, historial, originales, elementos fijos, ramas/uniones y validación numérica. El diagrama interactivo previo al plano queda para después de completar esta parte.
+> Trabaja en `feature/data1` de ProyectoIA3d. Lee primero la integración y el estado operativo de `PLAN-DATA.md`, `coordinacion/CONTRATO-DATA.md`, `coordinacion/CONTRATO-v3.md` y `CRITERIOS-IMPLEMENTACION-1.1.md`. El backend D0–D8 y su conexión inicial ya están implementados; esta rama también integra las dos ramas Data1 de Eduardo indicadas arriba. No reinicies el prototipo ni sustituyas los avances de un lado por los del otro. El proveedor acordado es Ollama local y el usuario configurará el modelo después; el siguiente ensayo debe usar fuentes reales y distinguir la calidad del modelo de las pruebas con proveedor simulado. Mantén la confirmación del contexto/plano, las prioridades activables con pesos base al apagarlas, los proyectos y originales persistentes, las actividades aceptadas con evidencia, los valores desconocidos y las ramas/uniones. Revisa con el usuario los resultados combinados antes de ampliar alcance. Siguen pendientes las definiciones de eficiencia individual, más especialistas/formatos y el diagrama interactivo previo al plano; no inventes sus fórmulas ni presentes un borrador derivado del plano como estudio observado. Conserva commit y push por fase terminada y verificada.

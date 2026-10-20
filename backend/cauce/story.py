@@ -17,10 +17,11 @@ import re
 import unicodedata
 
 from .catalog import ASSUMPTIONS, DEFAULT_PARAMS, KIND, ZONE
-from . import units
+from . import site, spec, units
 from .agents import prompt
 from .agents import apply_building, apply_walls, apply_zones, fit_zones, place_with_targets, station_targets
-from .layout import EDGE, flow_order, initial_layout
+from .engine import gate_pt
+from .layout import EDGE, collisions, flow_order, initial_layout
 
 KIND_IDS = list(KIND)
 
@@ -40,6 +41,8 @@ STORY_SCHEMA = {
                     "tipo": {"type": "string", "enum": KIND_IDS},
                     "minutos_por_pieza": {"type": "number"},
                     "operarios": {"type": "integer"},
+                    "ancho_m": {"type": "number"},
+                    "largo_m": {"type": "number"},
                 },
                 "required": ["nombre", "tipo"],
             },
@@ -48,7 +51,7 @@ STORY_SCHEMA = {
             "type": "array",
             "items": {
                 "type": "object",
-                "properties": {"de": {"type": "string"}, "a": {"type": "string"}, "porcentaje": {"type": "number"}},
+                "properties": {"de": {"type": "string"}, "a": {"type": "string"}, "porcentaje": {"type": "number"}, "retorno": {"type": "boolean"}},
                 "required": ["de", "a"],
             },
         },
@@ -108,42 +111,17 @@ def words_to_digits(t: str) -> str:
 
 WORD_START = r"(?<![a-z])"
 DIMENSIONS_AFTER_MENTION = re.compile(
-    r"^[\s(,:-]*(?:(?:con\s+dimensiones?\s+de|dimensiones?\s+de|area\s+de|de|mide|es|tiene|con)\s*)?"
-    r"(?P<w>\d+(?:[.,]\d+)?)\s*(?:m(?:etros?)?\s*)?(?:x|×|por)\s*"
-    r"(?P<d>\d+(?:[.,]\d+)?)\s*(?:m(?:etros?)?)?"
-)
-FACILITY_DIMENSIONS = re.compile(
-    r"^\s*(?P<context>(?:(?:[a-z0-9]+\s+){0,6}?)"
-    r"(?:que\s+)?(?:mide|tiene|es|de|con\s+dimensiones?\s+de)\s*)"
-    r"(?P<w>\d+(?:[.,]\d+)?)\s*(?:m(?:etros?)?\s*)?(?:x|×|por)\s*"
-    r"(?P<d>\d+(?:[.,]\d+)?)\s*(?:m(?:etros?)?)?"
+    r"^[a-z]*(?:\s+(?:de|del)\s+(?!\d)[a-z]+)?[\s(,:-]*(?:(?:con\s+dimensiones?\s+de|dimensiones?\s+de|area\s+de|de|mide|es|tiene|con|que\s+mide)\s*)?"
+    r"(?P<w>\d+(?:[.,]\d+)?)\s*(?:(?:cm|mm|m(?:etros?)?)\s*)?(?:x|×|por)\s*"
+    r"(?P<d>\d+(?:[.,]\d+)?)\s*(?P<u>cm|mm|centimetros?|milimetros?|m(?:etros?)?)?"
 )
 
 
-def _facility_dimensions(text: str) -> tuple[float, float] | None:
-    """Extrae las medidas explícitas de la planta, taller o fábrica."""
-    facility_terms = ("planta", "fabrica", "taller", "carpinteria", "tamaleria")
-    intervening_keywords = [
-        keyword
-        for catalog in (KIND, ZONE)
-        for item in catalog.values()
-        for keyword in item["keywords"]
-    ]
-    for term in facility_terms:
-        for mention in re.finditer(WORD_START + re.escape(term), text):
-            match = FACILITY_DIMENSIONS.match(text[mention.end():mention.end() + 100])
-            if not match:
-                continue
-            context = match.group("context")
-            if any(re.search(WORD_START + re.escape(keyword), context) for keyword in intervening_keywords):
-                continue
-            width = float(match.group("w").replace(",", "."))
-            depth = float(match.group("d").replace(",", "."))
-            if width > 0 and depth > 0:
-                return width, depth
-    return None
-
-
+def _dims_of(match):
+    """Medidas de una mención, en metros (también si se escribieron en cm o mm)."""
+    w = site.to_m(float(match.group("w").replace(",", ".")), match.group("u"))
+    d = site.to_m(float(match.group("d").replace(",", ".")), match.group("u"))
+    return (w, d) if w > 0 and d > 0 else None
 def _zone_instances(text: str, zone_id: str) -> list[tuple[str, float, float]]:
     """Devuelve una instancia por mención del primer nombre detectado para la zona."""
     keywords = ZONE[zone_id]["keywords"]
@@ -159,12 +137,7 @@ def _zone_instances(text: str, zone_id: str) -> list[tuple[str, float, float]]:
     instances = []
     for mention in re.finditer(WORD_START + re.escape(keyword) + r"(?:s|es)?", text):
         match = DIMENSIONS_AFTER_MENTION.match(text[mention.end():mention.end() + 64])
-        dimensions = None
-        if match:
-            width = float(match.group("w").replace(",", "."))
-            depth = float(match.group("d").replace(",", "."))
-            if width > 0 and depth > 0:
-                dimensions = (width, depth)
+        dimensions = _dims_of(match) if match else None
         width, depth = dimensions or (ZONE[zone_id]["w"], ZONE[zone_id]["d"])
         instances.append((ZONE[zone_id]["name"], width, depth))
     return instances
@@ -180,13 +153,7 @@ def _station_instances(text: str, kind: str) -> list[tuple[int, tuple[float, flo
     instances = []
     for mention in sorted(mentions.values(), key=lambda item: item.start()):
         match = DIMENSIONS_AFTER_MENTION.match(text[mention.end():mention.end() + 64])
-        dimensions = None
-        if match:
-            width = float(match.group("w").replace(",", "."))
-            depth = float(match.group("d").replace(",", "."))
-            if width > 0 and depth > 0:
-                dimensions = (width, depth)
-        instances.append((mention.start(), dimensions))
+        instances.append((mention.start(), _dims_of(match) if match else None))
     return instances
 
 
@@ -256,8 +223,16 @@ def _match(name, stations):
         if normalize(s["name"]).strip() == n:
             return s["id"]
     for s in stations:
+        if s["id"].lower() == n:
+            return s["id"]
+
+    def inside(a, b):
+        # "maquina 1" no es parte de "maquina 10": se compara por palabras completas.
+        return bool(a) and re.search(r"(?<![a-z0-9])" + re.escape(a) + r"(?![a-z0-9])", b) is not None
+
+    for s in stations:
         m = normalize(s["name"])
-        if n and (n in m or m in n):
+        if n and (inside(n, m) or inside(m, n)):
             return s["id"]
     return None
 
@@ -274,6 +249,10 @@ def _stems(name):
 def _where(name, kind, t):
     """Dónde se menciona en la historia (posición) o None si no aparece."""
     hits = [m.start() for st in _stems(name) for m in [re.search(WORD_START + re.escape(st), t)] if m]
+    # Nombres con número o código ("Máquina 3", "M1"): el nombre completo, como palabra.
+    full = re.search(WORD_START + re.escape(words_to_digits(normalize(name)).strip()) + r"(?![a-z0-9])", t)
+    if full:
+        hits.append(full.start())
     if kind != "otro":
         hits += [m.start() for w in KIND[kind]["keywords"] for m in [re.search(WORD_START + re.escape(w), t)] if m]
     return min(hits) if hits else None
@@ -296,6 +275,48 @@ def _station(i, name, kind, t=None, ops=None, dimensions=None):
     }
 
 
+WEAK = {"recepcion": r"recep|materias? primas?|almacen de entrada", "despacho": r"despach|embarque|area de salida", "mesa": r"mesa de trabajo|banco de trabajo"}
+RETURN_WORDS = r"regres|vuelve|devuelv|retrabaj|reproces|repite|se rehace|otra vez"
+
+
+def _ai_dims(x, t):
+    """Medidas que dio la IA para una estación, solo si las dos cifras están en el texto."""
+    w, d = x.get("ancho_m"), x.get("largo_m")
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and 0.2 <= v <= 200 for v in (w, d)):
+        return None
+    nums = {float(n.replace(",", ".")) for n in re.findall(r"\d+(?:[.,]\d+)?", t)}
+    return (float(w), float(d)) if float(w) in nums and float(d) in nums else None
+
+
+def _reaches(routes, a, b):
+    """¿Se llega de a hasta b siguiendo las rutas?"""
+    seen, stack = set(), [a]
+    while stack:
+        k = stack.pop()
+        if k == b:
+            return True
+        if k in seen:
+            continue
+        seen.add(k)
+        stack += [r["to"] for r in routes if r["from"] == k]
+    return False
+
+
+def _name_of(stations, sid):
+    return next((s["name"] for s in stations if s["id"] == sid), sid)
+
+
+def _fit_issues(plant):
+    """Estaciones que no caben en el recinto o que quedaron encimadas: se informa, no se encogen."""
+    W, D = plant["size"]["w"], plant["size"]["d"]
+    out = [f"{s['name']} ({s['w']:g} x {s['d']:g} m) no cabe en el recinto de {W:g} x {D:g} m." for s in plant["stations"] if min(s["w"], s["d"]) > min(W, D) or max(s["w"], s["d"]) > max(W, D)]
+    bad = collisions(plant, plant["layout"])
+    if bad:
+        names = ", ".join(sorted(s["name"] for s in plant["stations"] if s["id"] in bad))
+        out.append(f"No hubo lugar libre para {names}: quedaron encimadas; conviene moverlas o agrandar el recinto.")
+    return out
+
+
 def place_zones_default(plant, zone_instances):
     """Zonas en fila contra el frente derecho, como punto de partida.
 
@@ -312,11 +333,14 @@ def place_zones_default(plant, zone_instances):
 
 
 def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict:
-    rules = by_rules(text)
     t = words_to_digits(normalize(text))
+    # El edificio ("un almacén rectangular de 60 x 40") no es una estación: se lee como recinto.
+    t = site.mask(t, site.facility_spans(t))
+    rules = by_rules(t)
     ai = ai or {}
     facts = []
     notes = []
+    issues = []
     dropped = []
 
     # --- Estaciones de la IA, solo si la historia las menciona ---
@@ -339,41 +363,51 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
             continue
         if any(normalize(f[1]) == n for f in found):
             continue
-        found.append((pos, name, kind, x.get("minutos_por_pieza"), x.get("operarios")))
+        found.append((pos, name, kind, x.get("minutos_por_pieza"), x.get("operarios"), _ai_dims(x, t)))
         if isinstance(x.get("cantidad"), int) and x["cantidad"] > 1:
             qty[n] = x["cantidad"]
     source = "ia" if found else "reglas"
 
     # --- Lo que las reglas encontraron y la IA no ---
-    added = False
     covered = {f[2] for f in found}
     names_norm = " ".join(normalize(f[1]) for f in found)
     for kid in rules["kinds"]:
         if kid in covered or any(w[:4] in names_norm for w in KIND[kid]["keywords"] if len(w) >= 4):
             continue
+        # "llega", "a mano" o "camión" no bastan para inventar una recepción, una mesa o un despacho
+        # cuando la IA ya leyó las estaciones: hace falta el nombre del área.
+        if found and kid in WEAK and not re.search(WEAK[kid], t):
+            continue
         pos = _where(KIND[kid]["name"], kid, t)
-        found.append((pos if pos is not None else len(t), KIND[kid]["name"], kid, None, None))
-        added = True
+        found.append((pos if pos is not None else len(t), KIND[kid]["name"], kid, None, None, None))
     # Lo que entra va primero y lo que sale al final; lo demás en el orden en que se cuenta.
     found.sort(key=lambda f: (f[2] != "recepcion", f[2] == "despacho", f[0]))
     station_entries = []
     for kind in KIND:
         entries = sorted((entry for entry in found if entry[2] == kind), key=lambda entry: entry[0])
         mentions = _station_instances(t, kind)
+        if not entries and found:
+            # Con estaciones de la IA, una palabra suelta solo crea estación si trae sus medidas.
+            mentions = [m for m in mentions if m[1]]
         if not entries and not mentions:
             continue
 
+        # Repetir una palabra no crea otra máquina: solo cuentan las menciones con medidas propias.
+        mentions = [m for m in mentions if m[1]] or mentions[:1]
         count = max(len(entries), len(mentions))
         for i in range(count):
+            ai_dims = None
             if i < len(entries):
                 entry = entries[i]
-                _, name, _, minutes, operators = entry
+                _, name, _, minutes, operators, ai_dims = entry
             else:
                 name, minutes, operators = KIND[kind]["name"], None, None
             if i < len(mentions):
                 position, dimensions = mentions[i]
             else:
                 position, dimensions = entry[0], None
+            # Las medidas escritas junto a la mención mandan; luego las de la IA si sus cifras están en el texto.
+            dimensions = dimensions or ai_dims
             station_entries.append((position, name, kind, minutes, operators, dimensions))
 
     station_entries.sort(key=lambda entry: (entry[2] != "recepcion", entry[2] == "despacho", entry[0]))
@@ -400,26 +434,72 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
     # Sin nada reconocible, una sola caja genérica para empezar a dibujar.
     if not stations:
         stations.append(_station(0, "Proceso 1", "otro", None, 1))
+    # Una lista con medidas ("- Máquina de corte M1: 4 x 3 m") manda: ni una estación más ni otras medidas.
+    listed = spec.stations(text)
+    if listed:
+        stations = listed
+        notes = [f"Estaciones tomadas de la lista del texto ({len(listed)}), con sus medidas exactas."]
 
     # --- Flujo: el de la IA si es coherente; si no, en el orden de la historia ---
-    order = {s["id"]: i for i, s in enumerate(stations)}
-    routes = []
-    if not added:
-        for x in ai.get("flujo", []) or []:
-            if not isinstance(x, dict):
-                continue
-            a, b = _match(str(x.get("de", "")), stations), _match(str(x.get("a", "")), stations)
-            # Una ruta que regresa a una estación anterior casi siempre es un error de lectura.
-            if a and b and order[a] < order[b] and not any(r["from"] == a and r["to"] == b for r in routes):
-                pct = x.get("porcentaje")
-                frac = pct / 100 if isinstance(pct, (int, float)) and 0 < pct <= 100 else 1.0
-                routes.append({"id": f"r{len(routes) + 1}", "from": a, "to": b, "frac": round(frac, 2)})
+    # Grafo del proceso: una estación puede alimentar a varias y recibir de varias (ramas y uniones).
+    # Primero el flujo escrito en el texto ("A alimenta a B y a C"); si no lo hay, el de la IA.
+    routes = spec.routes(text, stations) if listed else []
+    if routes:
+        notes.append(f"Flujo tomado del texto: {len(routes)} conexiones.")
+    for x in [] if routes else ai.get("flujo", []) or []:
+        if not isinstance(x, dict):
+            continue
+        a, b = _match(str(x.get("de", "")), stations), _match(str(x.get("a", "")), stations)
+        if not a or not b or a == b or any(r["from"] == a and r["to"] == b for r in routes):
+            continue
+        pct = x.get("porcentaje")
+        frac = pct / 100 if isinstance(pct, (int, float)) and 0 < pct <= 100 else 1.0
+        # Un ciclo es un retorno (retrabajo) solo si la historia habla de regresar; si no, es un error de lectura.
+        if _reaches(routes, b, a) or x.get("retorno") is True:
+            if re.search(RETURN_WORDS, t):
+                routes.append({"id": f"r{len(routes) + 1}", "from": a, "to": b, "frac": round(frac if frac < 1 else 0.1, 2), "is_return": True})
+                notes.append(f"Retorno: {_name_of(stations, a)} → {_name_of(stations, b)} (retrabajo).")
+            else:
+                notes.append(f"Se descartó la ruta {_name_of(stations, a)} → {_name_of(stations, b)}: cerraba un ciclo.")
+            continue
+        routes.append({"id": f"r{len(routes) + 1}", "from": a, "to": b, "frac": round(frac, 2)})
+    if not listed:
+        # La historia leída oración por oración manda ("de ahí", "pero las que...", "regresa a");
+        # la IA solo agrega conexiones de estaciones que la historia no conecta.
+        told = spec.narrative_routes(text, stations)
+        told_nodes = {r["from"] for r in told} | {r["to"] for r in told}
+        if len(told_nodes) >= max(2, 0.6 * len(stations)):
+            # Las notas de la primera lectura de la IA ya no aplican.
+            notes = [x for x in notes if not x.startswith(("Retorno:", "Se descartó la ruta"))]
+            extra = [r for r in routes if r["from"] not in told_nodes or r["to"] not in told_nodes]
+            # Recepción y despacho que la historia no nombra van al inicio y al final del flujo contado.
+            heads = [r["from"] for r in told if not r.get("is_return") and not any(q["to"] == r["from"] and not q.get("is_return") for q in told)]
+            tails = [r["to"] for r in told if not r.get("is_return") and not any(q["from"] == r["to"] for q in told)]
+            for s in stations:
+                if s["id"] in told_nodes or any(s["id"] in (r["from"], r["to"]) for r in extra):
+                    continue
+                if s["kind"] == "recepcion" and heads:
+                    extra.append({"from": s["id"], "to": heads[0], "frac": 1.0})
+                elif s["kind"] == "despacho" and tails:
+                    extra.append({"from": tails[-1], "to": s["id"], "frac": 1.0})
+            routes = [{**r, "id": f"r{i + 1}", **({"frac": 0.1} if r.get("is_return") else {})} for i, r in enumerate(told + extra)]
+            notes.append(f"Flujo leído de la historia ({len(told)} conexiones)" + (f"; la IA completó {len(extra)}." if extra else "."))
+            for r in told:
+                if r.get("is_return"):
+                    notes.append(f"Retorno: {_name_of(stations, r['from'])} → {_name_of(stations, r['to'])} (retrabajo, 10 % supuesto).")
     connected = {r["from"] for r in routes} | {r["to"] for r in routes}
+    # El flujo principal (sin retornos) es el que ordena; un retorno no conecta una estación.
+    main = [r for r in routes if not r.get("is_return")]
+    connected = {r["from"] for r in main} | {r["to"] for r in main}
     prev = None
+    guessed = []
     for s in stations:
-        if s["id"] not in connected and prev:
+        if s["id"] not in connected and prev and routes:
             routes.append({"id": f"r{len(routes) + 1}", "from": prev, "to": s["id"], "frac": 1.0})
+            guessed.append(s["name"])
         prev = s["id"]
+    if guessed:
+        notes.append("Sin flujo explícito para " + ", ".join(guessed) + ": se conectó en el orden de la descripción.")
     if not routes:
         for a, b in zip(stations, stations[1:]):
             routes.append({"id": f"r{len(routes) + 1}", "from": a["id"], "to": b["id"], "frac": 1.0})
@@ -478,9 +558,6 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
     total = max(area * 3.2, 300)
     D = max(14, math.ceil(math.sqrt(total / 2) / 2) * 2)
     W = max(24, math.ceil(total / D / 2) * 2)
-    facility_size = _facility_dimensions(t)
-    if facility_size:
-        W, D = facility_size
     W = max(W, math.ceil((sum(w for _, _, w, _ in zone_instances) + max(0, len(zone_instances) - 1) + 2 * EDGE) / 2) * 2)
     D = max(D, math.ceil((max((d for _, _, _, d in zone_instances), default=0) + 2 * EDGE) / 2) * 2)
     plant = {
@@ -501,9 +578,29 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
     # --- Lectura espacial: cada agente aporta solo lo que la historia confirma ---
     spatial_notes = []
     used = []
+    default_gates = plant["gates"]
+    # Medidas, forma y portones escritos con cifras: mandan sobre lo que interprete la IA.
+    explicit = site.apply_site(plant, t, spatial_notes, issues)
     if spatial:
+        geometry = (plant["size"], plant.get("outline"))
         apply_building(plant, t, (spatial.get("edificio") or {}).get("data"), spatial_notes)
-    plant["zones"] = place_zones_default(plant, zone_instances)
+        if explicit:
+            plant["size"], plant["outline"] = geometry
+            if plant["outline"] is None:
+                plant.pop("outline")
+    gates_told = site.apply_gates(plant, t, spatial_notes, issues)
+    if gates_told:
+        # Los portones contados en el texto reemplazan a los que ubicó el agente.
+        spatial_notes[:] = [x for x in spatial_notes if not x.startswith("Portones ubicados en")]
+    if not gates_told:
+        if plant["gates"] is default_gates:
+            # Los de por defecto siguen a las medidas finales del recinto.
+            for g, f in zip(plant["gates"], (0.15, 0.45)):
+                g["x"], g["z"] = round(plant["size"]["w"] * f), plant["size"]["d"]
+        # Los portones de la IA o los de por defecto quedan sobre el contorno real.
+        for g in plant["gates"]:
+            g["x"], g["z"] = (round(v, 2) for v in gate_pt(plant, g["id"], 0.0))
+    plant["zones"] = place_zones_default(plant, zone_instances) + site.aisles(t, plant["size"]["w"], plant["size"]["d"], plant.get("_main"))
     if spatial:
         apply_zones(plant, t, (spatial.get("zonas") or {}).get("data"), spatial_notes)
         fit_zones(plant)
@@ -516,6 +613,28 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
             spatial_notes.append("Ubicación tomada de la descripción: " + ", ".join(where) + ".")
         apply_walls(plant, t, (spatial.get("paredes") or {}).get("data"), spatial_notes)
         used = [k for k, v in spatial.items() if v.get("data") is not None]
+    outs, ins = {}, {}
+    for r in plant["routes"]:
+        outs[r["from"]] = outs.get(r["from"], 0) + 1
+        ins[r["to"]] = ins.get(r["to"], 0) + 1
+    branching = any(v > 1 for v in list(outs.values()) + list(ins.values()))
+    if listed:
+        spec.apply(plant, text, spatial_notes, issues, plant.get("_main"))
+    else:
+        fixed = spec.locks(text, plant["stations"], loose=True)
+        for s in plant["stations"]:
+            if s["id"] in fixed:
+                s["locked"] = True
+                s["lock_reason"] = "La descripción dice que no se mueve"
+        if fixed:
+            spatial_notes.append("Fijas según la descripción: " + ", ".join(s["name"] for s in plant["stations"] if s["id"] in fixed) + ".")
+    if listed:
+        pass
+    elif branching and not (spatial and (spatial.get("acomodo") or {}).get("data")):
+        # Con ramas, el acomodo por niveles las abre a los lados en vez de una fila.
+        plant["layout"] = spec.flow_layout(plant, None, plant.get("_main"))
+    plant.pop("_main", None)
+    issues += site.check_gates(plant) + _fit_issues(plant)
     # El acomodo inicial sigue el flujo; se guarda en ese orden.
     order = {sid: i for i, sid in enumerate(flow_order(plant))}
     plant["stations"].sort(key=lambda s: order.get(s["id"], 0))
@@ -525,7 +644,8 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
         "plant": plant,
         "assumptions": assumptions,
         "source": source,
-        "notes": ai_notes + notes + spatial_notes,
+        "notes": ai_notes + notes + spatial_notes + issues,
+        "issues": issues,
         "spatial": {"agents": used, "notes": spatial_notes},
         "ai_assumptions": [impersonal(x) for x in ai.get("supuestos", []) or [] if str(x).strip()],
         "rules": rules,

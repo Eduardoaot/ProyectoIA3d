@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { addProject, clearProjectContext, listProjects, loadLibrary, saveLibrary, selectProject, updateProject } from './projectLibrary'
 
-export const EMPTY_GAME = { missions: [], done: {} }
-
 export const EMPTY = {
     text: '',
     info: null,
@@ -11,7 +9,6 @@ export const EMPTY = {
     analysis: null,
     redesign: { choice: null, custom: null, metrics: null },
     printed: false,
-    game: EMPTY_GAME,
     maxStep: 0,
 }
 
@@ -32,7 +29,6 @@ export function blankPlant(params = {}) {
         walls: [],
         routes: [],
         conveyors: [],
-        use_assumptions: false,
         params,
         layout: {},
     }

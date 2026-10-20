@@ -5,6 +5,7 @@ import { api } from '../../api'
 import { has } from '../../capabilities'
 import useCaps from '../../useCaps'
 import { CRITERIA, DEFAULT_WEIGHTS, normalizeWeights, validWeights } from '../../weights'
+import { ask } from '../Dialog'
 import References from '../References'
 import WorkStudies from './WorkStudies'
 import useWorkspaceBackend from './useWorkspaceBackend'
@@ -89,7 +90,7 @@ function ProjectsPanel({ projects, activeId, project, onCreate, onSelect, onClea
         setNotice('Proyecto creado. Ya puedes agregarle su propio contexto.')
     }
     const clear = async () => {
-        if (!window.confirm(`Se borrarán el texto, los datos, estudios, referencias, prioridades y archivos de «${project.name || 'este proyecto'}». El plano permanecerá. ¿Continuar?`)) return
+        if (!(await ask(`Se borrarán el texto, los datos, estudios, referencias, prioridades y archivos de «${project.name || 'este proyecto'}». El plano permanecerá.`, { title: '¿Borrar el contexto?', ok: 'Sí, borrar' }))) return
         setClearing(true)
         try {
             await onClear()

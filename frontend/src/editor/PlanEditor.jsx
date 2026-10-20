@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, fmt } from '../api'
-import { arrowPoints, bboxOf, centerOf, composeParts, dims, fitToOutline, fromPartLocal, gateInfo, GATE_HALF, midOf, movePart, nearestOnSeg, outlineOf, PART_KINDS, partPoly, partsOf, pathD, pointInPoly, polyD, projectToOutline, rectOf, rotatePart, round2, shortName, sizePart, smartPoint, snap, straight, toPartLocal, uid } from './geometry'
+import { arrowPoints, bboxOf, centerOf, composeParts, dims, fitToOutline, fromPartLocal, gateInfo, midOf, movePart, nearestOnSeg, outlineOf, PART_KINDS, partPoly, partsOf, pathD, pointInPoly, polyD, projectToOutline, rectOf, rotatePart, round2, scalePart, shortName, sizePart, smartPoint, snap, straight, toPartLocal, uid } from './geometry'
 import Assistant from './Assistant'
 import Inspector from './Inspector'
 import { applyOps } from '../ops'
@@ -12,7 +12,7 @@ import { copyGroup, deleteOps, moveOps, pasteOps, patchRoutes, routesAmong, sele
 import GroupPanel from './GroupPanel'
 
 const TOOLS_FULL = [
-  { id: 'select', label: 'Mover', key: 'V', tip: 'Selecciona y arrastra máquinas, zonas, paredes y portones. Shift o Ctrl + clic suma máquinas a la selección; Shift + arrastrar el fondo selecciona por rectángulo. Arrastra el fondo para mover la vista; la rueda acerca y aleja. Las flechas mueven lo seleccionado (Shift: 10 veces más). Ctrl+C, Ctrl+X y Ctrl+V copian, cortan y pegan con las rutas internas.' },
+  { id: 'select', label: 'Mover', key: 'V', tip: 'Selecciona algo para editarlo. Supr borra, R gira, Ctrl+C y Ctrl+V copian y pegan, Ctrl+Z deshace. Las rutas se calculan por los pasillos, sin cruzar máquinas, paredes ni zonas.' },
   { id: 'station', label: 'Máquina', key: 'M', tip: 'Clic en el plano para agregar una máquina del tipo elegido.' },
   { id: 'route', label: 'Ruta', key: 'T', tip: 'Clic en la máquina de origen y luego en la de destino. Sigue encadenando; Esc para terminar.' },
   { id: 'wall', label: 'Pared', key: 'P', tip: 'Arrastra para dibujar una pared interior. Se pega a esquinas y muros cercanos y se ajusta a 45°; con Alt queda libre.' },
@@ -259,6 +259,14 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       if (setParts([...parts, part])) setSel({ type: 'part', id: part.id })
     },
     setPart: (id, patch) => replacePart(id, (p) => ({ ...p, ...patch })),
+    // Ancho y fondo de todo el edificio: cada pieza se estira en la misma proporción.
+    sizeShape: (w, d) => {
+      const b = bboxOf(outline)
+      const fx = w / (b.x1 - b.x0 || 1)
+      const fz = d / (b.z1 - b.z0 || 1)
+      if (Math.abs(fx - 1) < 1e-6 && Math.abs(fz - 1) < 1e-6) return
+      setParts(parts.map((p) => scalePart(movePart(p, -b.x0, -b.z0), fx, fz)))
+    },
     sizePart: (id, w, d) => replacePart(id, (p) => sizePart(p, w, d)),
     rotatePart: (id, deg) => replacePart(id, (p) => rotatePart(p, deg)),
     centerPart: (id, x, z) =>
@@ -389,6 +397,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       const w = plant.walls.find((q) => q.id === sel.id)
       ops.setWall(sel.id, { x1: round2(w.x1 + dx), z1: round2(w.z1 + dz), x2: round2(w.x2 + dx), z2: round2(w.z2 + dz) })
     } else if (sel.type === 'part') replacePart(sel.id, (p) => movePart(p, dx, dz))
+    else if (sel.type === 'shape') setParts(parts.map((p) => movePart(p, dx, dz)))
     else if (sel.type === 'pvertex') {
       const q = parts.find((p) => p.id === sel.id)?.pts[sel.i]
       if (q) ops.movePVertex(sel.id, sel.i, q[0] + dx, q[1] + dz)
@@ -724,6 +733,35 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
     setSel({ type: 'pvertex', id: part.id, i: i + 1 })
   }
 
+  /* Piso del edificio con Mover: un clic elige todo el edificio y, ya elegido, arrastrarlo
+     mueve todas sus piezas juntas. Doble clic elige solo la pieza que está debajo. */
+  const onDownFloor = (e) => {
+    if (!full || tool !== 'select' || e.button !== 0 || e.shiftKey) return onDownBg(e)
+    e.stopPropagation()
+    box.current.focus({ preventScroll: true })
+    setMulti([])
+    if (sel?.type !== 'shape') {
+      setSel({ type: 'shape' })
+      return startPan(e)
+    }
+    const [x, z] = toPt(e)
+    frozenVB.current = viewBox
+    startDrag(e, { type: 'shape', x0: x, z0: z, base: parts })
+  }
+  const onDblFloor = (e) => {
+    if (!full || tool !== 'select') return
+    const pt = toPt(e)
+    const under = parts.filter((p) => !p.hole && pointInPoly(partPoly(p), pt))
+    if (!under.length) return
+    const area = (p) => {
+      const b = bboxOf(partPoly(p))
+      return (b.x1 - b.x0) * (b.z1 - b.z0)
+    }
+    const p = under.reduce((a, q) => (area(q) < area(a) ? q : a))
+    drag.current = null
+    setSel({ type: 'part', id: p.id })
+  }
+
   const onDownBg = (e) => {
     if (e.button !== 0) return
     box.current.focus({ preventScroll: true })
@@ -871,6 +909,12 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       if (nx === g0?.x && nz === (g0?.z ?? D)) return
       markMoved(d)
       onChange({ ...plant, gates: plant.gates.map((q) => (q.id === d.id ? { ...q, x: nx, z: nz } : q)) }, positions)
+    } else if (d.type === 'shape') {
+      const dx = g(x - d.x0)
+      const dz = g(z - d.z0)
+      if (!dx && !dz && !d.moved) return
+      markMoved(d)
+      setParts(d.base.map((p) => movePart(p, dx, dz)), { fit: false })
     } else if (d.type === 'part') {
       const dx = g(x - d.x0)
       const dz = g(z - d.z0)
@@ -973,7 +1017,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
       setTool('select')
     }
     const d = drag.current
-    if (d && ['part', 'partSize', 'partRot', 'pvertex'].includes(d.type)) {
+    if (d && ['shape', 'part', 'partSize', 'partRot', 'pvertex'].includes(d.type)) {
       // Al soltar, la planta se reacomoda al origen (sin otro paso de deshacer).
       if (d.moved) setParts(plant.parts || parts, { record: false })
       frozenVB.current = null
@@ -1216,6 +1260,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
           </div>
           {notice && <p className="editor-notice small">{notice}</p>}
 
+          <div className="editor-stage">
           <svg
             ref={svg}
             viewBox={viewBox}
@@ -1241,10 +1286,35 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
             </defs>
 
             <rect x={vx - vw} y={vz - vh} width={vw * 3} height={vh * 3} fill="transparent" onPointerDown={onDownBg} />
-            <path d={polyD(outline)} fill="url(#grid)" stroke="#000" strokeWidth={0.3} onPointerDown={onDownBg} />
+            <path d={polyD(outline)} fill="url(#grid)" stroke="#000" strokeWidth={0.3} onPointerDown={onDownFloor} onDoubleClick={onDblFloor} style={{ cursor: full && tool === 'select' && sel?.type === 'shape' ? 'move' : undefined }} />
+            {/* Mover: el edificio completo elegido, o una sola de sus piezas (doble clic). */}
+            {full && tool === 'select' && sel?.type === 'shape' && (
+              <g pointerEvents="none">
+                <path d={polyD(outline)} fill="#000" fillOpacity={0.04} stroke="#000" strokeWidth={u * 0.22} strokeDasharray={`${u * 0.6} ${u * 0.35}`} />
+                {(() => {
+                  const b = bboxOf(outline)
+                  return label((b.x0 + b.x1) / 2, b.z0 - u * 1.2, `${fmt(b.x1 - b.x0, 2)} × ${fmt(b.z1 - b.z0, 2)} m`, 0.8)
+                })()}
+              </g>
+            )}
+            {full && tool === 'select' && selPart && (
+              <path d={polyD(partPoly(selPart))} fill="#000" fillOpacity={0.06} stroke="#000" strokeWidth={u * 0.22} strokeDasharray={`${u * 0.6} ${u * 0.35}`} style={{ cursor: 'move' }} onPointerDown={(e) => onDownPart(e, selPart)} onDoubleClick={onDblFloor} />
+            )}
 
-            {plant.zones.map((zn) => {
+            {/* Las áreas de trabajo van debajo de todo: solo marcan el piso. */}
+            {[...plant.zones.filter((q) => q.kind === 'area'), ...plant.zones.filter((q) => q.kind !== 'area')].map((zn) => {
               const on = sel?.type === 'zone' && sel.id === zn.id
+              if (zn.kind === 'area')
+                return (
+                  <g key={zn.id} onPointerDown={(e) => onDownZone(e, zn)} style={{ cursor: full && tool === 'select' ? 'move' : undefined }}>
+                    <rect x={zn.x - zn.w / 2} y={zn.z - zn.d / 2} width={zn.w} height={zn.d} fill="#000" fillOpacity={on ? 0.07 : 0.035} stroke="#000" strokeWidth={on ? 0.3 : 0.18} strokeDasharray="1 0.5" />
+                    <text x={zn.x - zn.w / 2 + 0.5} y={zn.z - zn.d / 2 + 1.25} fontSize="0.95" fontWeight="800" letterSpacing="0.05" fill="#000" pointerEvents="none">
+                      {shortName(zn.name.toUpperCase(), Math.max(6, Math.floor(zn.w * 1.6)))}
+                    </text>
+                    {zn.locked && <LockGlyph x={zn.x + zn.w / 2 - 0.85} z={zn.z - zn.d / 2 + 0.1} s={Math.min(0.7, zn.w * 0.6, zn.d * 0.6)} />}
+                    <title>{zn.name} (área de trabajo)</title>
+                  </g>
+                )
               return (
                 <g key={zn.id} onPointerDown={(e) => onDownZone(e, zn)} style={{ cursor: full && tool === 'select' ? 'move' : undefined }}>
                   <rect x={zn.x - zn.w / 2} y={zn.z - zn.d / 2} width={zn.w} height={zn.d} fill={zn.kind === 'bloqueado' ? 'url(#hatch)' : '#eeeeee'} fillOpacity={zn.kind === 'bloqueado' ? 0.5 : 1} stroke="#000" strokeWidth={on ? 0.3 : 0.12} strokeDasharray={on ? undefined : '0.5 0.35'} />
@@ -1353,7 +1423,7 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
               const lift = 1.7 + Math.abs(gi.n[0]) * 2.2
               return (
                 <g key={gt.id} onPointerDown={(e) => onDownGate(e, gt)} style={{ cursor: full && tool === 'select' ? 'move' : undefined }}>
-                  <rect x={-GATE_HALF} y={-0.35} width={GATE_HALF * 2} height={1} transform={`translate(${gi.x} ${gi.z}) rotate(${gi.deg})`} fill={role ? '#000' : '#fff'} stroke="#000" strokeWidth={on ? 0.3 : 0.15} />
+                  <rect x={-gi.half} y={-0.35} width={gi.half * 2} height={1} transform={`translate(${gi.x} ${gi.z}) rotate(${gi.deg})`} fill={role ? '#000' : '#fff'} stroke="#000" strokeWidth={on ? 0.3 : 0.15} />
                   <text x={gi.x + gi.n[0] * lift} y={gi.z + gi.n[1] * lift + 0.3} textAnchor="middle" fontSize="0.9" fontWeight={role ? 800 : 500} fill="#000" pointerEvents="none">
                     {gt.id} {role}
                   </text>
@@ -1482,6 +1552,16 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
             {/* Encima de todo: al dibujar una pieza a mano cada clic pone una esquina, aunque caiga sobre una máquina. */}
             {penOn && <rect x={vx - vw} y={vz - vh} width={vw * 3} height={vh * 3} fill="transparent" style={{ cursor: 'crosshair' }} onPointerDown={onDownPen} onDoubleClick={() => closePen()} />}
           </svg>
+            <p className="editor-tip small">
+              {tip}
+              {cursor && full && (
+                <span className="editor-coords num">
+                  {' '}
+                  x {fmt(cursor[0], 2)} · z {fmt(cursor[1], 2)} m
+                </span>
+              )}
+            </p>
+          </div>
           {(plant.routes.some((r) => (r.flow || 'material') !== 'material' || r.is_return) || conveyors.length > 0) && (
             <p className="editor-legend editor-flows small">
               {FLOWS.filter((f) => f.id === 'material' || plant.routes.some((r) => r.flow === f.id)).map((f) => (
@@ -1505,15 +1585,6 @@ export default function PlanEditor({ plant, positions, onChange, catalog, mode =
               ))}
             </p>
           )}
-          <p className="editor-tip small">
-            {tip}
-            {cursor && full && (
-              <span className="editor-coords num">
-                {' '}
-                x {fmt(cursor[0], 2)} · z {fmt(cursor[1], 2)} m
-              </span>
-            )}
-          </p>
         </div>
 
         {multi.length > 1 ? (

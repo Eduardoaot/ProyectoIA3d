@@ -36,6 +36,21 @@ class OllamaProvider:
         except Exception as e:  # noqa: BLE001
             return {"online": False, "models": [], "ready": False, "error": str(e)}
 
+    async def warm(self, system: str) -> None:
+        """Carga el modelo y deja leídas las instrucciones de un agente en la caché de Ollama.
+        Las llamadas de verdad empiezan con ese mismo texto y no lo vuelven a leer (en CPU, unos
+        20 tokens por segundo: 30-45 s por agente). Solo adelanta trabajo: la respuesta no cambia."""
+        body = {
+            "model": self.model,
+            "stream": False,
+            "keep_alive": KEEP_ALIVE,
+            "options": {"temperature": self.temperature, "num_predict": 1},
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": "."}],
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as c:
+            r = await c.post(f"{self.host}/api/chat", json=body)
+            r.raise_for_status()
+
     async def json(self, system: str, prompt: str, schema: dict | None = None) -> dict:
         body = {
             "model": self.model,

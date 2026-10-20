@@ -1,5 +1,5 @@
-/* Contexto 2 (criterios §4.3): resumen determinista, sin IA, de lo que el sistema entendió
-   del plano, para que el usuario lo confirme antes de analizar. Solo cuenta y nombra. */
+/* Resumen determinista, sin IA, de lo que el sistema entendió del plano. Se muestra en
+   «Así entendimos tu planta» dentro del contexto antes de analizar. Solo cuenta y nombra. */
 
 const FLOW_LABEL = { material: 'material', personas: 'personas', vehiculos: 'vehículos', carga: 'carga' }
 
@@ -46,9 +46,8 @@ export function summarize(plant, previous = null) {
         lines.push(`Rutas de ${FLOW_LABEL[fl] || fl}: ${rs.length}${ret ? ` (${ret} de retorno)` : ''}.`)
     }
     if ((plant.conveyors || []).length) lines.push(`Bandas: ${plant.conveyors.map((c) => c.name || c.id).join(', ')}.`)
-    lines.push(plant.use_assumptions ? 'Se analizan tiempos y producción con los supuestos del panel.' : 'Sin supuestos: solo se analizan recorridos y cercanía entre áreas.')
     const changes = previous ? changesSince(plant, previous) : []
     // La firma cambia con cualquier edición del plano: lo confirmado deja de valer.
-    const signature = JSON.stringify({ stations: plant.stations, routes: plant.routes, zones: plant.zones, conveyors: plant.conveyors || [], layout: plant.layout, params: plant.use_assumptions ? plant.params : null })
+    const signature = JSON.stringify({ stations: plant.stations, routes: plant.routes, zones: plant.zones, conveyors: plant.conveyors || [], layout: plant.layout })
     return { lines, changes, signature }
 }

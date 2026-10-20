@@ -5,6 +5,7 @@ import Wordmark from '../brand/Wordmark'
 import FlowPlan from '../charts/FlowPlan'
 import RelChart from '../charts/RelChart'
 import { StudyDeliverables } from '../components/context/BackendPanels'
+import Cursograma from './Cursograma'
 
 const Delta = ({ before, after, up }) => {
 	const p = pct(before, after)
@@ -22,7 +23,6 @@ const Delta = ({ before, after, up }) => {
 export default function ReportDoc({ plant, analysis, chosen, notes = [], reportText, catalog }) {
 	const cur = analysis.current
 	const m = chosen?.metrics
-	const full = plant.use_assumptions && cur.daily_m != null
 	const names = Object.fromEntries(plant.stations.map((s) => [s.id, s.name]))
 	const kindName = Object.fromEntries((catalog?.kinds || []).map((k) => [k.id, k.name]))
 	const [today] = useState(() => new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }))
@@ -31,14 +31,6 @@ export default function ReportDoc({ plant, analysis, chosen, notes = [], reportT
 
 	const rows = [
 		['Recorrido de una pieza', 'm', cur.piece_m, m?.piece_m, 1, false],
-		...(full
-		? [
-			['Material que se mueve al día', 'm', cur.daily_m, m?.daily_m, 0, false],
-			['Capacidad', 'piezas al día', cur.capacity, m?.capacity, 1, true],
-			['Tiempo de fabricación', 'h por pieza', cur.lead_h, m?.lead_h, 1, false],
-			['Carga de camiones', 'min al día', cur.loading_min, m?.loading_min, 0, false],
-			]
-		: []),
 	]
 
 	const after = chosen?.plant || plant
@@ -105,7 +97,6 @@ export default function ReportDoc({ plant, analysis, chosen, notes = [], reportT
 					</tbody>
 				</table>
 
-				{!full && <p className="doc-note">Sin supuestos de tiempos ni producción: el análisis cubre recorridos y cercanía entre áreas.</p>}
 			</section>
 
 			<section className="doc-section doc-plans">
@@ -121,6 +112,12 @@ export default function ReportDoc({ plant, analysis, chosen, notes = [], reportT
 					</div>
 				)}
 			</section>
+
+			{analysis.studies?.source !== 'accepted_activities' && <section className="doc-section doc-break">
+				<h2>Borrador de cursograma desde el plano</h2>
+				<p className="doc-note" style={{ marginBottom: 12 }}>Clasificación inferida de estaciones y traslados; requiere revisar las actividades reales. Las filas enumeran ramas y retornos, sin representar una secuencia única observada. Las distancias conocidas salen de las rutas calculadas.</p>
+				<Cursograma plant={plant} legsNow={cur.legs || []} legsNew={m?.legs || null} nameNew={chosen?.name} />
+			</section>}
 
 			{chosen && (
 				<section className="doc-section doc-break">
@@ -187,34 +184,6 @@ export default function ReportDoc({ plant, analysis, chosen, notes = [], reportT
 				<RelChart relations={analysis.relations} title="" />
 			</section>
 
-			{full && (
-				<section className="doc-section">
-					<h2>Supuestos usados</h2>
-					
-					<table className="doc-table">
-						<tbody>
-							{(catalog?.assumptions || []).map((a) => (
-								<tr key={a.key}>
-									<td>{a.label}</td>
-									<td className="num">
-										{fmt(plant.params?.[a.key] ?? a.value, Number.isInteger(Number(plant.params?.[a.key] ?? a.value)) ? 0 : 2)} {a.unit}
-									</td>
-								</tr>
-							))}
-
-							{plant.stations.map((s) => (
-								<tr key={s.id}>
-									<td>{s.name}</td>
-									<td className="num">
-										{fmt(s.t, 1)} min por pieza · {s.ops} {s.ops === 1 ? 'operario' : 'operarios'}
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
-				</section>
-			)}
-
 			{(reportText || notes.length > 0) && (
 				<section className="doc-section">
 				<h2>Conclusiones del ingeniero</h2>
@@ -233,7 +202,7 @@ export default function ReportDoc({ plant, analysis, chosen, notes = [], reportT
 
 			<footer className="doc-foot">
 				<span>Cauce · el recorrido de tu planta, en orden.</span>
-				<span>Los números salen del plano y de los supuestos indicados; confírmalos con datos medidos.</span>
+				<span>Los números salen del plano; confírmalos con datos medidos.</span>
 			</footer>
 			{analysis.studies && <StudyDeliverables result={analysis.studies} />}
 		</article>

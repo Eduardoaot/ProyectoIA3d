@@ -18,7 +18,7 @@ Funciona para cualquier rubro (vidrio, carpintería, metalmecánica, costura, al
 
 ## Contexto, estudios y operadores conectados
 
-La rama `feature/data` añade un expediente local persistente en SQLite, con confirmación por lotes, documentos originales, trabajos de interpretación por bloques, estudios de más de cien actividades, base de operadores y entregables estructurados. Contrato y alcance: [CONTRATO-DATA.md](coordinacion/CONTRATO-DATA.md) y [PLAN-DATA.md](PLAN-DATA.md).
+La rama de continuación `feature/data1` reúne el expediente local persistente en SQLite, con confirmación por lotes, documentos originales, trabajos de interpretación por bloques, estudios de más de cien actividades, base de operadores y entregables estructurados, junto con las mejoras de recinto, editor y presentación de Eduardo. Contrato, integración y próximos pasos: [CONTRATO-DATA.md](coordinacion/CONTRATO-DATA.md) y [PLAN-DATA.md](PLAN-DATA.md).
 
 Desde la raíz, con las dependencias de `backend/requirements-dev.txt` instaladas en `.venv`:
 
@@ -29,6 +29,8 @@ Desde la raíz, con las dependencias de `backend/requirements-dev.txt` instalada
 En otra terminal: `cd frontend` y `npm run dev -- --host 127.0.0.1`. Abrir **Ver contexto de la planta**. El estado se guarda en el navegador; **Guardar copia del proyecto** persiste el expediente en el backend y **Exportar con archivos** permite trasladarlo. `CAUCE_DATA_DIR` cambia la carpeta de SQLite (por defecto `.cauce-data`, excluida de Git).
 
 La interpretación utiliza el proveedor existente del rol contexto: `OLLAMA_HOST`, `CAUCE_CONTEXT_PROVIDER` y `CAUCE_CONTEXT_MODEL`. Si el modelo no está disponible, el servicio lo explica y conserva captura manual y documentos. Las pruebas no necesitan Ollama: usan proveedores simulados. No se ha equiparado esa prueba con la calidad de un modelo real.
+
+En Windows también se puede usar `powershell -ExecutionPolicy Bypass -File .\iniciar.ps1`. Reutiliza `.venv` de la raíz o `backend/.venv`, inicia el backend oculto y deja el frontend en la terminal. El modelo se configura después; solo se descarga desde este script si se añade `-DescargarModelo`.
 
 Los porcentajes de operadores importados conservan su escala y procedencia; la eficiencia calculada requiere definir sus observaciones. Las duraciones desconocidas quedan sin dato. Un promedio de muestras se calcula en código y no se llama tiempo estándar. Los formatos sin extracción real y los PDFs escaneados siguen pendientes de lectura.
 

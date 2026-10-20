@@ -4,10 +4,9 @@ import EngineerChat from '../components/EngineerChat'
 import Btn from '../fx/Btn'
 import { Appear, CountUp, RevealTitle } from '../fx/Reveal'
 
-export default function Summary({ plant, analysis, chosen, context, onPrint, onWorkshop, onRestart }) {
+export default function Summary({ plant, analysis, chosen, context, onPrint, onRestart }) {
     const cur = analysis.current
     const m = chosen?.metrics
-    const full = plant.use_assumptions && cur.daily_m != null
     const saved = m ? -pct(cur.piece_m, m.piece_m) : 0
 
     const moved = chosen ? plant.stations.filter((s) => {
@@ -53,35 +52,12 @@ export default function Summary({ plant, analysis, chosen, context, onPrint, onW
                         Se mueven {moved} de {plant.stations.length} estaciones.
                         </li>
 
-                        {full && m && (
-                            <>
-                                <li>
-                                Capacidad: {fmt(cur.capacity, 1)} → {fmt(m.capacity, 1)} piezas al día.
-                                </li>
-                                <li>
-                                Tiempo por pieza: {fmt(cur.lead_h, 1)} → {fmt(m.lead_h, 1)} h.
-                                </li>
-                                <li>
-                                Carga de camiones: {fmt(cur.loading_min)} → {fmt(m.loading_min)} min al día.
-                                </li>
-                            </>
-                        )}
-
-                        {!full && <li>Sin supuestos: para ver capacidad y tiempos, actívalos en el paso 1.</li>}
                     </ul>
                     
                     <div className="row">
                         <Btn size="small" onClick={onPrint}>
                             Ver el reporte otra vez
                         </Btn>
-
-                        <button type="button" className="btn btn--ghost btn--small" onClick={onWorkshop}>
-                            Taller de mejora (extra)
-                        </button>
-                        
-                        <button type="button" className="btn btn--ghost btn--small" onClick={onRestart}>
-                            Empezar otra planta
-                        </button>
                     </div>
                 </Appear>
             </div>
@@ -91,6 +67,11 @@ export default function Summary({ plant, analysis, chosen, context, onPrint, onW
             </Appear>
 
             <p className="fin">FIN</p>
+
+            <div className="fin-next">
+                <p className="small">¿Tienes otra planta en mente?</p>
+                <Btn onClick={onRestart}>Crear una nueva planta</Btn>
+            </div>
         </section>
     )
 }

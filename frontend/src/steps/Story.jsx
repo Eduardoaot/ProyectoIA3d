@@ -4,136 +4,7 @@ import WaitPanel from '../components/WaitPanel'
 import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
-import { parseProject } from '../importProject'
-
-function Switch({ on, onChange, children }) {
-    return (
-        <button type="button" className="switch" role="switch" aria-checked={on} onClick={() => onChange(!on)}>
-            <span className="switch-track">
-                <span className="switch-knob" />
-            </span>
-            {children}
-        </button>
-    )
-}
-
-function Assumptions({ draft, setDraft, catalog, info }) {
-    const [clearedZeros, setClearedZeros] = useState({})
-    const on = !!draft.use_assumptions
-    const src = Object.fromEntries((info?.assumptions || []).map((a) => [a.key, a.source]))
-    const setParam = (k, v) => setDraft({ ...draft, params: { ...draft.params, [k]: v } })
-    const setSt = (id, patch) => setDraft({ ...draft, stations: draft.stations.map((s) => (s.id === id ? { ...s, ...patch } : s)) })
-    const people = draft.stations.reduce((a, s) => a + (Number(s.ops) || 0), 0)
-    const clearZeroOnFocus = (key, e) => {
-        if (e.currentTarget.value !== '' && Number(e.currentTarget.value) === 0) {
-            setClearedZeros((current) => ({ ...current, [key]: true }))
-        }
-    }
-    const restoreZeroOnBlur = (key) => {
-        setClearedZeros((current) => {
-            const next = { ...current }
-            delete next[key]
-            return next
-        })
-    }
-    const showValue = (key, value) => clearedZeros[key] ? '' : value
-
-    return (
-        <div className="block stack">
-            <div className="chart-head">
-                <div>
-                    <h3>Supuestos para calcular</h3>
-                    <p className="small">Sin supuestos solo se analizan recorridos y cercanía entre áreas. Con ellos también se calculan capacidad, cuello de botella y tiempos.</p>
-                </div>
-
-                <Switch on={on} onChange={(v) => setDraft({ ...draft, use_assumptions: v })}>
-                    {on ? 'Usar supuestos' : 'Sin supuestos'}
-                </Switch>
-            </div>
-
-            {on && (
-                <>
-                    {info?.ai_assumptions?.length > 0 && (
-                        <details className="how">
-                            <summary>Supuestos tomados en el análisis</summary>
-                            <ul>
-                                {info.ai_assumptions.map((assumption, idx) => (
-                                    <li key={idx}>{assumption}</li>
-                                ))}
-                            </ul>
-                        </details>
-                    )}
-
-                    <div className="assume assume--grid">
-                        {catalog?.assumptions.map((assumption) => (
-                            <div key={assumption.key} className="assume-row" data-src={src[assumption.key] || 'supuesto'}>
-                                <div>
-                                    <label htmlFor={`a-${assumption.key}`}>{assumption.label}</label>
-                                    <span className="small">
-                                        {assumption.why} ({assumption.unit})
-                                    </span>
-                                </div>
-
-                                <input id={`a-${assumption.key}`} type="number" step="any" min="0" value={showValue(`param-${assumption.key}`, draft.params?.[assumption.key] ?? assumption.value)} onFocus={(e) => clearZeroOnFocus(`param-${assumption.key}`, e)} onBlur={() => restoreZeroOnBlur(`param-${assumption.key}`)} onChange={(e) => {
-                                    if (e.target.value === '') return
-                                    setParam(assumption.key, Number(e.target.value))
-                                    restoreZeroOnBlur(`param-${assumption.key}`)
-                                }} />
-                            </div>
-                        ))}
-                    </div>
-
-                    <div>
-                        <div className="chart-head">
-                            <h3>Tiempos y personas por estación</h3>
-                            <span className="small num">{people} personas en planta</span>
-                        </div>
-
-                        <table className="table">
-                            <thead>
-                                <tr>
-                                    <th>Estación</th>
-                                    <th className="num">Minutos por pieza</th>
-                                    <th className="num">Operarios</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {draft.stations.map((station) => (
-                                    <tr key={station.id}>
-                                        <td>
-                                            {station.name}
-                                            {station.t_source === 'ia' && <span className="small"> (estimado por la IA)</span>}
-                                        </td>
-
-                                        <td className="num">
-                                            <input className="cell-input" type="number" min="0" step="0.1" value={showValue(`time-${station.id}`, station.t ?? 0)} onFocus={(e) => clearZeroOnFocus(`time-${station.id}`, e)} onBlur={() => restoreZeroOnBlur(`time-${station.id}`)} onChange={(e) => {
-                                                if (e.target.value === '') return
-                                                setSt(station.id, { t: Number(e.target.value), t_source: 'usuario' })
-                                                restoreZeroOnBlur(`time-${station.id}`)
-                                            }} aria-label={`Minutos por pieza en ${station.name}`} />
-                                        </td>
-
-                                        <td className="num">
-                                            <input className="cell-input" type="number" min="0" step="1" value={showValue(`ops-${station.id}`, station.ops ?? 0)} onFocus={(e) => clearZeroOnFocus(`ops-${station.id}`, e)} onBlur={() => restoreZeroOnBlur(`ops-${station.id}`)} onChange={(e) => {
-                                                if (e.target.value === '') return
-                                                setSt(station.id, { ops: Math.max(0, Math.round(Number(e.target.value))) })
-                                                restoreZeroOnBlur(`ops-${station.id}`)
-                                            }} aria-label={`Operarios en ${station.name}`} />
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-
-                        <p className="small" style={{ marginTop: 8 }}>
-                            Con 0 operarios y minutos mayores a 0, la estación se toma como máquina automática.
-                        </p>
-                    </div>
-                </>
-            )}
-        </div>
-    )
-}
+import { ask } from '../components/Dialog'
 
 /* Nombre editable en el mismo chip: clic para escribir, Enter o salir para guardar. */
 function ChipName({ value, onCommit }) {
@@ -248,7 +119,7 @@ function ProcessSummary({ draft, setDraft }) {
             {draft.zones.length > 0 && (
                 <div className="chips" style={{ marginTop: 10 }}>
                     {draft.zones.map((zone) => (
-                        <span key={zone.id} className="chip chip--edit" data-kind="supuesto">
+                        <span key={zone.id} className="chip chip--edit" data-kind="zona">
                             <i />
                             <ChipName value={zone.name} onCommit={(name) => rename('zones', zone.id, name)} />
                         </span>
@@ -281,30 +152,15 @@ function SpatialNote({ spatial }) {
     )
 }
 
-export default function Story({ text, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onImport, onSave, saving, onOpenContext, context2 }) {
+export default function Story({ text, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2 }) {
     const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
-    const [importError, setImportError] = useState(null)
     const editorRef = useRef(null)
-    const fileRef = useRef(null)
-
-    // Carga un proyecto o una planta en JSON (por ejemplo pruebas/transformadores.json) en el editor.
-    const importFile = async (e) => {
-        const file = e.target.files?.[0]
-        e.target.value = ''
-        if (!file) return
-        const out = parseProject(await file.text())
-        setImportError(out.error || null)
-        if (out.error) return
-        if (draft?.stations?.length && !window.confirm('El plano actual se reemplaza por el importado. ¿Seguir?')) return
-        onImport(out.plant, out.warnings)
-        scrollToEditor()
-    }
 
     const scrollToEditor = () => setTimeout(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120)
 
-    const restartPlan = () => {
-        if (!window.confirm('Se borrará todo el plano (máquinas, rutas, paredes y zonas) para empezar uno vacío. ¿Seguir?')) return
+    const restartPlan = async () => {
+        if (!(await ask('Se borrará todo el plano (máquinas, rutas, paredes y zonas) para empezar uno vacío.', { title: '¿Reiniciar el plano?', ok: 'Sí, reiniciar' }))) return
         onBlank()
     }
 
@@ -326,8 +182,10 @@ export default function Story({ text, info, draft, setDraft, catalog, reading, e
                         <h2>Cuéntanos sobre<br />tu planta.</h2>
                         <p>Tu proceso, tus documentos y lo que quieres mejorar. Todo en un mismo lugar.</p>
                         {text.trim() && <blockquote className="context-story-preview">{text}</blockquote>}
-                        <button type="button" className="btn" onClick={() => onOpenContext('inicio')}>{empty ? 'Empezar con mi contexto' : 'Continuar con mi contexto'} <span aria-hidden="true">↗</span></button>
                         <div className="story-bar">
+                            <Btn variant="ghost" onClick={() => onOpenContext('inicio')}>
+                                {empty ? 'Empezar con mi contexto' : 'Continuar con mi contexto'}
+                            </Btn>
                             <Btn
                                 onClick={async () => {
                                     if (await onRead()) scrollToEditor()
@@ -340,8 +198,6 @@ export default function Story({ text, info, draft, setDraft, catalog, reading, e
                     </div>
 
                     {error && <p className="small">{error}</p>}
-                    {importError && <p className="small">{importError}</p>}
-                    <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={importFile} />
                 </Appear>
 
                 <div className="stack">
@@ -354,17 +210,12 @@ export default function Story({ text, info, draft, setDraft, catalog, reading, e
                             <ul className="note-list" style={{ marginTop: 14 }}>
                                 <li>La IA lee el contexto y devuelve solo datos: máquinas, rutas, zonas y cifras.</li>
                                 <li>Se arma un primer plano. Tú lo corriges en el editor de abajo.</li>
-                                <li>Los supuestos (tiempos, producción) son opcionales: sin estos, solo se analizan recorridos.</li>
                             </ul>
 
                             <p className="small" style={{ marginTop: 18 }}>
                                 ¿Prefieres no usar la IA?{' '}
                                 <button type="button" className="link-btn" onClick={() => (onBlank(), scrollToEditor())}>
                                     Dibuja el plano tú mismo
-                                </button>
-                                {' '}o{' '}
-                                <button type="button" className="link-btn" onClick={() => fileRef.current?.click()}>
-                                    Importar proyecto (JSON)
                                 </button>
                             </p>
                         </div>
@@ -406,25 +257,18 @@ export default function Story({ text, info, draft, setDraft, catalog, reading, e
                         mode="full"
                         onMetrics={setMetrics}
                         actions={
-                            <>
-                                <button type="button" className="btn btn--ghost btn--small" onClick={() => fileRef.current?.click()} title="Carga una planta o un proyecto guardado en JSON">
-                                    Importar JSON
-                                </button>
-                                <button type="button" className="btn btn--ghost btn--small" onClick={restartPlan} title="Borra todo el plano y empieza uno vacío">
-                                    Reiniciar plano
-                                </button>
-                            </>
+                            <button type="button" className="btn btn--ghost btn--small" onClick={restartPlan} title="Borra todo el plano y empieza uno vacío">
+                                Reiniciar plano
+                            </button>
                         }
                     />
-
-                    <div style={{ marginTop: 24 }}>
-                        <Assumptions draft={draft} setDraft={setDraft} catalog={catalog} info={info} />
-                    </div>
 
                     {context2 && (
                         <div className="context-review-card">
                             <div><h3>Así entendimos tu planta</h3><p className="small">{context2.confirmed ? 'Confirmaste esta versión del plano, contexto y prioridades.' : 'Revisa el plano junto con los datos y las prioridades antes de analizar.'}</p></div>
-                            <button type="button" className="btn btn--ghost btn--small" onClick={() => onOpenContext('revision')}>{context2.confirmed ? 'Ver revisión' : 'Revisar y confirmar'} <span aria-hidden="true">↗</span></button>
+                            <Btn variant="ghost" size="small" onClick={() => onOpenContext('revision')}>
+                                {context2.confirmed ? 'Ver revisión' : 'Revisar y confirmar'}
+                            </Btn>
                         </div>
                     )}
 

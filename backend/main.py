@@ -1,4 +1,8 @@
 import asyncio
+import json
+import os
+import pathlib
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,8 +27,6 @@ from cauce.providers import caps, get_provider
 from cauce.story import STORY_SCHEMA, STORY_SYSTEM, build_plant
 from cauce.workspace_routes import create_router
 
-app = FastAPI(title="Cauce")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 # Un proveedor por rol (criterios §7.3); cada uno se configura con CAUCE_<ROL>_PROVIDER/MODEL.
 extractor = get_provider("extractor")  # historia -> JSON
 engineer = get_provider("chat")  # chat del ingeniero
@@ -35,6 +37,28 @@ spatial = get_provider("espacial")  # agentes que leen el espacio
 seer = get_provider("vision")  # imágenes de referencia (solo si el modelo tiene visión)
 context_organizer = get_provider("contexto")  # especialistas por tema y consolidador
 context_organizer.max_output_tokens = 4096
+
+
+async def warm_up():
+    """Al arrancar, deja leídas las instrucciones del extractor y del revisor (las dos llamadas
+    que hace toda historia). La primera historia se ahorra ~1 min en CPU; sin Ollama no pasa nada."""
+    for system in (STORY_SYSTEM, REVIEW_SYSTEM):
+        try:
+            await extractor.warm(system)
+        except Exception:  # noqa: BLE001
+            return
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    task = asyncio.create_task(warm_up()) if hasattr(extractor, "warm") and os.getenv("CAUCE_WARM", "1") != "0" else None
+    yield
+    if task:
+        task.cancel()
+
+
+app = FastAPI(title="Cauce", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(create_router(lambda: context_organizer))
 
 
@@ -117,6 +141,29 @@ async def catalog_route():
     return catalog.public()
 
 
+FLOW_SCHEMA = {"type": "object", "properties": {"flujo": STORY_SCHEMA["properties"]["flujo"]}, "required": ["flujo"]}
+REVIEW_SYSTEM = (pathlib.Path(__file__).resolve().parent / "cauce" / "agents" / "revisor.md").read_text(encoding="utf-8").strip()
+
+
+async def review_flow(provider, text: str, extracted: dict) -> dict:
+    """El flujo corregido por el revisor si es válido (solo nombres de la lista); si falla, el original."""
+    names = [str(x.get("nombre")) for x in extracted.get("estaciones") or [] if isinstance(x, dict) and x.get("nombre")]
+    prompt_ = f"Historia:\n{text}\n\nEstaciones: {json.dumps(names, ensure_ascii=False)}\n\nFlujo propuesto: {json.dumps(extracted.get('flujo') or [], ensure_ascii=False)}"
+    try:
+        out = await provider.json(REVIEW_SYSTEM, prompt_, FLOW_SCHEMA)
+    except Exception:  # noqa: BLE001
+        return extracted
+    flujo = out.get("flujo") if isinstance(out, dict) else None
+    if not isinstance(flujo, list) or check({"flujo": flujo}, FLOW_SCHEMA):
+        return extracted
+    known = {n.strip().lower() for n in names}
+    flujo = [f for f in flujo if isinstance(f, dict) and str(f.get("de", "")).strip().lower() in known and str(f.get("a", "")).strip().lower() in known]
+    # Un revisor que deja menos de la mitad de las conexiones probablemente se equivocó: se queda el original.
+    if len(flujo) < max(1, len(extracted.get("flujo") or []) // 2):
+        return extracted
+    return {**extracted, "flujo": flujo, "flujo_revisado": True}
+
+
 @app.post("/api/context/organize")
 async def context_organize(body: OrganizeContextInterface):
     text = body.text.strip()
@@ -144,6 +191,10 @@ async def story(body: StoryInterface):
                 extracted = retry
     except Exception as e:
         error = str(e)
+
+    # Segunda lectura: un revisor compara el flujo con la historia (ramas, salidas que faltan, retornos).
+    if isinstance(extracted, dict) and len(extracted.get("estaciones") or []) >= 3:
+        extracted = await review_flow(extractor, body.text, extracted)
 
     # Si la historia describe el espacio, se consulta a un agente por cada tipo de interpretación.
     score, _ = detail(body.text)

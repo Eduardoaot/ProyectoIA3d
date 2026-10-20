@@ -18,7 +18,7 @@ import math
 from functools import lru_cache
 
 from . import flows, units
-from .catalog import CLEAN, DEFAULT_PARAMS, DIRTY
+from .catalog import CLEAN, DEFAULT_PARAMS, DIRTY, WALKABLE_ZONES
 
 STEP = 0.5      # resolución de la malla (m)
 MARGIN = 0.25   # holgura alrededor de cada obstáculo (m)
@@ -127,6 +127,8 @@ def obstacles(plant, positions, skip=()):
             continue
         rects.append(tuple(round(v, 2) for v in rect_at(st[sid], pos)))
     for zn in plant.get("zones", []):
+        if zn.get("kind") in WALKABLE_ZONES:
+            continue  # por el pasillo y por un área de trabajo se camina
         rects.append(tuple(round(v, 2) for v in zone_rect(zn)))
     segs = tuple((w["x1"], w["z1"], w["x2"], w["z2"]) for w in plant.get("walls", []))
     poly = outline(plant)
@@ -323,7 +325,7 @@ def avoid_hits(plant, positions):
     """Áreas sucias (polvo, ruido, calor) a menos de 4 m de áreas limpias."""
     st = station_map(plant)
     items = [(sid, st[sid]["name"], st[sid]["kind"], rect_at(st[sid], p)) for sid, p in positions.items() if sid in st]
-    items += [(z["id"], z["name"], z["kind"], zone_rect(z)) for z in plant.get("zones", [])]
+    items += [(z["id"], z["name"], z["kind"], zone_rect(z)) for z in plant.get("zones", []) if z["kind"] != "area"]
     hits = []
     for a in items:
         if a[2] not in DIRTY:
@@ -499,7 +501,7 @@ def rebalance_ops(plant, positions):
 
 def relations(plant):
     """Tabla de relaciones (A, E, I, O, U, X). No depende de supuestos."""
-    zones = [z for z in plant.get("zones", []) if z["kind"] not in ("bloqueado", "obstaculo")]
+    zones = [z for z in plant.get("zones", []) if z["kind"] not in ("bloqueado", "obstaculo", "pasillo", "area")]
     ids = [s["id"] for s in plant["stations"]] + [z["id"] for z in zones]
     names = {s["id"]: s["name"] for s in plant["stations"]}
     names.update({z["id"]: z["name"] for z in zones})

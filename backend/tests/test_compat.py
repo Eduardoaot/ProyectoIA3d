@@ -105,7 +105,7 @@ def test_capabilities_coherente(client):
         "flows": lambda: __import__("cauce.flows"),
         "conveyors": lambda: __import__("cauce.flows"),
         "simulate": lambda: "/api/simulate" in routes or (_ for _ in ()).throw(AssertionError("falta /api/simulate")),
-        "context_agents": lambda: __import__("cauce.agents.context_workspace"),
+        "context_agents": lambda: "/api/context/organize" in routes or (_ for _ in ()).throw(AssertionError("falta /api/context/organize")),
         "context_workspace": lambda: __import__("cauce.workspace_routes"),
         "context_jobs": lambda: __import__("cauce.workspace_jobs"),
         "context_documents": lambda: __import__("cauce.workspace_documents"),

@@ -14,7 +14,7 @@ export const SEGMENTS = [
     { id: 'estudios', label: 'Estudios del trabajo', hint: 'método, actividades y estudios aportados' },
     { id: 'referencias', label: 'Referencias', hint: 'imágenes de distribución y notas' },
 ]
-export const SOURCES = ['medido', 'estimado', 'supuesto', 'usuario']
+export const SOURCES = ['medido', 'estimado', 'usuario']
 export const CONFIDENCE = ['alta', 'media', 'baja']
 
 export const EMPTY_CONTEXT = { segments: {} }
