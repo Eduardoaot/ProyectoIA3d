@@ -83,7 +83,7 @@
 
 .work-studies__activities {
   display: grid;
-  gap: 18px;
+  gap: 7px;
 }
 
 .work-studies__activity {
@@ -94,9 +94,24 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--g200);
+  width: 100%;
+  min-height: 52px;
+  padding: 9px 15px;
+  border: 0;
   background: #fafafa;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.work-studies__activity-top:hover,
+.work-studies__activity-top:focus-visible {
+  background: var(--g100);
+}
+
+.work-studies__activity-top[aria-expanded="true"] {
+  border-bottom: 1px solid var(--g200);
 }
 
 .work-studies__activity-top > strong {
@@ -104,6 +119,32 @@
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: 14px;
+}
+
+.work-studies__step {
+  width: 34px;
+  flex-shrink: 0;
+  color: var(--g500);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.work-studies__activity-kind {
+  flex-shrink: 0;
+  color: var(--g500);
+  font-size: 12px;
+}
+
+.work-studies__activity-expand {
+  width: 20px;
+  flex-shrink: 0;
+  font-size: 20px;
+  text-align: center;
+}
+
+.work-studies__activity-actions {
+  padding: 0 18px 15px;
+  text-align: right;
 }
 
 .work-studies__activity-symbol {

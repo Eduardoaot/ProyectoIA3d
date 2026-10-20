@@ -11,6 +11,7 @@ export const SEGMENTS = [
     { id: 'personal', label: 'Personal', hint: 'operarios, turnos, habilidades' },
     { id: 'calidad', label: 'Calidad', hint: 'scrap, retrabajo, reclamos' },
     { id: 'restricciones', label: 'Restricciones', hint: 'fijos, seguridad, pasillos mínimos' },
+    { id: 'estudios', label: 'Estudios del trabajo', hint: 'método, actividades y estudios aportados' },
     { id: 'referencias', label: 'Referencias', hint: 'imágenes de distribución y notas' },
 ]
 export const SOURCES = ['medido', 'estimado', 'supuesto', 'usuario']

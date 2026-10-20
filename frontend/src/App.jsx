@@ -6,7 +6,7 @@ import { upgradePlant } from './migrate'
 import { isStale } from './proposals'
 import { contextPayload } from './context'
 import { summarize } from './context2'
-import { reviewSignature } from './contextWorkspace'
+import { deleteAttachments, reviewSignature } from './contextWorkspace'
 import ContextWorkspace from './components/context/ContextWorkspace'
 import './components/context/context-entry.css'
 import FlowMark from './brand/FlowMark'
@@ -57,7 +57,7 @@ function slim(project, ch, segmented = false) {
 
 export default function App() {
     const [intro, setIntro] = useState(true)
-    const [project, update, reset] = useProject()
+    const [project, update, reset, library] = useProject()
     const [step, setStep] = useState(() => (project.plant ? 1 : 0))
     const [catalog, setCatalog] = useState(null)
     const [reading, setReading] = useState(false)
@@ -79,7 +79,7 @@ export default function App() {
     const signature = useMemo(() => reviewSignature(project), [project])
     const confirmed = !!signature && project.context2Ok === signature
     const stale = isStale(project) || (!!analysis && project.analysisInputSignature !== signature)
-    const version = `${signature}-${analysis?.current?.piece_m}-${ch?.id}-${ch?.metrics?.piece_m}`
+    const version = `${library.activeId}-${signature}-${analysis?.current?.piece_m}-${ch?.id}-${ch?.metrics?.piece_m}`
     const report = useReport(stale ? null : context, version, has(caps, 'report_validation'))
     const openContext = (topic = 'inicio') => {
         contextOpener.current = document.activeElement
@@ -114,7 +114,7 @@ export default function App() {
             setStep(i)
             update((p) => ({ maxStep: Math.max(p.maxStep || 0, i) }))
             stage.current?.scrollTo({ top: 0, behavior: 'instant' })
-        }, [],
+        }, [update],
     )
 
     const defaultParams = () => Object.fromEntries((catalog?.assumptions || []).map((a) => [a.key, a.value]))
@@ -180,6 +180,29 @@ export default function App() {
         if (!window.confirm('Se borrará el plano, el rediseño y el reporte de este navegador. ¿Seguir?')) return
         reset()
         setStep(0)
+    }
+
+    const createProject = (name) => {
+        library.create(name)
+        setContextTopic('proyectos')
+        setStep(0)
+        setChat(false)
+        setError(null)
+    }
+
+    const selectProject = (id) => {
+        if (id === library.activeId) return
+        library.select(id)
+        setContextTopic('proyectos')
+        setStep(0)
+        setChat(false)
+        setError(null)
+    }
+
+    const clearContext = async () => {
+        const files = project.contextWorkspace?.attachments || []
+        await deleteAttachments(files.map((file) => file.id))
+        library.clearContext()
     }
 
     const ready = !!(plant && analysis)
@@ -272,7 +295,7 @@ export default function App() {
                         </button>
                     </div>
                     <AnimatePresence mode="wait">
-                        <motion.div key={ready ? step : 0} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
+                        <motion.div key={`${library.activeId}-${ready ? step : 0}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
                           {ready && step > 0 && stale && (
                               <p className="stale-note small" role="status">
                                   <strong>Resultados pendientes de actualizar.</strong> Revisa el plano, el contexto y tus prioridades. Confirma «Así entendimos tu planta» y vuelve al paso 1 para recalcular.
@@ -286,7 +309,13 @@ export default function App() {
 
             {contextTopic !== null && (
                 <ContextWorkspace
+                    key={library.activeId}
                     project={project}
+                    projects={library.projects}
+                    activeProjectId={library.activeId}
+                    onCreateProject={createProject}
+                    onSelectProject={selectProject}
+                    onClearContext={clearContext}
                     plant={draft || plant}
                     onTextChange={(text) => update({ text, printed: false })}
                     onContextChange={(context) => update({ context, printed: false })}
