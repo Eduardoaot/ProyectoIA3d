@@ -29,7 +29,6 @@ export const api = {
     // extra: campos nuevos del contrato v3 (context, weights); el backend viejo los ignora.
     analyze: (plant, extra = {}) => post('/api/analyze', { plant, ...extra }),
     compact: (plant) => post('/api/compact', { plant }),
-    missions: (context) => post('/api/missions', context),
     // Asistente del editor (solo si capabilities anuncia plan_ops).
     planOps: (instruction, plant) => post('/api/plan/ops', { instruction, plant }),
     // Imágenes de referencia: el backend responde 422 si su proveedor no tiene visión.

@@ -119,13 +119,17 @@ export function projectToOutline(poly, [x, z], margin = GATE_HALF) {
   return best
 }
 
+/* Medio ancho de un portón: su ancho real (`w`, en metros) o el de siempre. */
+export const gateHalf = (g) => (Number(g?.w) > 0 ? Number(g.w) / 2 : GATE_HALF)
+
 /* Dónde está un portón: punto sobre el contorno, lado y normal hacia la calle. */
 export function gateInfo(plant, g) {
   const poly = outlineOf(plant)
-  const p = projectToOutline(poly, [g.x, g.z ?? plant.size.d])
+  const half = gateHalf(g)
+  const p = projectToOutline(poly, [g.x, g.z ?? plant.size.d], half)
   const [nx, nz] = p.edge.n
   // Rotación en grados para dibujar el portón con su eje "y" hacia afuera.
-  return { x: p.x, z: p.z, n: p.edge.n, dir: p.edge.dir, edge: p.edge.i, t: p.t, deg: (Math.atan2(-nx, nz) * 180) / Math.PI }
+  return { x: p.x, z: p.z, n: p.edge.n, dir: p.edge.dir, edge: p.edge.i, t: p.t, half, deg: (Math.atan2(-nx, nz) * 180) / Math.PI }
 }
 
 export function bboxOf(poly) {
@@ -263,6 +267,13 @@ export function sizePart(part, w, d) {
   const kx = w / (b.x1 - b.x0 || 1)
   const kz = d / (b.z1 - b.z0 || 1)
   return { ...part, pts: part.pts.map(([x, z]) => [round2(cx + (x - cx) * kx), round2(cz + (z - cz) * kz)]) }
+}
+
+/* Escala una pieza respecto del origen (para cambiar el tamaño de todo el edificio). */
+export function scalePart(part, fx, fz) {
+  if (part.kind === 'poly') return { ...part, pts: part.pts.map(([x, z]) => [round2(x * fx), round2(z * fz)]) }
+  const quarter = Math.round((part.rot || 0) / 90) % 2 !== 0
+  return { ...part, x: round2(part.x * fx), z: round2(part.z * fz), w: round2(part.w * (quarter ? fz : fx)), d: round2(part.d * (quarter ? fx : fz)) }
 }
 
 export function shiftPart(part, dx, dz) {

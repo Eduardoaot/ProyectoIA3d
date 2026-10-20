@@ -2,7 +2,7 @@ import { motion } from 'motion/react'
 import { fmt } from '../api'
 import { flowOf, lateralOffsets, shiftPath } from '../flows'
 import { countOf, fitLabel } from '../units'
-import { arrowPoints, bboxOf, GATE_HALF, gateInfo, midOf, outlineOf, pathD, polyD, rectOf, shortName, straight } from '../editor/geometry'
+import { arrowPoints, bboxOf, gateInfo, midOf, outlineOf, pathD, polyD, rectOf, shortName, straight } from '../editor/geometry'
 import { useTip } from './Tip'
 
 /* Plano desde arriba con cada recorrido del material y su dirección.
@@ -74,7 +74,7 @@ export default function FlowPlan({ plant, positions, legs, title, total, unit = 
           const lift = 1.8 + Math.abs(gi.n[0]) * 2.2
           return (
             <g key={g.id}>
-              <rect x={-GATE_HALF} y={-0.25} width={GATE_HALF * 2} height={0.9} transform={`translate(${gi.x} ${gi.z}) rotate(${gi.deg})`} fill={on ? '#000' : '#fff'} stroke="#000" strokeWidth={0.15} />
+              <rect x={-gi.half} y={-0.25} width={gi.half * 2} height={0.9} transform={`translate(${gi.x} ${gi.z}) rotate(${gi.deg})`} fill={on ? '#000' : '#fff'} stroke="#000" strokeWidth={0.15} />
               <text x={gi.x + gi.n[0] * lift} y={gi.z + gi.n[1] * lift + 0.35} textAnchor="middle" fontSize="1" fontWeight={on ? 800 : 400} fill={on ? '#000' : '#767676'}>
                 {g.id}
                 {role}

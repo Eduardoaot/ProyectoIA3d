@@ -84,7 +84,7 @@ export default function Assistant({ plant, positions, onApply }) {
                             </ul>
                         </>
                     )}
-                    {lines.length === 0 && !out.rejected?.length && <p>No se propuso ningún cambio.</p>}
+                    {lines.length === 0 && !out.rejected?.length && !out.notes && <p>No se propuso ningún cambio.</p>}
                     <div className="row">
                         {lines.length > 0 && (
                             <button type="button" className="btn btn--small" onClick={apply}>

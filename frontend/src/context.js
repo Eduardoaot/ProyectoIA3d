@@ -13,7 +13,7 @@ export const SEGMENTS = [
     { id: 'restricciones', label: 'Restricciones', hint: 'fijos, seguridad, pasillos mínimos' },
     { id: 'referencias', label: 'Referencias', hint: 'imágenes de distribución y notas' },
 ]
-export const SOURCES = ['medido', 'estimado', 'supuesto', 'usuario']
+export const SOURCES = ['medido', 'estimado', 'usuario']
 export const CONFIDENCE = ['alta', 'media', 'baja']
 
 export const EMPTY_CONTEXT = { segments: {} }

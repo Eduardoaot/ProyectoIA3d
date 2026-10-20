@@ -385,6 +385,31 @@ const builders = {
       for (let k = 0; k < 4; k++) cyl(g, 0.2, 0.45, M.black, x + Math.cos(k * 1.57) * 0.95, 0, Math.sin(k * 1.57) * 0.95, 'y', 10)
     }
   },
+  /* Área de trabajo: piso apenas más oscuro con su contorno pintado. */
+  areaMark(g, w, d) {
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshStandardMaterial({ color: 0x000000, transparent: true, opacity: 0.05, roughness: 1 }))
+    floor.rotation.x = -Math.PI / 2
+    floor.position.y = 0.02
+    g.add(floor)
+    const line = new THREE.MeshStandardMaterial({ color: 0x161616, roughness: 0.8 })
+    for (const [lw, ld, x, z] of [[w, 0.12, 0, -d / 2], [w, 0.12, 0, d / 2], [0.12, d, -w / 2, 0], [0.12, d, w / 2, 0]]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(lw, ld), line)
+      m.rotation.x = -Math.PI / 2
+      m.position.set(x, 0.03, z)
+      g.add(m)
+    }
+  },
+  /* Pasillo reservado: solo líneas amarillas en el piso, sin barrera (por ahí se camina). */
+  aisle(g, w, d) {
+    const line = new THREE.MeshStandardMaterial({ color: 0xf2c200, roughness: 0.8 })
+    const long = w >= d
+    for (const s of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(long ? w : 0.15, long ? 0.15 : d), line)
+      m.rotation.x = -Math.PI / 2
+      m.position.set(long ? 0 : (s * w) / 2, 0.03, long ? (s * d) / 2 : 0)
+      g.add(m)
+    }
+  },
   /* Zona bloqueada: piso rayado con barrera. */
   blocked(g, w, d) {
     zoneFloor(g, w, d)
@@ -400,11 +425,11 @@ const MODEL = {
   lavado: 'tunnel', secado: 'dryer', mesa: 'workbench', ensamble: 'assembly', costura: 'sewing', mezcla: 'tanks',
   banda: 'conveyor', grua: 'hoistStation', inspeccion: 'inspection', empaque: 'packing', otro: 'generic',
   oficina: 'office', banos: 'restroom', comedor: 'canteen', bloqueado: 'blocked',
-  rack: 'storage', table: 'gantry', bench: 'workbench', polisher: 'line', booth: 'cabin', washer: 'tunnel', pack: 'packing', zone: 'dispatch',
+  pasillo: 'aisle', area: 'areaMark', rack: 'storage', table: 'gantry', bench: 'workbench', polisher: 'line', booth: 'cabin', washer: 'tunnel', pack: 'packing', zone: 'dispatch',
 }
 
 /* Altura aproximada de cada maqueta, para poner la etiqueta encima. */
-export const TALL = { pintura: 2.9, horno: 3.2, prensa: 3.8, grua: 4.3, cnc: 2.8, mezcla: 2.7, oficina: 2.4, banos: 2.3 }
+export const TALL = { pintura: 2.9, horno: 3.2, prensa: 3.8, grua: 4.3, cnc: 2.8, mezcla: 2.7, oficina: 2.4, banos: 2.3, area: 0.4, pasillo: 0.3 }
 
 export function makeMachine(kind, w, d, opts = {}) {
   const g = new THREE.Group()

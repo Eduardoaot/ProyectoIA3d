@@ -301,26 +301,31 @@ export default class PlantScene {
 
   buildWalls(opts) {
     empty(this.walls)
-    const h = 2.3
+    // Altura real de los muros si el plano la trae (wall_h, en metros); si no, la de siempre.
+    const h = Number(this.plant.wall_h) > 0 ? Number(this.plant.wall_h) : 2.3
     const t = 0.3
     const mat = M.white
     const poly = this.poly || outlineOf(this.plant)
     const open = opts.gates ? opts.gates.map((id) => this.plant.gates.find((g) => g.id === id)).filter(Boolean) : this.plant.gates
-    const infos = open.map((g) => gateInfo(this.plant, g))
+    const infos = open.map((g) => ({ ...gateInfo(this.plant, g), gh: Number(g.h) > 0 ? Number(g.h) : h }))
     // Muros exteriores por cada lado del contorno, con el hueco de cada portón.
     for (const e of edgesOf(poly)) {
-      const seg = (s0, s1) => {
+      const seg = (s0, s1, y0 = 0) => {
         const len = s1 - s0
-        if (len < 0.05) return
+        const hh = h - y0
+        if (len < 0.05 || hh < 0.05) return
         // En las esquinas el muro se alarga para cerrar el ángulo.
         const a0 = s0 <= 0.01 ? t : 0
         const a1 = s1 >= e.len - 0.01 ? t : 0
         const c = s0 - a0 + (len + a0 + a1) / 2
-        const m = box(this.walls, len + a0 + a1, h, t, mat, 0, 0, 0)
-        m.position.set(e.a[0] + e.dir[0] * c + (e.n[0] * t) / 2, h / 2, e.a[1] + e.dir[1] * c + (e.n[1] * t) / 2)
+        const m = box(this.walls, len + a0 + a1, hh, t, mat, 0, 0, 0)
+        m.position.set(e.a[0] + e.dir[0] * c + (e.n[0] * t) / 2, y0 + hh / 2, e.a[1] + e.dir[1] * c + (e.n[1] * t) / 2)
         m.rotation.y = -Math.atan2(e.dir[1], e.dir[0])
       }
-      const cuts = infos.filter((gi) => gi.edge === e.i).map((gi) => [gi.t - 2.2, gi.t + 2.2]).sort((a, b) => a[0] - b[0])
+      const here = infos.filter((gi) => gi.edge === e.i)
+      // Sobre un portón más bajo que el muro queda el dintel.
+      for (const gi of here) if (gi.gh < h) seg(gi.t - gi.half, gi.t + gi.half, gi.gh)
+      const cuts = here.map((gi) => [gi.t - gi.half, gi.t + gi.half]).sort((a, b) => a[0] - b[0])
       let s0 = 0
       for (const [a, b] of cuts) {
         if (a > s0) seg(s0, a)
@@ -332,7 +337,7 @@ export default class PlantScene {
       const g = new THREE.Group()
       g.position.set(gi.x + gi.n[0] * 0.6, 0.03, gi.z + gi.n[1] * 0.6)
       g.rotation.y = Math.atan2(gi.n[0], gi.n[1])
-      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 1.2), new THREE.MeshStandardMaterial({ map: this.hatch(), roughness: 0.9 }))
+      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(gi.half * 2, 1.2), new THREE.MeshStandardMaterial({ map: this.hatch(), roughness: 0.9 }))
       stripe.rotation.x = -Math.PI / 2
       g.add(stripe)
       this.walls.add(g)
@@ -482,14 +487,12 @@ export default class PlantScene {
     this.legs = legs
     empty(this.flow)
     this.particles = []
-    const p = this.plant.params
-    const use = this.plant.use_assumptions
     this.plant.routes.forEach((e, i) => {
       const a = positions[e.from]
       const b = positions[e.to]
       if (!a || !b) return
       const frac = e.frac ?? 1
-      const trips = use ? ((p.demand || 0) * frac) / (p.batch || 1) : frac * 20
+      const trips = frac * 20
       const width = 0.14 + Math.min(trips, 25) * 0.012
       const pts = this.pathPoints(a, b, i, legs?.find((l) => l.id === e.id))
       const dashed = frac < 1

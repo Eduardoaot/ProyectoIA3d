@@ -3,17 +3,17 @@ import { AnimatePresence, motion } from 'motion/react'
 import { api } from './api'
 import { has } from './capabilities'
 import { upgradePlant } from './migrate'
-import { isStale } from './proposals'
+import { isStale, samePlant } from './proposals'
 import { contextPayload, EMPTY_CONTEXT } from './context'
-import { summarize } from './context2'
 import FlowMark from './brand/FlowMark'
+import DialogHost, { ask } from './components/Dialog'
 import EngineerChat from './components/EngineerChat'
 import useReport from './components/useReport'
 import { startWait } from './components/wait'
 import ClickSplash from './fx/ClickSplash'
 import Cursor from './fx/Cursor'
 import Intro from './fx/Intro'
-import { blankPlant, chosen as chosenOf, EMPTY_GAME, useProject } from './project'
+import { blankPlant, chosen as chosenOf, useProject } from './project'
 import Story from './steps/Story'
 import useCaps from './useCaps'
 
@@ -23,11 +23,10 @@ const Diagnosis = lazy(() => import('./steps/Diagnosis'))
 const Redesign = lazy(() => import('./steps/Redesign'))
 const Report = lazy(() => import('./steps/Report'))
 const Summary = lazy(() => import('./steps/Summary'))
-const Workshop = lazy(() => import('./steps/Workshop'))
 // En cuanto la página queda libre se baja el paso 2, así «Guardar y ver en 3D» no espera la descarga.
 const preload = () => import('./steps/Plant')
 
-const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen', 'Taller de mejora (extra)']
+const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen']
 
 /* Lo mínimo que necesita el ingeniero para hablar de la planta (sin trazos). */
 function slim(project, ch, segmented = false) {
@@ -70,8 +69,6 @@ export default function App() {
     const ch = useMemo(() => chosenOf(project), [project])
     const segmented = has(caps, 'segmented_context')
     const context = useMemo(() => slim(project, ch, segmented), [project, ch, segmented])
-    const summary = useMemo(() => summarize(project.draft, project.plant), [project.draft, project.plant])
-    const confirmed = !!summary.signature && project.context2Ok === summary.signature
     const version = `${analysis?.current?.piece_m}-${ch?.id}-${ch?.metrics?.piece_m}`
     const report = useReport(context, version, has(caps, 'report_validation'))
     const stale = isStale(project)
@@ -99,8 +96,6 @@ export default function App() {
         }, [],
     )
 
-    const defaultParams = () => Object.fromEntries((catalog?.assumptions || []).map((a) => [a.key, a.value]))
-
     const read = async () => {
         setReading(true)
         setError(null)
@@ -109,7 +104,7 @@ export default function App() {
             const done = startWait('story')
             const r = await api.story(project.text)
             done()
-            update({ draft: upgradePlant(r.plant), info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error, spatial: r.spatial } })
+            update({ draft: upgradePlant(r.plant), info: { source: r.source, notes: r.notes, error: r.error, spatial: r.spatial } })
             setReading(false)
 
             return true
@@ -120,12 +115,9 @@ export default function App() {
         }
     }
 
-    const importPlant = (plant, warnings) => update({ draft: upgradePlant(plant), info: { source: 'Proyecto importado', notes: warnings } })
-
-    const blank = () => update({ draft: blankPlant(defaultParams()), info: { source: 'Plano vacío', notes: [] } })
+    const blank = () => update({ draft: blankPlant(), info: { source: 'Plano vacío', notes: [] } })
 
     const save = async () => {
-        if (!confirmed) return
         setSaving(true)
         setError(null)
 
@@ -135,10 +127,10 @@ export default function App() {
                 plant: draft,
                 analysis: out,
                 analysisRev: p.draftRev || 0,
-                // El rediseño hecho a mano no se borra al volver a analizar (H7): se conserva y se avisa.
-                redesign: p.redesign?.custom ? { ...p.redesign, choice: p.redesign.choice === 'propio' ? 'propio' : null, metrics: null } : { choice: null, custom: null, metrics: null },
+                // El rediseño hecho a mano no se borra al volver a analizar (H7) si es de la misma planta;
+                // si el plano es otro (otra historia, otro tamaño u otras máquinas), se descarta.
+                redesign: p.redesign?.custom && samePlant(p.redesign.custom.plant || p.plant, draft) ? { ...p.redesign, choice: p.redesign.choice === 'propio' ? 'propio' : null, metrics: null } : { choice: null, custom: null, metrics: null },
                 printed: false,
-                game: EMPTY_GAME,
             }))
             go(1)
         } catch {
@@ -168,14 +160,14 @@ export default function App() {
         go(5)
     }, [update, go])
 
-    const restart = () => {
-        if (!window.confirm('Se borrará el plano, el rediseño y el reporte de este navegador. ¿Seguir?')) return
+    const restart = async () => {
+        if (!(await ask('Se borrará el plano, el rediseño y el reporte de este navegador.', { title: '¿Empezar otra planta?', ok: 'Sí, borrar todo' }))) return
         reset()
         setStep(0)
     }
 
     const ready = !!(plant && analysis)
-    const enabled = (i) => i === 0 || (i <= 4 && ready) || (i === 5 && ready && project.printed) || (i === 6 && ready)
+    const enabled = (i) => i === 0 || (i <= 4 && ready) || (i === 5 && ready && project.printed)
 
     const view = (() => {
         if (step === 0 || !ready)
@@ -191,21 +183,17 @@ export default function App() {
             error={error}
             onRead={read}
             onBlank={blank}
-            onImport={importPlant}
             context={project.context || EMPTY_CONTEXT}
             setContext={(c) => update({ context: c })}
-            context2={{ summary, confirmed, onConfirm: () => update({ context2Ok: summary.signature }) }}
             onSave={save}
             saving={saving}
             />
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
-        if (step === 2) return <Diagnosis plant={plant} analysis={analysis} report={report} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} weights={project.weights} onReweigh={reweigh} onNext={() => go(4)} />
+        if (step === 2) return <Diagnosis plant={plant} analysis={analysis} weights={project.weights} onReweigh={reweigh} onNext={() => go(3)} />
+        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} onNext={() => go(4)} />
         if (step === 4) return <Report plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
-        if (step === 5) return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onWorkshop={() => go(6)} onRestart={restart} />
-
-        return <Workshop context={context} chosen={ch} game={project.game} setGame={(f) => update((p) => ({ game: typeof f === 'function' ? f(p.game) : f }))} notify={notify} />
+        return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onRestart={restart} />
     })()
 
     const aiOk = ai?.extractor?.ready && ai?.engineer?.ready
@@ -232,14 +220,14 @@ export default function App() {
                             <button
                                 key={name}
                                 type="button"
-                                className={`rail-step${i === 6 ? ' rail-step--extra' : ''}`}
+                                className="rail-step"
                                 data-state={i === step ? 'active' : i <= (project.maxStep || 0) ? 'done' : 'todo'}
                                 disabled={!enabled(i)}
                                 onClick={() => go(i)}
                                 aria-label={name}
                                 aria-current={i === step ? 'step' : undefined}
                             >
-                                {i === 6 ? '+' : i + 1}
+                                {i + 1}
                                 <span className="rail-tip">{name}</span>
                             </button>
                         ))}
@@ -272,6 +260,7 @@ export default function App() {
             </div>
 
             <EngineerChat open={chat} onClose={() => setChat(false)} context={context} />
+            <DialogHost />
 
             <AnimatePresence>
                 {toast && (

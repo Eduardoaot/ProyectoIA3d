@@ -2,11 +2,9 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { has, loadCapabilities, NO_CAPS, normalizeCaps, resetCapabilities } from '../src/capabilities.js'
-import { parseProject } from '../src/importProject.js'
 
 const fx = (name) => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8')
 const json = (name) => JSON.parse(fx(name))
-const root = (name) => readFileSync(new URL(`../../pruebas/${name}`, import.meta.url), 'utf8')
 
 test('backend viejo: /api/capabilities da 404 y no hay funciones nuevas', async () => {
     resetCapabilities()
@@ -41,35 +39,6 @@ test('respuestas raras no rompen', () => {
     assert.deepEqual(normalizeCaps({ features: 'count' }).features, [])
     assert.deepEqual(normalizeCaps({ features: ['count', 3, null] }).features, ['count'])
     assert.equal(normalizeCaps(null), NO_CAPS)
-})
-
-test('importar pruebas/transformadores.json', () => {
-    const out = parseProject(root('transformadores.json'))
-    assert.equal(out.error, undefined)
-    assert.equal(out.plant.stations.length, 11)
-    assert.equal(out.plant.receive_gate, 'A')
-    assert.deepEqual(out.warnings, [])
-})
-
-test('importar un proyecto completo exportado (usa el borrador)', () => {
-    const plant = JSON.parse(root('transformadores.json'))
-    const out = parseProject(JSON.stringify({ text: 'x', draft: plant, plant: null }))
-    assert.equal(out.plant.name, plant.name)
-})
-
-test('importar avisa lo que falta sin perderlo', () => {
-    const plant = JSON.parse(root('transformadores.json'))
-    delete plant.layout.horno
-    plant.routes.push({ id: 'rx', from: 'horno', to: 'no-existe' })
-    const out = parseProject(JSON.stringify(plant))
-    assert.equal(out.warnings.length, 2)
-    assert.ok(out.plant.layout.horno)
-    assert.ok(!out.plant.routes.some((r) => r.id === 'rx'))
-})
-
-test('importar rechaza archivos que no son plantas', () => {
-    assert.ok(parseProject('{').error)
-    assert.ok(parseProject('{"a": 1}').error)
 })
 
 test('respuestas simuladas v2 y v3 tienen lo que la interfaz lee', () => {

@@ -11,7 +11,7 @@ export default function Plant({ plant, analysis, notes, onNext, onEdit }) {
     const extras = useMemo(
         () => ({
             trucks: 2,
-            ops: plant.use_assumptions ? Object.fromEntries(plant.stations.map((s) => [s.id, s.ops || 0])) : {},
+            ops: {},
             bottleneck: cur.bottleneck,
             bottleneckUtil: cur.bottleneck_util,
             legs: cur.legs,
@@ -63,8 +63,7 @@ export default function Plant({ plant, analysis, notes, onNext, onEdit }) {
                         {notes.map((note, idx) => (
                             <li key={`n${idx}`}>{note}</li>
                         ))}
-                        
-                        <li>{plant.use_assumptions ? 'Con supuestos: el diagnóstico incluye capacidad, tiempos y camiones.' : 'Sin supuestos: el diagnóstico muestra solo recorridos y cercanías.'}</li>
+
                     </ul>
                 </Appear>
             </div>

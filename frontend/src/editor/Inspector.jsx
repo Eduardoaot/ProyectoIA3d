@@ -4,14 +4,9 @@ import { has } from '../capabilities'
 import { FLOWS } from '../flows'
 import { ARRANGEMENTS, countOf, resize } from '../units'
 import useCaps from '../useCaps'
-import { bboxOf, centerOf, PART_KINDS, partLabel, shapePreset } from './geometry'
+import { bboxOf, centerOf, PART_KINDS, partLabel, partPoly, shapePreset } from './geometry'
 
-const T_SOURCES = [
-  { id: 'medido', label: 'Medido' },
-  { id: 'estimado', label: 'Estimado' },
-  { id: 'supuesto', label: 'Supuesto' },
-  { id: 'usuario', label: 'Lo indica el usuario' },
-]
+const AREA_NAMES = ['Zona de corte', 'Zona de soldadura', 'Zona de pintura', 'Zona de ensamble', 'Zona de almacén', 'Zona de empaque', 'Zona de calidad', 'Zona de carga']
 
 /* Fijar o liberar: lo fijo no se mueve en el editor ni en ninguna alternativa. */
 function LockBox({ item, lock, full }) {
@@ -80,16 +75,6 @@ function Units({ s, setStation }) {
         <Field label="Ciclo mínimo" type="number" step="0.5" min={0} value={tmin ?? ''} suffix="min" onCommit={(v) => setRaw({ t_cycle_min: toRange(v, tmax) })} />
         <Field label="Ciclo máximo" type="number" step="0.5" min={0} value={tmax ?? ''} suffix="min" onCommit={(v) => setRaw({ t_cycle_min: toRange(tmin, v) })} />
       </div>
-      <label className="field">
-        <span>De dónde sale el tiempo</span>
-        <select value={s.t_source || 'supuesto'} onChange={(e) => setRaw({ t_source: e.target.value })}>
-          {T_SOURCES.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-      </label>
       <div className="field-row">
         <Field label="Lote (piezas)" type="number" step="1" min={0} value={s.batch?.size ?? ''} onCommit={(v) => setRaw({ batch: v >= 1 ? { size: Math.round(v), t_min: s.batch?.t_min || s.t || 1 } : undefined })} />
         <Field label="Minutos por lote" type="number" step="5" min={0} value={s.batch?.t_min ?? ''} suffix="min" onCommit={(v) => setRaw({ batch: v > 0 ? { size: s.batch?.size || 1, t_min: v } : undefined })} />
@@ -151,6 +136,19 @@ const partSize = (p) => {
   const b = bboxOf(p.pts)
   const [x, z] = centerOf(p.pts)
   return { w: Math.round((b.x1 - b.x0) * 100) / 100, d: Math.round((b.z1 - b.z0) * 100) / 100, x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100 }
+}
+
+/* Tamaño de todo el edificio (el rectángulo que lo envuelve), como en la herramienta Forma. */
+function ShapeSize({ plant, parts, ops }) {
+  const b = bboxOf(parts.filter((p) => !p.hole).flatMap(partPoly))
+  const w = Math.round((b.x1 - b.x0) * 100) / 100 || plant.size.w
+  const d = Math.round((b.z1 - b.z0) * 100) / 100 || plant.size.d
+  return (
+    <div className="field-row">
+      <Field label="Ancho" type="number" step="0.5" min={2} value={w} suffix="m" onCommit={(v) => ops.sizeShape(v, d)} />
+      <Field label="Fondo" type="number" step="0.5" min={2} value={d} suffix="m" onCommit={(v) => ops.sizeShape(w, v)} />
+    </div>
+  )
 }
 
 /* Sólido suma al edificio; hueco le recorta un pedazo. */
@@ -239,6 +237,18 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
           {p.kind === 'poly' && ' Arrastra sus esquinas; doble clic en un lado agrega una, doble clic en una esquina la quita.'}
         </p>
         <PartWarnings comp={comp} />
+      </aside>
+    )
+  }
+
+  /* ---------- El edificio completo (Mover, un clic en el piso) ---------- */
+  if (sel?.type === 'shape' && full) {
+    return (
+      <aside className="inspector">
+        <span className="inspector-kicker">Edificio completo</span>
+        <h3>{plant.name || 'Mi planta'}</h3>
+        <ShapeSize plant={plant} parts={parts} ops={ops} />
+        <p className="small">Arrastra el piso para mover todas las piezas juntas. Doble clic elige una sola pieza.</p>
       </aside>
     )
   }
@@ -448,7 +458,7 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
             </select>
           </label>
         ))}
-        <p className="small">{used.length ? `La usan ${used.length} ${used.length === 1 ? 'ruta' : 'rutas'}.` : 'Ninguna ruta va en esta banda: elige «Va en banda» en una ruta.'} Capacidad y velocidad iniciales son supuestos; cámbialos por los de la banda real.</p>
+        <p className="small">{used.length ? `La usan ${used.length} ${used.length === 1 ? 'ruta' : 'rutas'}.` : 'Ninguna ruta va en esta banda: elige «Va en banda» en una ruta.'} Ajusta capacidad y velocidad a las de la banda real.</p>
         <div className="row">{!c.locked && del}</div>
         <LockBox item={c} lock={lock} full={full} />
       </aside>
@@ -460,8 +470,18 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
     if (!z) return <aside className="inspector" />
     return (
       <aside className="inspector">
-        <span className="inspector-kicker">Zona sin paso de material</span>
+        <span className="inspector-kicker">{z.kind === 'area' ? 'Área de trabajo' : z.kind === 'pasillo' ? 'Pasillo' : 'Zona sin paso de material'}</span>
         <Field label="Nombre" value={z.name} onCommit={(v) => setZone(z.id, { name: v.trim() || z.name })} />
+        {z.kind === 'area' && (
+          <div className="area-presets" role="group" aria-label="Nombres rápidos">
+            {AREA_NAMES.map((n) => (
+              <button key={n} type="button" className="opt-btn" aria-pressed={z.name === n} onClick={() => setZone(z.id, { name: n })}>
+                {n.replace('Zona de ', '')}
+              </button>
+            ))}
+          </div>
+        )}
+        {z.kind === 'area' && <p className="small">Solo marca el piso: las máquinas pueden quedar dentro y el material pasa por ella.</p>}
         <label className="field">
           <span>Tipo</span>
           <select value={z.kind} onChange={(e) => setZone(z.id, { kind: e.target.value })}>
@@ -531,6 +551,16 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
       <aside className="inspector">
         <span className="inspector-kicker">Portón</span>
         <Field label="Nombre" value={g.label} onCommit={(v) => setGate(g.id, { label: v })} />
+        <label className="field">
+          <span>Uso</span>
+          <select value={g.use || 'mixto'} onChange={(e) => setGate(g.id, { use: e.target.value })}>
+            <option value="carga">Carga (sale el producto)</option>
+            <option value="descarga">Descarga (entra el material)</option>
+            <option value="mixto">Carga y descarga</option>
+          </select>
+        </label>
+        <Field label="Ancho" type="number" step="0.1" min={1} value={g.w ?? 4.4} suffix="m" onCommit={(v) => setGate(g.id, { w: Math.max(1, v) })} />
+        <Field label="Alto" type="number" step="0.1" min={1} value={g.h ?? 4.5} suffix="m" onCommit={(v) => setGate(g.id, { h: Math.max(1, v) })} />
         <p className="small">Arrástralo por cualquier muro exterior. En 3D la calle aparece frente a cada lado con portón.</p>
         <div className="row">
           <button type="button" className="btn btn--small" aria-pressed={plant.receive_gate === g.id} onClick={() => commit({ ...plant, receive_gate: g.id }, positions)}>
@@ -552,8 +582,9 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
         <>
           <Field label="Nombre de la planta" value={plant.name} onCommit={(v) => commit({ ...plant, name: v })} />
           <p className="small num">
-            Bodega de {fmt(plant.size.w, 1)} × {fmt(plant.size.d, 1)} m, armada con {parts.length} {parts.length === 1 ? 'pieza' : 'piezas'}. Para cambiar la forma usa la herramienta Forma (F).
+            Armada con {parts.length} {parts.length === 1 ? 'pieza' : 'piezas'}. Para cambiar la forma usa la herramienta Forma (F).
           </p>
+          <ShapeSize plant={plant} parts={parts} ops={ops} />
         </>
       )}
       <ul className="note-list">
@@ -566,11 +597,7 @@ export default function Inspector({ plant, positions, sel, setSel, commit, rotat
           <li key={i}>{h.text}: el polvo, ruido o calor afecta esa área.</li>
         ))}
       </ul>
-      <p className="small">
-        {full
-          ? `Selecciona algo para editarlo. Supr borra, R gira, Ctrl+C y Ctrl+V copian y pegan, Ctrl+Z deshace. Las rutas se calculan por los pasillos, sin cruzar máquinas, paredes ni zonas.`
-          : 'Arrastra las máquinas y gíralas con R. Los cambios se guardan como tu rediseño.'}
-      </p>
+      {!full && <p className="small">Arrastra las máquinas y gíralas con R. Los cambios se guardan como tu rediseño.</p>}
     </aside>
   )
 }

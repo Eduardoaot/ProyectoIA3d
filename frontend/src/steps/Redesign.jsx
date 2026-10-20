@@ -1,18 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, fmt, pct } from '../api'
 import FlowPlan from '../charts/FlowPlan'
-import LeadChart from '../charts/LeadChart'
 import WaitPanel from '../components/WaitPanel'
 import { startWait } from '../components/wait'
 import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
-import Criteria from '../components/Criteria'
+import OptionPicker from '../components/OptionPicker'
 import FlowsPanel from '../components/FlowsPanel'
-import SimPanel from '../components/SimPanel'
-import { has } from '../capabilities'
-import { protectLocked } from '../proposals'
-import useCaps from '../useCaps'
+import { protectLocked, samePlant } from '../proposals'
 import PlantView from '../three/PlantView'
 
 export function Delta({ label, unit, before, after, decimals = 0, goodWhenUp }) {
@@ -42,14 +38,6 @@ export function Delta({ label, unit, before, after, decimals = 0, goodWhenUp }) 
 	)
 }
 
-function Dots({ n }) {
-	return (
-		<span className="dots" aria-label={`${n} operarios`}>
-		{n === 0 ? <i data-off="true" /> : Array.from({ length: n }, (_, i) => <i key={i} />)}
-		</span>
-	)
-}
-
 function worksDiff(base, other) {
 	if (!other || other === base) return 0
 
@@ -73,17 +61,10 @@ function worksDiff(base, other) {
 	return n
 }
 
-export default function Redesign({ plant, analysis, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, notify = () => {}, weights, onReweigh, onNext }) {
-	const caps = useCaps()
-	const [reweighing, setReweighing] = useState(false)
-	const reweigh = async (w) => {
-		setReweighing(true)
-		await onReweigh(w)
-		setReweighing(false)
-	}
+export default function Redesign({ plant, analysis, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, notify = () => {}, onNext }) {
+	const [picking, setPicking] = useState(false)
 	const cur = analysis.current
 	const alts = analysis.alternatives
-	const full = plant.use_assumptions && cur.daily_m != null
 
 	const view = useRef(null)
 
@@ -91,7 +72,9 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 	const choice = redesign.choice
 
 	const alt = alts.find((a) => a.id === choice)
-	const custom = redesign.custom ? (redesign.custom.positions ? redesign.custom : { plant, positions: redesign.custom }) : null
+	const savedCustom = redesign.custom ? (redesign.custom.positions ? redesign.custom : { plant, positions: redesign.custom }) : null
+	// Un rediseño guardado de otra planta no se dibuja sobre esta (otro edificio, otras paredes).
+	const custom = savedCustom && samePlant(savedCustom.plant, plant) ? savedCustom : null
 
 	const sel = choice === 'propio' ? custom : alt ? { plant, positions: alt.positions } : null
 	const positions = sel?.positions
@@ -199,17 +182,12 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 
 		return {
 			trucks: 2,
-			ops: plant.use_assumptions ? (showing || !metrics ? Object.fromEntries(plant.stations.map((s) => [s.id, s.ops || 0])) : m.ops || {}) : {},
+			ops: {},
 			bottleneck: m.bottleneck,
 			bottleneckUtil: m.bottleneck_util,
 			legs: m.legs,
 		}
 	}, [showing, metrics, cur, plant])
-
-	const moves = useMemo(() => {
-		if (!full || !metrics?.ops) return []
-		return plant.stations.map((s) => ({ id: s.id, name: s.name, before: s.ops || 0, after: metrics.ops[s.id] ?? 0 })).filter((x) => x.before !== x.after)
-	}, [full, metrics, plant])
 
 	const aiAlt = alts.find((a) => a.id === 'ia')
 	const cards = [
@@ -228,79 +206,57 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 				<p className="lede">Cuatro acomodos calculados para tu flujo y uno que la IA busca para ocupar el menor espacio, siempre respetando tu planta y lo que fijaste. Selecciona una opción para ver cómo se mueven las máquinas.</p>
 			</header>
 
-			<Appear className="alts" style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }}>
-				{cards.map((a) => {
-					const p = a.m ? pct(cur.piece_m, a.m.piece_m) : null
-
-					if (a.pending)
-						return (
-							<div key={a.id} className="alt alt--ask">
-								<span className="alt-best">IA</span>
-								<h3>{a.name}</h3>
-								<Btn size="small" onClick={askCompact} disabled={compact.loading}>
-									{compact.loading ? 'Pensando…' : 'Calcular con IA'}
-								</Btn>
-								{compact.loading && <p className="small">Mira el avance abajo.</p>}
-								{compact.error && <p className="small">{compact.error}</p>}
-							</div>
-						)
-
-					return (
-						<div key={a.id} className="alt" data-on={a.id === choice && !showOriginal} onClick={() => pick(a.id)}>
-							{a.id === analysis.recommended && <span className="alt-best">RECOMENDADA</span>}
-							{a.id === analysis.ideal && a.id !== analysis.recommended && <span className="alt-best">IDEAL</span>}
-							{a.kind === 'ideal' && <span className="small">No respeta lo fijo o no cabe: solo como referencia.</span>}
-							{a.id === 'propio' && <span className="alt-best">TUYA</span>}
-							{a.id === 'ia' && <span className="alt-best">{a.source === 'ia' ? 'IA' : 'SIN IA: ORDEN DEL FLUJO'}</span>}
-
-							<h3>{a.name}</h3>
-
-							<div className="alt-figure num">
-								{a.m ? fmt(a.m.piece_m, 1) : '…'}
-								<small style={{ fontSize: '0.35em', marginLeft: 6 }}>m por pieza</small>
-							</div>
-
-							{p != null && <span className="small num">{p > 0 ? `+${p}` : p} % frente a hoy</span>}
-							{a.m?.footprint_m2 != null && (
-								<span className="small num">
-									Ocupa {fmt(a.m.footprint_m2)} m²{cur.footprint_m2 ? ` (hoy ${fmt(cur.footprint_m2)} m²)` : ''}
-								</span>
-							)}
-							<p className="small">{a.summary}</p>
-							<p className="small">Obra: {a.works}</p>
-							<div className="alt-actions">
-								<button type="button" className="alt-act" aria-pressed={a.id === choice && !showOriginal} onClick={(e) => (e.stopPropagation(), pick(a.id))}>
-									Ver
-								</button>
-								{a.id !== 'propio' && a.m?.legs && (
-									<button type="button" className="alt-act" onClick={(e) => (e.stopPropagation(), apply(alts.find((x) => x.id === a.id)))} title="Copia esta propuesta a «Tu rediseño» para ajustarla. Se puede deshacer.">
-										Aplicar
-									</button>
-								)}
-							</div>
+			{(() => {
+				const cardOf = cards.find((c) => c.id === choice && !c.pending)
+				const shown = showOriginal ? null : cardOf
+				const best = cards.find((c) => c.id === analysis.recommended)
+				const p = shown?.m ? pct(cur.piece_m, shown.m.piece_m) : null
+				return (
+					<Appear className="choice-box">
+						<div className="choice-main">
+							<span className="inspector-kicker">{shown ? 'Opción que estás viendo' : 'Estado de hoy'}</span>
+							<h3>
+								{shown ? shown.name : 'Sin rediseño elegido'}
+								{shown?.id === analysis.recommended && <span className="picker-tag">Recomendada</span>}
+								{shown?.id === 'propio' && <span className="picker-tag">Tuya</span>}
+							</h3>
+							<p className="choice-figure num">
+								{fmt(shown?.m ? shown.m.piece_m : cur.piece_m, 1)}
+								<small> m por pieza</small>
+								{p != null && <small className="choice-delta">{p > 0 ? `+${p}` : p} % frente a hoy</small>}
+							</p>
+							<p className="small">
+								{shown ? shown.summary : best ? `La recomendada es «${best.name}» (${fmt(best.m?.piece_m, 1)} m por pieza). ${analysis.recommended_reason || ''}` : 'Elige un acomodo para ver cómo se mueven las máquinas.'}
+							</p>
 						</div>
-					)
-				})}
-			</Appear>
+						<div className="choice-actions">
+							<Btn size="small" onClick={() => setPicking(true)}>
+								{shown ? 'Cambiar opción' : 'Elegir opción'}
+							</Btn>
+							{shown && shown.id !== 'propio' && shown.m?.legs && (
+								<button type="button" className="btn btn--ghost btn--small" onClick={() => apply(alts.find((x) => x.id === shown.id))} title="Copia esta propuesta a «Tu rediseño» para ajustarla. Se puede deshacer.">
+									Aplicar a tu rediseño
+								</button>
+							)}
+							<span className="small">{cards.filter((c) => !c.pending).length} opciones calculadas</span>
+						</div>
+					</Appear>
+				)
+			})()}
 
-			{analysis.recommended_reason && (
-				<div className="why small">
-					<strong>Por qué se recomienda.</strong> {analysis.recommended_reason}
-					{analysis.main_metric && <> Métrica principal: {analysis.main_metric.label.toLowerCase()}.</>}
-					{analysis.recommended_tradeoffs?.length > 0 && (
-						<>
-							{' '}A cambio, empeora:
-							<ul>
-								{analysis.recommended_tradeoffs.map((t) => (
-									<li key={t.metric}>{t.note}</li>
-								))}
-							</ul>
-						</>
-					)}
-				</div>
-			)}
-
-			<Criteria key={analysis.plant_version + JSON.stringify(analysis.weights_used || {})} analysis={analysis} canWeigh={has(caps, 'weights') && !!onReweigh} weights={weights} onReweigh={reweigh} busy={reweighing} />
+			<OptionPicker
+				open={picking}
+				onClose={() => setPicking(false)}
+				cards={cards}
+				cur={cur}
+				choice={showOriginal ? null : choice}
+				recommended={analysis.recommended}
+				ideal={analysis.ideal}
+				onPick={(id) => (pick(id), setPicking(false))}
+				onApply={(id) => (apply(alts.find((x) => x.id === id)), setPicking(false))}
+				compact={compact}
+				onAskCompact={() => (setPicking(false), askCompact())}
+			/>
 
 			{(redesign.undoApply?.length > 0 || (custom && redesign.basedOnRev != null && redesign.basedOnRev !== analysisRev)) && (
 				<div className="row small" style={{ marginTop: 12 }}>
@@ -312,21 +268,6 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 					)}
 				</div>
 			)}
-
-			{/* La explicación de la opción con IA va aparte, para que su tarjeta mida lo mismo que las demás. */}
-			<div className="alt-note small">
-				<strong>Compacta con IA.</strong> Se analizan las estaciones, el flujo y las zonas para decidir qué conviene juntar y desde qué esquina empezar. Después las máquinas se acomodan en el menor espacio sin alargar el recorrido.
-				{aiAlt?.reasons?.length > 0 && (
-					<>
-						{' '}Criterio aplicado:
-						<ul className="alt-reasons">
-							{aiAlt.reasons.map((r, i) => (
-								<li key={i}>{r}</li>
-							))}
-						</ul>
-					</>
-				)}
-			</div>
 
 			{compact.loading && <WaitPanel kind="compact" className="reading--wide" title="Buscando el acomodo más compacto…" game={null} />}
 
@@ -357,18 +298,9 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 
 					<PlanEditor plant={selPlant} positions={positions} onChange={onEdit} catalog={catalog} mode="full" onMetrics={onLive} title="Editor del rediseño" />
 
-					<Appear className="kpis" style={{ marginTop: 32, gridTemplateColumns: `repeat(${full ? 4 : 1}, minmax(0, 1fr))` }}>
+					<Appear className="kpis" style={{ marginTop: 32, gridTemplateColumns: 'minmax(0, 1fr)' }}>
 						{metrics ? (
-							full ? (
-								<>
-									<Delta label="Camina el material" unit="m al día" before={cur.daily_m} after={metrics.daily_m} />
-									<Delta label="Capacidad" unit="piezas al día" before={cur.capacity} after={metrics.capacity} decimals={1} goodWhenUp />
-									<Delta label="Tiempo por pieza" unit="h" before={cur.lead_h} after={metrics.lead_h} decimals={1} />
-									<Delta label="Carga de camiones" unit="min al día" before={cur.loading_min} after={metrics.loading_min} />
-								</>
-							) : (
-								<Delta label="Recorrido de una pieza" unit="m" before={cur.piece_m} after={metrics.piece_m} decimals={1} />
-							)
+							<Delta label="Recorrido de una pieza" unit="m" before={cur.piece_m} after={metrics.piece_m} decimals={1} />
 						) : (
 							<div className="kpi">
 								<p className="small">Calculando…</p>
@@ -386,45 +318,9 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 						</Appear>
 					</div>
 
-					{full && metrics?.lead_parts && (
-						<div className="grid-2" style={{ marginTop: 24 }}>
-							<Appear className="block">
-								<LeadChart before={cur} after={metrics} />
-							</Appear>
-
-							<Appear className="block" delay={0.1}>
-								<h3>Cambios de operarios</h3>
-
-								<p className="small" style={{ margin: '6px 0 14px' }}>
-									Las mismas personas, mejor repartidas.
-									{metrics.bottleneck && ` Nuevo cuello de botella: ${plant.stations.find((s) => s.id === metrics.bottleneck)?.name.toLowerCase()} al ${fmt(metrics.bottleneck_util * 100)} %.`}
-								</p>
-
-								<div className="moves">
-									{moves.length === 0 && <p className="small" style={{ padding: '12px 0' }}>Nadie cambia de puesto.</p>}
-
-									{moves.map((x) => (
-										<div key={x.id} className="move">
-											<span style={{ fontWeight: 650 }}>{x.name}</span>
-											<span className="move-arrow">
-												<Dots n={x.before} />→<Dots n={x.after} />
-											</span>
-										</div>
-									))}
-								</div>
-							</Appear>
-						</div>
-					)}
-
 					{cur.flows && (
 						<div style={{ marginTop: 24 }}>
 							<FlowsPanel plant={plant} current={cur} metrics={metrics} name={name} />
-						</div>
-					)}
-
-					{plant.use_assumptions && (
-						<div style={{ marginTop: 24 }}>
-							<SimPanel plant={choice === 'propio' ? selPlant : plant} choice={choice} name={name} positions={positions} />
 						</div>
 					)}
 
