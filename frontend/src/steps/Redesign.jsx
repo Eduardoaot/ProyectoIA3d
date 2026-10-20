@@ -10,10 +10,9 @@ import { Appear, RevealTitle } from '../fx/Reveal'
 import Criteria from '../components/Criteria'
 import FlowsPanel from '../components/FlowsPanel'
 import SimPanel from '../components/SimPanel'
-import { has } from '../capabilities'
 import { protectLocked } from '../proposals'
-import useCaps from '../useCaps'
 import PlantView from '../three/PlantView'
+import { CRITERIA, DEFAULT_WEIGHTS } from '../weights'
 
 export function Delta({ label, unit, before, after, decimals = 0, goodWhenUp }) {
 	const p = pct(before, after)
@@ -73,14 +72,7 @@ function worksDiff(base, other) {
 	return n
 }
 
-export default function Redesign({ plant, analysis, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, notify = () => {}, weights, onReweigh, onNext }) {
-	const caps = useCaps()
-	const [reweighing, setReweighing] = useState(false)
-	const reweigh = async (w) => {
-		setReweighing(true)
-		await onReweigh(w)
-		setReweighing(false)
-	}
+export default function Redesign({ plant, analysis, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, notify = () => {}, weights, onOpenContext, onNext }) {
 	const cur = analysis.current
 	const alts = analysis.alternatives
 	const full = plant.use_assumptions && cur.daily_m != null
@@ -300,7 +292,11 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 				</div>
 			)}
 
-			<Criteria key={analysis.plant_version + JSON.stringify(analysis.weights_used || {})} analysis={analysis} canWeigh={has(caps, 'weights') && !!onReweigh} weights={weights} onReweigh={reweigh} busy={reweighing} />
+			<div className="context-review-card">
+				<div><h3>Tus prioridades</h3><p className="small">{CRITERIA.map((c) => `${c.label}: ${Math.round((weights || DEFAULT_WEIGHTS)[c.key] * 100)} %`).join(' · ')}</p><p className="small">Al cambiarlas, revisa el contexto y vuelve al paso 1 para actualizar los resultados.</p></div>
+				<button type="button" className="btn btn--ghost btn--small" onClick={() => onOpenContext('prioridades')}>Editar en contexto ↗</button>
+			</div>
+			<Criteria key={analysis.plant_version + JSON.stringify(analysis.weights_used || {})} analysis={analysis} canWeigh={false} />
 
 			{(redesign.undoApply?.length > 0 || (custom && redesign.basedOnRev != null && redesign.basedOnRev !== analysisRev)) && (
 				<div className="row small" style={{ marginTop: 12 }}>

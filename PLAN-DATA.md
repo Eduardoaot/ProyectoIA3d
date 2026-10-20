@@ -4,6 +4,25 @@
 
 Dar al usuario un solo lugar, al inicio del proyecto, para contar cómo funciona su planta, adjuntar evidencia y comprobar qué entendió el sistema antes de analizar. Reunir allí las opciones que hoy están dispersas entre «Datos de la planta», «Referencias con imagen» y «Qué pesa más para ti». Ampliar el reporte con entregables de estudio del trabajo, especialmente cuando el usuario no subió uno.
 
+## Primera entrega: validar el frontend
+
+Por indicación del usuario, primero se construye una interfaz navegable para revisar la experiencia. El contrato definitivo, la estructura del backend y los entregables del reporte se trabajarán después de esta revisión.
+
+El prototipo reúne texto libre, diez temas, datos con historial, documentos, estudios manuales, imágenes, prioridades y confirmación del plano/contexto. El acceso está en la esquina superior derecha desde todos los pasos. Rediseño conserva el resumen de prioridades y enlaza a su edición en contexto.
+
+Alcance y límites de esta entrega:
+
+- «Organizar información» clasifica fragmentos por palabras clave en el navegador y lo indica en pantalla. No usa IA ni extrae cifras inferidas. Las propuestas requieren confirmación y conservan su fragmento original.
+- Los datos confirmados usan los segmentos existentes. El borrador adicional se guarda en `project.contextWorkspace`, fuera del contrato de planta y de las peticiones a la API. Los proyectos anteriores siguen abriendo sin cambiar su formato.
+- Los documentos originales se conservan en IndexedDB en este navegador, hasta 10 MB por archivo. TXT, MD y CSV permiten revisar hasta 100 000 caracteres de texto; los demás formatos quedan pendientes de lectura. La extracción local no verifica hechos. Los adjuntos no se sincronizan con un servidor ni viajan en la exportación actual del proyecto.
+- Las imágenes conservan la función anterior y su límite de 1 MB. Solo se marcan interpretadas tras una respuesta del proveedor de visión existente.
+- Estudios permite registrar actividades y vincularlas a estaciones/rutas. Tiempo y distancia desconocidos quedan vacíos. La visualización es un borrador del orden capturado; las ramas, uniones y cursogramas finales siguen pendientes.
+- La confirmación contempla plano completo, texto, contexto, prioridades y borrador. Un cambio marca los resultados anteriores pendientes de actualizar. No se recalcula automáticamente.
+
+Para revisar: `cd frontend`, `npm ci`, `npm run dev`; abrir el enlace local y entrar en **Ver contexto de la planta**. Se puede recorrer y capturar contexto sin servidor. La creación asistida de planos y el análisis conservan sus servicios actuales.
+
+Verificación de esta entrega: 58 pruebas unitarias, compilación y prueba en Chrome con el caso de transformadores, API simulada y perfil aislado. Se comprobaron propuestas, historial, archivos TXT/PDF, estudios, prioridades, confirmación, persistencia tras recarga, foco de teclado y seis vistas a 390 px. La prueba de navegador se ejecuta con Vite activo mediante `node tests/context-workspace.browser.mjs`; `CAUCE_BROWSER` permite indicar otro Chromium. El lint conserva advertencias previas del proyecto.
+
 ## Experiencia propuesta
 
 1. En la esquina superior derecha del paso inicial: botón **«Ver contexto de la planta»**, visible también en pasos posteriores para consultar o corregir. Abre una página o panel de ancho completo con navegación lateral, parecido en organización a `/docs` del backend. La interfaz debe mostrar ejemplos y lenguaje cotidiano, no exigir claves técnicas como `pulido.t_ciclo`.

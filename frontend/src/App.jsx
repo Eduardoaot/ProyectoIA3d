@@ -4,8 +4,11 @@ import { api } from './api'
 import { has } from './capabilities'
 import { upgradePlant } from './migrate'
 import { isStale } from './proposals'
-import { contextPayload, EMPTY_CONTEXT } from './context'
+import { contextPayload } from './context'
 import { summarize } from './context2'
+import { reviewSignature } from './contextWorkspace'
+import ContextWorkspace from './components/context/ContextWorkspace'
+import './components/context/context-entry.css'
 import FlowMark from './brand/FlowMark'
 import EngineerChat from './components/EngineerChat'
 import useReport from './components/useReport'
@@ -61,20 +64,35 @@ export default function App() {
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState(null)
     const [chat, setChat] = useState(false)
+    const [contextTopic, setContextTopic] = useState(null)
     const [toast, setToast] = useState(null)
     const [ai, setAi] = useState(null)
     const caps = useCaps()
     const stage = useRef(null)
+    const contextOpener = useRef(null)
 
     const { plant, analysis, draft, info } = project
     const ch = useMemo(() => chosenOf(project), [project])
     const segmented = has(caps, 'segmented_context')
     const context = useMemo(() => slim(project, ch, segmented), [project, ch, segmented])
     const summary = useMemo(() => summarize(project.draft, project.plant), [project.draft, project.plant])
-    const confirmed = !!summary.signature && project.context2Ok === summary.signature
-    const version = `${analysis?.current?.piece_m}-${ch?.id}-${ch?.metrics?.piece_m}`
-    const report = useReport(context, version, has(caps, 'report_validation'))
-    const stale = isStale(project)
+    const signature = useMemo(() => reviewSignature(project), [project])
+    const confirmed = !!signature && project.context2Ok === signature
+    const stale = isStale(project) || (!!analysis && project.analysisInputSignature !== signature)
+    const version = `${signature}-${analysis?.current?.piece_m}-${ch?.id}-${ch?.metrics?.piece_m}`
+    const report = useReport(stale ? null : context, version, has(caps, 'report_validation'))
+    const openContext = (topic = 'inicio') => {
+        contextOpener.current = document.activeElement
+        setContextTopic(topic)
+    }
+    const closeContext = useCallback(() => {
+        setContextTopic(null)
+        requestAnimationFrame(() => {
+            const opener = contextOpener.current
+            if (opener?.isConnected) opener.focus()
+            else document.querySelector('.context-open')?.focus()
+        })
+    }, [])
 
     useEffect(() => {
         if (window.requestIdleCallback) window.requestIdleCallback(preload)
@@ -130,11 +148,12 @@ export default function App() {
         setError(null)
 
         try {
-            const out = await api.analyze(draft, { context: context?.context, ...(has(caps, 'weights') && project.weights ? { weights: project.weights } : {}) })
+            const out = await api.analyze(draft, { context: contextPayload(project.context, project.text, segmented), ...(has(caps, 'weights') && project.weights ? { weights: project.weights } : {}) })
             update((p) => ({
                 plant: draft,
                 analysis: out,
                 analysisRev: p.draftRev || 0,
+                analysisInputSignature: signature,
                 // El rediseño hecho a mano no se borra al volver a analizar (H7): se conserva y se avisa.
                 redesign: p.redesign?.custom ? { ...p.redesign, choice: p.redesign.choice === 'propio' ? 'propio' : null, metrics: null } : { choice: null, custom: null, metrics: null },
                 printed: false,
@@ -145,17 +164,6 @@ export default function App() {
             setError('Error al analizar el plano.')
         }
         setSaving(false)
-    }
-
-    // Recalcular con otros pesos: mismo plano, solo cambia la decisión. No toca «Tu rediseño».
-    const reweigh = async (weights) => {
-        try {
-            const out = await api.analyze(plant, { context: context?.context, weights })
-            update({ analysis: out, weights })
-            notify('Se recalculó la recomendación con tus pesos.')
-        } catch {
-            notify('No se pudo recalcular con esos pesos.')
-        }
     }
 
     const setRedesign = useCallback((patch) => update((p) => ({ redesign: { ...p.redesign, ...patch } })), [update])
@@ -182,7 +190,6 @@ export default function App() {
         return (
             <Story
             text={project.text}
-            setText={(t) => update((p) => ({ text: typeof t === 'function' ? t(p.text) : t }))}
             info={info}
             draft={draft}
             setDraft={(d) => update((p) => ({ draft: d, draftRev: (p.draftRev || 0) + 1 }))}
@@ -192,16 +199,15 @@ export default function App() {
             onRead={read}
             onBlank={blank}
             onImport={importPlant}
-            context={project.context || EMPTY_CONTEXT}
-            setContext={(c) => update({ context: c })}
-            context2={{ summary, confirmed, onConfirm: () => update({ context2Ok: summary.signature }) }}
+            onOpenContext={openContext}
+            context2={{ confirmed }}
             onSave={save}
             saving={saving}
             />
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
         if (step === 2) return <Diagnosis plant={plant} analysis={analysis} report={report} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} weights={project.weights} onReweigh={reweigh} onNext={() => go(4)} />
+        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} weights={project.weights} onOpenContext={openContext} onNext={() => go(4)} />
         if (step === 4) return <Report plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
         if (step === 5) return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onWorkshop={() => go(6)} onRestart={restart} />
 
@@ -217,7 +223,7 @@ export default function App() {
             <ClickSplash />
 
             {intro && <Intro onDone={() => setIntro(false)} />}
-            <div className="app">
+            <div className="app" inert={contextTopic !== null ? true : undefined}>
                 <nav className="rail" aria-label="Pasos">
                     <button type="button" className="rail-logo" onClick={() => go(0)} aria-label="Volver al inicio">
                         <FlowMark size={44} state={step === 0 ? 'tangled' : 'u'} color="#fff" hoverMorph />
@@ -258,11 +264,18 @@ export default function App() {
                 </nav>
 
                 <main className="stage" ref={stage}>
+                    <div className="context-topbar">
+                        <span className="context-topbar-label">CAUCE <span>/</span> {STEPS[ready ? step : 0]}</span>
+                        <button type="button" className="context-open" onClick={() => openContext()}>
+                            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 3h14v14H3zM7 3v14M10 7h4M10 10h4M10 13h2" /></svg>
+                            Ver contexto de la planta <span aria-hidden="true">↗</span>
+                        </button>
+                    </div>
                     <AnimatePresence mode="wait">
                         <motion.div key={ready ? step : 0} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
                           {ready && step > 0 && stale && (
                               <p className="stale-note small" role="status">
-                                  <strong>Desactualizado: el plano cambió.</strong> Estos resultados son del plano analizado antes{analysis?.plant_version ? ` (versión ${analysis.plant_version.slice(0, 8)})` : ''}. Vuelve al paso 1 y pulsa «Guardar y ver en 3D» para recalcular.
+                                  <strong>Resultados pendientes de actualizar.</strong> Revisa el plano, el contexto y tus prioridades. Confirma «Así entendimos tu planta» y vuelve al paso 1 para recalcular.
                               </p>
                           )}
                           <Suspense fallback={<p className="small" style={{ padding: 48 }}>Cargando…</p>}>{view}</Suspense>
@@ -271,7 +284,24 @@ export default function App() {
                 </main>
             </div>
 
-            <EngineerChat open={chat} onClose={() => setChat(false)} context={context} />
+            {contextTopic !== null && (
+                <ContextWorkspace
+                    project={project}
+                    plant={draft || plant}
+                    onTextChange={(text) => update({ text, printed: false })}
+                    onContextChange={(context) => update({ context, printed: false })}
+                    onWorkspaceChange={(patch) => update((p) => ({ contextWorkspace: { ...p.contextWorkspace, ...(typeof patch === 'function' ? patch(p.contextWorkspace || {}) : patch) }, printed: false }))}
+                    onWeightsChange={(weights) => update({ weights, printed: false })}
+                    summary={summary}
+                    confirmed={confirmed}
+                    onConfirm={() => update({ context2Ok: signature })}
+                    onClose={closeContext}
+                    onGoToPlan={() => { closeContext(); go(0) }}
+                    initialTopic={contextTopic}
+                />
+            )}
+
+            <EngineerChat open={chat && contextTopic === null} onClose={() => setChat(false)} context={stale ? null : context} />
 
             <AnimatePresence>
                 {toast && (
