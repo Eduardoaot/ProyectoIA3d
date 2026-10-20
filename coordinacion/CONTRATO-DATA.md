@@ -25,6 +25,8 @@ Implementación autorizada el 20 de octubre de 2026. Complementa `CONTRATO-v3.md
 
 La IA se accede por la interfaz existente de proveedores; fragmentos de evidencia se validan contra el original. Fallos parciales son visibles; sin IA la captura manual y documentos funcionan. No hay truncamiento silencioso.
 
+`retry_job_id` es opcional al crear un trabajo: reutiliza bloques completos sin errores si el texto y el tipo coinciden. Los bloques fallidos se vuelven a leer contra la revisión actual. Las actividades repetidas conservan posiciones de origen distintas.
+
 ## Archivos, operadores y entregables
 
 - `POST /api/workspaces/{id}/documents?name=...&topic=...`: cuerpo binario, hasta 10 MB; metadatos y texto extraído con fuentes. `GET .../documents/{document_id}` descarga el original.
@@ -32,6 +34,8 @@ La IA se accede por la interfaz existente de proveedores; fragmentos de evidenci
 - `GET /api/workspaces/{id}/coverage`: preguntas dirigidas y referencias faltantes.
 - `GET /api/workspaces/{id}/deliverables`: tablas calculadas de actividades aceptadas, tiempos conocidos, referencias y disponibilidad de estudios.
 - `GET /api/workspaces/{id}/export` / `POST /api/workspaces/import`: paquete ZIP de expediente y originales; rutas internas nunca se extraen al filesystem.
+- `POST /api/workspaces/{id}/clear-context`: `{ expected_revision }`, limpia contexto y originales del expediente actual conservando plano y otros expedientes; cancela trabajos activos del mismo expediente.
+- `POST /api/studies/build`: `{ plant, analysis?, context?, redesign? }`, entrega tablas actuales y un borrador propuesto solo si hay transportes aceptados vinculados a rutas calculadas del rediseño. No inventa tiempos de transporte futuros.
 
 ## Plano y compatibilidad
 

@@ -71,3 +71,19 @@ def test_excel_import_and_limit():
     assert documents.table(stream.getvalue(), "operators.xlsx")[1] == ["Luis", "Noche"]
     with pytest.raises(ValueError, match="10 MB"):
         documents.upload("demo", "huge.txt", "negocio", b"x" * (documents.MAX_BYTES + 1))
+
+
+def test_clear_context_preserves_plan_other_projects_and_checks_revision(client):
+    metadata = documents.upload("demo", "note.txt", "negocio", b"Original")
+    project = store.read("demo")["project"]
+    project.update(draft={"stations": [{"id": "keep"}]}, text="Delete this")
+    store.write("demo", project, 1)
+    store.write("other", {"text": "Other project"}, 0)
+    assert client.post("/api/workspaces/demo/clear-context", json={"expected_revision": 1}).status_code == 409
+    assert store.document("demo", metadata["id"])[1] == b"Original"
+    saved = client.post("/api/workspaces/demo/clear-context", json={"expected_revision": 2}).json()
+    assert saved["project"]["text"] == ""
+    assert saved["project"]["draft"]["stations"][0]["id"] == "keep"
+    assert store.read("other")["project"]["text"] == "Other project"
+    with pytest.raises(KeyError):
+        store.document("demo", metadata["id"])

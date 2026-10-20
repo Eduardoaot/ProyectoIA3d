@@ -17,7 +17,7 @@ def finite(value):
         return None
 
 
-def build(context, plant=None, analysis=None):
+def build(context, plant=None, analysis=None, redesign=None):
     context = context if isinstance(context, dict) else {}
     activities = [a for a in context.get("activities", []) if a.get("status") == "confirmed"]
     rows, edges, warnings = [], [], []
@@ -29,12 +29,17 @@ def build(context, plant=None, analysis=None):
                 external_ids.setdefault(a["externalId"], []).append(a["id"])
         for a in activities:
             time = finite(a.get("time"))
+            samples = [finite(v) for v in a.get("time_samples", [])]
+            from_samples = time is None and samples and all(v is not None for v in samples)
+            if from_samples:
+                time = sum(samples) / len(samples)
             factor = {"s": 1 / 60, "min": 1, "h": 60}.get(a.get("timeUnit", "min"))
             rows.append({"id": a["id"], "sequence": a.get("sequence"), "description": a.get("description"), "type": a.get("type"),
                 "time_min": round(time * factor, 6) if time is not None and factor is not None else None,
                 "distance_m": finite(a.get("distance")), "station_id": a.get("stationId") or None,
                 "route_id": a.get("routeId") or None, "source_id": a.get("source_id") or a.get("sourceId") or None,
                 "excerpt": a.get("excerpt"), "origin": "document" if a.get("source_id") or a.get("sourceId") else "user"})
+            rows[-1]["time_basis"] = "Promedio de observaciones aportadas" if from_samples else "Tiempo aportado" if time is not None else "Sin dato"
             for predecessor in a.get("predecessors", []):
                 candidates = external_ids.get(predecessor, [predecessor] if any(p["id"] == predecessor for p in activities) else [])
                 if len(candidates) == 1:
@@ -50,8 +55,18 @@ def build(context, plant=None, analysis=None):
         warnings.append("Borrador derivado del plano: una estación no sustituye un estudio de actividades observado.")
     times = [row["time_min"] for row in rows if row["time_min"] is not None]
     distances = [row["distance_m"] for row in rows if row["distance_m"] is not None]
+    proposed_rows = []
+    proposed_legs = {leg.get("id"): leg for leg in ((redesign or {}).get("metrics") or {}).get("legs", [])}
+    if source == "accepted_activities" and any(row.get("route_id") in proposed_legs and row["type"] == "transporte" for row in rows):
+        for row in rows:
+            proposal = {**row, "origin": "baseline_study", "distance_m": None}
+            if row["type"] == "transporte":
+                leg = proposed_legs.get(row.get("route_id"))
+                proposal.update(time_min=None, time_basis="Requiere validar tiempo de transporte", distance_m=finite(leg.get("dist")) if leg else None,
+                    origin="redesign_route" if leg else "missing_redesign_route")
+            proposed_rows.append(proposal)
     return {"context_version": context_version(context), "plant_version": plant_version(plant) if plant else None,
-        "source": source, "rows": rows, "edges": edges, "warnings": warnings,
+        "source": source, "rows": rows, "proposed_rows": proposed_rows, "edges": edges, "warnings": warnings,
         "counts": dict(Counter(row["type"] for row in rows)),
         "totals": {"activities": len(rows), "known_time_rows": len(times), "missing_time_rows": len(rows) - len(times),
             "known_distance_rows": len(distances), "known_time_sum_min": round(sum(times), 6) if times else None,
@@ -61,5 +76,5 @@ def build(context, plant=None, analysis=None):
             {"type": "cursograma_analitico", "label": "Cursograma analítico actual", "status": "draft" if rows else "missing_data"},
             {"type": "hoja_tiempos", "label": "Tabla de tiempos conocidos", "status": "partial" if times else "missing_data"},
             {"type": "mapa_proceso", "label": "Relaciones de proceso", "status": "draft" if edges else "missing_data"},
-            {"type": "cursograma_propuesto", "label": "Cursograma propuesto", "status": "missing_data", "reason": "Requiere actividades y relaciones sustentadas del rediseño; no se copia el estudio actual."},
+            {"type": "cursograma_propuesto", "label": "Cursograma propuesto", "status": "draft" if proposed_rows else "missing_data", "reason": "Las operaciones conservan su dato de origen; los transportes usan distancias del motor y necesitan validar sus tiempos." if proposed_rows else "Requiere actividades vinculadas a rutas calculadas del rediseño; no se copia el estudio actual."},
         ]}

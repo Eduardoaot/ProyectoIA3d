@@ -6,6 +6,25 @@ Dar al usuario un solo lugar, al inicio del proyecto, para contar cómo funciona
 
 ## Primera entrega: validar el frontend
 
+**Actualización de implementación del 20 de octubre:** el usuario autorizó continuar con el backend. Se implementó la extensión [CONTRATO-DATA.md](coordinacion/CONTRATO-DATA.md): expedientes persistentes con revisiones, confirmación masiva, trabajos por bloques con cancelación/reintento, originales y lectores de documentos, importación de operadores, cobertura y entregables estructurados. Las descripciones del prototipo y de las ideas pendientes que siguen son el registro histórico; consultar el estado operativo siguiente para distinguir lo que ya funciona.
+
+### Estado operativo de la conexión DATA
+
+- SQLite conserva cada expediente, sus revisiones y originales en `CAUCE_DATA_DIR` (por defecto `.cauce-data`). La pantalla ofrece guardar/recuperar una copia y exportar/restaurar un paquete con archivos. No hay sincronización automática entre computadoras; se puede trasladar el paquete.
+- La ruta compatible `/api/context/organize` se conserva. La interfaz nueva usa trabajos `/api/workspaces/{id}/jobs` para texto largo, muestra progreso y errores, permite cancelar y reintentar bloques. Un resultado no se aplica sobre una revisión cambiada. Si un documento excede el límite de lectura, no se utiliza su vista parcial como si fuera completo.
+- Los especialistas de contexto existentes alimentan un consolidador; el servicio acepta únicamente propuestas con respaldo y aplica la confirmación en código. «Confirmar todos los datos» no incorpora conflictos bloqueados; estos permanecen corregibles.
+- Estudios tiene entrada de texto completo y filas editables, confirmación masiva y coordinación por tipos: cursograma analítico, hoja de tiempos y mapa de proceso. Los tipos desconocidos se declaran sin determinar. Los promedios de observaciones aportadas se calculan en código; no se generan tiempos normales/estándar sin definición y datos suficientes.
+- Documentos de hasta 10 MB: TXT/MD/CSV, XLSX y PDF con texto. Los escaneados y formatos sin lector quedan pendientes. Las referencias visuales conservan el proveedor de visión existente. La exportación puede trasladar originales anteriores de IndexedDB si todavía existen en el navegador.
+- Personal permite importar CSV/XLSX y revisar operadores/asignaciones. Eficiencia reportada y valoración de ritmo conservan valor, escala y fuente por separado. Eficiencia individual calculada sigue como «sin datos» mientras no se definan sus observaciones y fórmula; no modifica el factor global del motor.
+- Preguntas útiles se integran dentro de revisión, sin añadir otra sección. Las respuestas son información proporcionada por el usuario. Prioridades apagadas usa los pesos base del motor; la respuesta conserva los pesos efectivos.
+- El constructor acepta contexto revisado de forma aditiva a `/api/story`; el boceto resultante requiere verificación de dimensiones/posiciones. El análisis y el reporte reciben actividades/operadores aceptados. Los entregables conservan ramas, retornos y valores desconocidos.
+- El cursograma propuesto solo se habilita cuando existen actividades vinculadas a rutas del rediseño con distancias calculadas. Las operaciones conservan su fuente de origen y los tiempos de transporte propuestos requieren validación. Un plano sin estudio produce un borrador identificado como tal, no un estudio observado.
+- Se mantienen pendientes por diseño: otros tipos de estudios, la definición del desempeño individual y el diagrama interactivo previo al plano. La calidad de interpretación con un modelo real requiere configurar un proveedor activo; las pruebas automatizadas usan proveedores simulados, sin presentarlas como validación del modelo.
+
+Las fases D0–D8 que figuran más abajo sirven como desglose y criterios de extensión de esta conexión. Las decisiones de almacenamiento, prioridades apagadas, catálogo inicial y ubicación de preguntas se concretaron en `CONTRATO-DATA.md` al autorizar esta implementación.
+
+Verificación de la conexión: suite general del backend, pruebas específicas de expedientes/documentos/estudios, 62 pruebas del frontend y compilación. Chrome comprobó tanto la compatibilidad anterior como el flujo HTTP conectado con proveedor simulado, incluyendo 120 actividades, importación de operadores, confirmación masiva y vistas móviles. No hay proveedor Ollama activo en esta PC al cerrar esta entrega; la prueba de calidad con un modelo real queda pendiente de su configuración.
+
 Por indicación del usuario, primero se construye una interfaz navegable para revisar la experiencia. El contrato definitivo, la estructura del backend y los entregables del reporte se trabajarán después de esta revisión.
 
 El prototipo reúne texto libre, diez temas, datos con historial, documentos, estudios manuales, imágenes, prioridades y confirmación del plano/contexto. El acceso está en la esquina superior derecha desde todos los pasos. Rediseño conserva el resumen de prioridades y enlaza a su edición en contexto.

@@ -80,6 +80,12 @@ class ChatInterface(BaseModel):
     with_validation: bool = False
 
 
+@app.post("/api/studies/build")
+def study_deliverables(body: ContextInterface):
+    from cauce.workspace_deliverables import build
+    return build(body.context, body.plant, body.analysis, body.redesign)
+
+
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
 FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors", "simulate", "context_agents", "context_workspace", "context_jobs", "context_documents", "work_studies", "operator_import"]

@@ -16,6 +16,26 @@ Funciona para cualquier rubro (vidrio, carpintería, metalmecánica, costura, al
 
 ---
 
+## Contexto, estudios y operadores conectados
+
+La rama `feature/data` añade un expediente local persistente en SQLite, con confirmación por lotes, documentos originales, trabajos de interpretación por bloques, estudios de más de cien actividades, base de operadores y entregables estructurados. Contrato y alcance: [CONTRATO-DATA.md](coordinacion/CONTRATO-DATA.md) y [PLAN-DATA.md](PLAN-DATA.md).
+
+Desde la raíz, con las dependencias de `backend/requirements-dev.txt` instaladas en `.venv`:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+En otra terminal: `cd frontend` y `npm run dev -- --host 127.0.0.1`. Abrir **Ver contexto de la planta**. El estado se guarda en el navegador; **Guardar copia del proyecto** persiste el expediente en el backend y **Exportar con archivos** permite trasladarlo. `CAUCE_DATA_DIR` cambia la carpeta de SQLite (por defecto `.cauce-data`, excluida de Git).
+
+La interpretación utiliza el proveedor existente del rol contexto: `OLLAMA_HOST`, `CAUCE_CONTEXT_PROVIDER` y `CAUCE_CONTEXT_MODEL`. Si el modelo no está disponible, el servicio lo explica y conserva captura manual y documentos. Las pruebas no necesitan Ollama: usan proveedores simulados. No se ha equiparado esa prueba con la calidad de un modelo real.
+
+Los porcentajes de operadores importados conservan su escala y procedencia; la eficiencia calculada requiere definir sus observaciones. Las duraciones desconocidas quedan sin dato. Un promedio de muestras se calcula en código y no se llama tiempo estándar. Los formatos sin extracción real y los PDFs escaneados siguen pendientes de lectura.
+
+Pruebas: `.venv\Scripts\python.exe -m pytest backend/tests -q`, y en frontend `npm test` / `npm run build`. La integración de navegador se comprueba con `backend/tests/serve_data_smoke.py` y `frontend/tests/data-smoke-server.mjs` en procesos separados, y después `node tests/data-backend.browser.mjs`; ese servidor de pruebas usa un expediente temporal y proveedor simulado, separado del servidor normal.
+
+---
+
 ## Índice
 
 1. [Idea y origen](#1-idea-y-origen)

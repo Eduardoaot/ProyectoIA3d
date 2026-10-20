@@ -99,3 +99,14 @@ def test_120_activities_unknowns_and_no_overwrite():
     asyncio.run(jobs.run("demo", "conflict", Provider()))
     assert store.job("demo", "conflict")["status"] == "conflict"
     assert len(store.read("demo")["project"]["contextWorkspace"]["activities"]) == 120
+
+
+def test_repeated_activity_descriptions_keep_distinct_source_positions():
+    class Provider:
+        async def json(self, system, text, schema):
+            if "types" in schema.get("properties", {}):
+                return {"types": ["cursograma_analitico"], "reason": "Actividades"}
+            return {"activities": [{"description": "Revisar pieza", "excerpt": "Revisar pieza", "type": "inspeccion", "time": None, "distance": None, "timeUnit": "min"} for _ in range(3)]}
+    result = asyncio.run(jobs.interpret_block("studies", {"text": "Revisar pieza\nRevisar pieza\nRevisar pieza", "offset": 0}, Provider()))
+    assert len(result["activities"]) == 3
+    assert len({a["id"] for a in result["activities"]}) == 3

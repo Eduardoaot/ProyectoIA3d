@@ -1,5 +1,6 @@
 """API aditiva del expediente. Las operaciones nuevas no alteran las rutas v3."""
 from __future__ import annotations
+import zipfile
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
@@ -38,6 +39,10 @@ class OperatorInput(BaseModel):
     mapping: dict[str, str] | None = None
 
 
+class RevisionInput(BaseModel):
+    expected_revision: int = Field(ge=1)
+
+
 def translate(operation):
     try:
         return operation()
@@ -45,7 +50,7 @@ def translate(operation):
         raise HTTPException(409, str(exc)) from exc
     except KeyError as exc:
         raise HTTPException(404, "No existe el expediente o recurso solicitado") from exc
-    except (ValueError, TypeError) as exc:
+    except (ValueError, TypeError, zipfile.BadZipFile) as exc:
         raise HTTPException(422, str(exc)) from exc
 
 
@@ -69,6 +74,27 @@ def create_router(provider):
     def export_workspace(workspace_id: str):
         binary = translate(lambda: documents.export_bundle(workspace_id))
         return Response(binary, media_type="application/zip", headers={"Content-Disposition": 'attachment; filename="cauce-proyecto.zip"'})
+
+    @router.post("/{workspace_id}/clear-context")
+    async def clear_context(workspace_id: str, body: RevisionInput):
+        import asyncio
+        with store.connection() as db:
+            active = [jobs.TASKS[row[0]] for row in db.execute("SELECT id FROM jobs WHERE workspace=?", (workspace_id,)) if row[0] in jobs.TASKS]
+        for task in active:
+            task.cancel()
+        if active:
+            await asyncio.gather(*active, return_exceptions=True)
+        def clear():
+            with store.connection() as db:
+                db.execute("BEGIN IMMEDIATE")
+                project = store.read(workspace_id, db)["project"]
+                project.update(text="", context={"segments": {}}, contextWorkspace={}, weights=None,
+                    prioritiesEnabled=True, context2Ok=None, analysisInputSignature=None, printed=False)
+                saved = store.write(workspace_id, project, body.expected_revision, db)
+                db.execute("DELETE FROM documents WHERE workspace=?", (workspace_id,))
+                db.execute("DELETE FROM jobs WHERE workspace=?", (workspace_id,))
+                return saved
+        return translate(clear)
 
     @router.post("/{workspace_id}/documents")
     async def upload_document(workspace_id: str, request: Request, name: str, topic: str):
@@ -112,7 +138,7 @@ def create_router(provider):
         return translate(lambda: store.job(workspace_id, job_id))
 
     @router.post("/{workspace_id}/jobs/{job_id}/cancel")
-    def cancel_job(workspace_id: str, job_id: str):
+    async def cancel_job(workspace_id: str, job_id: str):
         value = translate(lambda: store.job(workspace_id, job_id))
         if value["status"] in ("queued", "running"):
             value["status"] = "cancelled"

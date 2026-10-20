@@ -21,11 +21,29 @@ def test_pending_rows_cannot_appear_as_study_facts():
     assert result["rows"] == [] and result["totals"]["known_time_sum_min"] is None
 
 
+def test_time_sheet_average_computed_by_code_with_source_preserved():
+    row = {**activity("corte"), "time_samples": [10, 12, 11], "source_id": "sheet-1"}
+    result = build({"activities": [row]})
+    assert result["rows"][0]["time_min"] == 11
+    assert result["rows"][0]["time_basis"] == "Promedio de observaciones aportadas"
+    assert result["rows"][0]["source_id"] == "sheet-1"
+    assert row["time"] is None  # no se transforma el original en una medición única
+
+
 def test_bare_plant_is_identified_as_draft_not_observed_study():
     result = build({}, {"stations": [{"id": "cut", "name": "Corte", "t": 12}], "routes": []})
     assert result["source"] == "plant_draft"
     assert result["rows"][0]["time_min"] is None
     assert result["warnings"]
+
+
+def test_proposed_study_uses_only_linked_route_distances():
+    row = {**activity("transport", 3), "type": "transporte", "routeId": "r1", "distance": 20}
+    result = build({"activities": [row]}, redesign={"metrics": {"legs": [{"id": "r1", "dist": 8}]}})
+    assert result["rows"][0]["distance_m"] == 20
+    assert result["proposed_rows"][0]["distance_m"] == 8
+    assert result["proposed_rows"][0]["time_min"] is None
+    assert result["proposed_rows"][0]["origin"] == "redesign_route"
 
 
 def test_story_uses_accepted_context_and_preserves_old_route(client, fake):

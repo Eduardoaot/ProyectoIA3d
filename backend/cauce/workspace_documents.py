@@ -132,6 +132,8 @@ def export_bundle(workspace_id):
     result = io.BytesIO()
     referenced = {f["id"] for f in saved["project"].get("contextWorkspace", {}).get("attachments", [])}
     docs = [d for d in store.documents(workspace_id) if d["id"] in referenced]
+    if len(docs) > 998 or sum(d["size"] for d in docs) > 90 * 1024 * 1024:
+        raise ValueError("El paquete excede 90 MB de originales o 998 archivos. Divide el proyecto antes de exportar.")
     with zipfile.ZipFile(result, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("manifest.json", store.encode({"format": "cauce-workspace-1", "project": saved["project"], "documents": docs}))
         for doc in docs:

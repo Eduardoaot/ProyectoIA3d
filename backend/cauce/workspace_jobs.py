@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 import re
 import uuid
 from pathlib import Path
@@ -12,12 +13,14 @@ from .workspace import merge_result, normalize
 from . import workspace_store as store
 
 TASKS = {}
+STUDY_TYPES = {"cursograma_analitico": None, "hoja_tiempos": "study-times.md", "mapa_proceso": "study-process.md"}
+COORDINATOR_SCHEMA = {"type": "object", "properties": {"types": {"type": "array", "items": {"type": "string", "enum": [*STUDY_TYPES, "desconocido"]}}, "reason": {"type": "string"}}, "required": ["types", "reason"], "additionalProperties": False}
 STUDY_SCHEMA = {"type": "object", "properties": {"activities": {"type": "array", "items": {
     "type": "object", "properties": {"description": {"type": "string"}, "excerpt": {"type": "string"},
         "type": {"type": "string", "enum": ["operacion", "transporte", "inspeccion", "espera", "almacenamiento"]},
         "externalId": {"type": "string"}, "time": {"type": ["number", "null"]}, "timeUnit": {"type": "string", "enum": ["s", "min", "h"]},
-        "distance": {"type": ["number", "null"]}, "predecessors": {"type": "array", "items": {"type": "string"}}},
-    "required": ["description", "excerpt", "type", "externalId", "time", "timeUnit", "distance", "predecessors"], "additionalProperties": False,
+        "distance": {"type": ["number", "null"]}, "time_samples": {"type": "array", "items": {"type": "number"}}, "predecessors": {"type": "array", "items": {"type": "string"}}},
+    "required": ["description", "excerpt", "type", "externalId", "time", "timeUnit", "distance", "predecessors", "time_samples"], "additionalProperties": False,
 }}}, "required": ["activities"], "additionalProperties": False}
 
 
@@ -75,23 +78,41 @@ async def interpret_block(kind, block, provider, source_id=None, topic=None):
         for proposal in result["proposals"]:
             proposal.update(source_id=source_id, offset=block["offset"] + text.index(proposal["excerpt"]))
         return {"proposals": result["proposals"], "warnings": result["errors"]}
-    prompt = Path(__file__).with_name("agents").joinpath("study-reader.md").read_text(encoding="utf-8")
+    prompts = Path(__file__).with_name("agents")
+    inventory = []
+    try:
+        classification = await provider.json(prompts.joinpath("study-coordinator.md").read_text(encoding="utf-8"), text, COORDINATOR_SCHEMA)
+        inventory = [t for t in classification.get("types", []) if t in STUDY_TYPES]
+    except Exception:
+        pass  # La interpretación genérica sigue disponible; no se afirma haber identificado el formato.
+    prompt = prompts.joinpath("study-reader.md").read_text(encoding="utf-8")
+    for kind_name in inventory:
+        if STUDY_TYPES[kind_name]:
+            prompt += "\n" + prompts.joinpath(STUDY_TYPES[kind_name]).read_text(encoding="utf-8")
     raw = await provider.json(prompt, text, STUDY_SCHEMA)
     if not isinstance(raw, dict) or not isinstance(raw.get("activities"), list):
         raise ValueError("El especialista no devolvió una lista de actividades")
-    activities, warnings = [], []
+    activities, warnings, cursors = [], [], {}
     for item in raw["activities"]:
         try:
             excerpt, description = str(item.get("excerpt") or "").strip(), str(item.get("description") or "").strip()
             if not excerpt or excerpt not in text or not description or item.get("type") not in ("operacion", "transporte", "inspeccion", "espera", "almacenamiento"):
                 raise ValueError("Actividad sin evidencia literal, descripción o tipo válido")
-            offset = block["offset"] + text.index(excerpt)
+            position = text.find(excerpt, cursors.get(excerpt, 0))
+            if position < 0:
+                raise ValueError("La respuesta repite un fragmento más veces que el original")
+            cursors[excerpt] = position + len(excerpt)
+            offset = block["offset"] + position
             fingerprint = digest([source_id, excerpt, offset])
             activity = {"id": f"actividad-{fingerprint[:24]}", "fingerprint": fingerprint, "description": description,
                 "excerpt": excerpt, "offset": offset, "sourceId": source_id or "", "source_id": source_id,
                 "type": item["type"], "time": supported_number(item.get("time"), excerpt), "timeUnit": item.get("timeUnit", "min"),
                 "distance": supported_number(item.get("distance"), excerpt), "stationId": "", "routeId": "", "status": "pending",
                 "externalId": str(item.get("externalId") or ""), "predecessors": [str(v) for v in item.get("predecessors", [])]}
+            activity["time_samples"] = [supported_number(sample, excerpt) for sample in item.get("time_samples", [])]
+            available = Counter(float(n.replace(",", ".")) for n in re.findall(r"(?<!\w)\d+(?:[.,]\d+)?", excerpt))
+            if any(count > available[number] for number, count in Counter(activity["time_samples"]).items()):
+                raise ValueError("La respuesta repite observaciones numéricas que el original no contiene")
             if activity["timeUnit"] not in ("s", "min", "h"):
                 raise ValueError("Unidad de tiempo no soportada")
             activities.append(activity)
@@ -104,7 +125,7 @@ async def interpret_block(kind, block, provider, source_id=None, topic=None):
     missing = numbered - returned
     if missing:
         warnings.append("Filas numeradas no identificadas en la respuesta: " + ", ".join(sorted(missing, key=int)))
-    return {"activities": activities, "warnings": warnings}
+    return {"activities": activities, "warnings": warnings, "inventory": [{"type": t, "status": "identified_unconfirmed", "source_id": source_id} for t in inventory or ["desconocido"]]}
 
 
 async def run(workspace_id, job_id, provider):
@@ -122,6 +143,10 @@ async def run(workspace_id, job_id, provider):
                 part = await interpret_block(value["kind"], block, provider, value.get("source_id"), value.get("topic"))
                 value["result"]["proposals"].extend(part.get("proposals", []))
                 value["result"]["activities"].extend(part.get("activities", []))
+                inventory = value["result"].setdefault("inventory", [])
+                for study in part.get("inventory", []):
+                    if study not in inventory:
+                        inventory.append(study)
                 if part.get("warnings"):
                     value["errors"].append({"block": block["index"], "detail": part["warnings"]})
                 value["completed_blocks"].append(block["index"])
@@ -135,8 +160,6 @@ async def run(workspace_id, job_id, provider):
             for index, item in enumerate(value["result"]["activities"]):
                 item["sequence"] = index + 1
             value["result"].update(source="ia", warnings=value["errors"], blocks={"completed": value["completed_blocks"], "total": len(blocks(value["text"]))})
-            if value["kind"] == "studies":
-                value["result"]["inventory"] = [{"type": "cursograma_analitico", "status": "draft", "source_id": value.get("source_id"), "activities": len(value["result"]["activities"])}]
             try:
                 saved = store.mutate(workspace_id, value["base_revision"], lambda project: merge_result(project, value["result"]))
                 value.update(status="partial" if value["errors"] else "done", applied_revision=saved["revision"])
@@ -160,6 +183,8 @@ def launch(workspace_id, body, provider):
         document, _ = store.document(workspace_id, body.source_id)
         if document.get("status") != "text_extracted":
             raise ValueError("El documento está pendiente de lectura")
+        if document.get("truncated"):
+            raise ValueError("El documento excede el límite de texto de esta lectura. Divídelo en partes; no se interpretará una vista incompleta como el documento entero.")
         text = document["text"]
     if not text.strip() or len(text) > 500000:
         raise ValueError("Proporciona entre 1 y 500 000 caracteres. Divide documentos mayores sin omitir su contenido.")
