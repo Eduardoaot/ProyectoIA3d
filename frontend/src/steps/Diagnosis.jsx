@@ -1,22 +1,11 @@
-import { useState } from 'react'
 import { fmt } from '../api'
-import { has } from '../capabilities'
-import Criteria from '../components/Criteria'
-import useCaps from '../useCaps'
 import FlowPlan from '../charts/FlowPlan'
 import RelChart from '../charts/RelChart'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 
-export default function Diagnosis({ plant, analysis, weights, onReweigh, onNext }) {
+export default function Diagnosis({ plant, analysis, onNext }) {
 	const cur = analysis.current
-	const caps = useCaps()
-	const [busy, setBusy] = useState(false)
-	const reweigh = async (w) => {
-		setBusy(true)
-		await onReweigh(w)
-		setBusy(false)
-	}
 
 	return (
 		<section className="step">
@@ -37,11 +26,7 @@ export default function Diagnosis({ plant, analysis, weights, onReweigh, onNext 
 			</div>
 
 			<Appear className="block" style={{ marginTop: 24 }}>
-				<Criteria key={analysis.plant_version + JSON.stringify(analysis.weights_used || {})} analysis={analysis} canWeigh={has(caps, 'weights') && !!onReweigh} weights={weights} onReweigh={reweigh} busy={busy} />
-			</Appear>
-
-			<Appear className="block" style={{ marginTop: 24 }}>
-				<details className="how">
+				<details className="how" open>
 					<summary>Cómo se calculó</summary>
 					<ul>
 						<li>Recorrido: la ruta más corta por los pasillos, sin cruzar máquinas, paredes ni zonas, multiplicada por el % de piezas de cada ruta.</li>

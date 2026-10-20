@@ -56,7 +56,6 @@ export default function Assistant({ plant, positions, onApply }) {
                 <button type="button" className="btn btn--small" onClick={ask} disabled={state.busy || !text.trim()}>
                     {state.busy ? 'Pensando…' : 'Proponer cambios'}
                 </button>
-                <span className="small">Nada se aplica sin tu confirmación. Lo fijo no se toca.</span>
             </div>
             {state.error && <p className="small">{state.error}</p>}
             {out && (

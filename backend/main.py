@@ -1,6 +1,8 @@
 import asyncio
 import json
+import os
 import pathlib
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,8 +25,6 @@ from cauce.compact import compact_alternative, footprint
 from cauce.providers import caps, get_provider
 from cauce.story import STORY_SCHEMA, STORY_SYSTEM, build_plant
 
-app = FastAPI(title="Cauce")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 # Un proveedor por rol (criterios §7.3); cada uno se configura con CAUCE_<ROL>_PROVIDER/MODEL.
 extractor = get_provider("extractor")  # historia -> JSON
 engineer = get_provider("chat")  # chat del ingeniero
@@ -33,6 +33,28 @@ missioner = get_provider("misiones")  # misiones del taller (JSON)
 editor = get_provider("editor")  # asistente del editor: instrucción -> operaciones
 spatial = get_provider("espacial")  # agentes que leen el espacio
 seer = get_provider("vision")  # imágenes de referencia (solo si el modelo tiene visión)
+
+
+async def warm_up():
+    """Al arrancar, deja leídas las instrucciones del extractor y del revisor (las dos llamadas
+    que hace toda historia). La primera historia se ahorra ~1 min en CPU; sin Ollama no pasa nada."""
+    for system in (STORY_SYSTEM, REVIEW_SYSTEM):
+        try:
+            await extractor.warm(system)
+        except Exception:  # noqa: BLE001
+            return
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    task = asyncio.create_task(warm_up()) if hasattr(extractor, "warm") and os.getenv("CAUCE_WARM", "1") != "0" else None
+    yield
+    if task:
+        task.cancel()
+
+
+app = FastAPI(title="Cauce", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 async def spatial_or_extractor():

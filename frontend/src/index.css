@@ -128,13 +128,16 @@ a {
 .btn {
   --fill: var(--white);
   --text: var(--white);
+  --cut: 14px;
+  --edge: var(--black);
   position: relative;
   display: inline-flex;
   align-items: center;
   gap: 0.75rem;
   min-height: 56px;
   padding: 0 1.6rem;
-  border: 2px solid var(--black);
+  /* El borde lo dibuja ::after: uno de CSS se corta en la esquina y deja escalones. */
+  border: 2px solid transparent;
   border-radius: 0;
   background: var(--black);
   color: var(--text);
@@ -143,18 +146,34 @@ a {
   font-weight: 760;
   font-size: var(--t-16);
   letter-spacing: -0.005em;
-  overflow: hidden;
   isolation: isolate;
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
   transition: color 0.45s var(--ease-out);
   will-change: transform;
   user-select: none;
 }
 
+/* Contorno de 2 px que sigue el recorte, diagonal incluida, igual en reposo y con hover.
+   Es un anillo: la forma de afuera menos la de adentro (evenodd). En la diagonal, el borde
+   interior se corre 0,83 px (2·√2 − 2) para que mida 2 px como los demás lados. */
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--edge);
+  clip-path: polygon(
+    evenodd,
+    0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%, 0 0,
+    2px 2px, 2px calc(100% - 2px), calc(100% - 2px) calc(100% - 2px), calc(100% - 2px) calc(var(--cut) + 0.83px), calc(100% - var(--cut) - 0.83px) 2px, 2px 2px
+  );
+}
+
 .btn::before {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -2px;
   z-index: -1;
   background: var(--fill);
   transform: translateY(101%);
@@ -174,6 +193,7 @@ a {
 }
 
 .btn:disabled {
+  --edge: var(--g300);
   background: var(--g300);
   border-color: var(--g300);
   color: var(--white);
@@ -204,7 +224,7 @@ a {
   min-height: 42px;
   padding: 0 1.1rem;
   font-size: var(--t-14);
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  --cut: 10px;
 }
 
 .btn--wide {
@@ -348,19 +368,25 @@ a {
 }
 
 .rail-steps {
-  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
+}
+
+/* La línea va del centro del primer paso al centro del último: no asoma por arriba ni por abajo. */
+.rail-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   gap: 18px;
 }
 
 .rail-line {
   position: absolute;
   left: 50%;
-  top: 22px;
-  bottom: 22px;
+  top: 23px;
+  bottom: 23px;
   width: 2px;
   background: var(--g700);
   transform: translateX(-50%);
@@ -407,8 +433,10 @@ a {
   color: var(--black);
 }
 
+/* Opaco: con transparencia la línea se veía a través del cuadro. */
 .rail-step:disabled {
-  opacity: 0.45;
+  border-color: #262626;
+  color: var(--g700);
 }
 
 .rail-tip {
@@ -1046,6 +1074,11 @@ body.cursor-out .cursor-ring {
   flex-wrap: wrap;
 }
 
+/* Sobre el 3D un botón transparente se pierde con el piso: fondo blanco siempre. */
+.scene-tools .btn--ghost {
+  background: var(--white);
+}
+
 .seg {
   display: inline-flex;
   border: 2px solid var(--black);
@@ -1393,6 +1426,7 @@ details.how ul {
 }
 
 .report .btn {
+  --edge: var(--white);
   background: var(--white);
   color: var(--black);
   border-color: var(--white);
@@ -1676,6 +1710,17 @@ details.how ul {
 .chat-form .btn {
   min-height: 64px;
   clip-path: none;
+  overflow: hidden;
+  border-color: var(--edge);
+}
+
+/* Sin esquina cortada basta el borde normal (overflow recortaría el anillo). */
+.chat-form .btn::after {
+  display: none;
+}
+
+.chat-form .btn::before {
+  inset: 0;
 }
 
 .chat-suggest {
@@ -2104,6 +2149,18 @@ details.how ul {
   letter-spacing: 0.3em;
 }
 
+/* Después de FIN: empezar con otra planta. */
+.fin-next {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.fin-next p {
+  margin: 0;
+}
+
 /* ---------- Reporte ---------- */
 
 .doc-preview {
@@ -2240,8 +2297,19 @@ details.how ul {
   color: var(--g700);
 }
 
+/* En pantalla, la copia para imprimir queda maquetada fuera de la vista con el ancho de la hoja:
+   así se puede medir (el cursograma calcula sus líneas con la altura real de cada fila). */
 .print-root {
-  display: none;
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 210mm;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.print-root .doc {
+  padding: 14mm 14mm 12mm;
 }
 
 @media print {
@@ -2266,12 +2334,9 @@ details.how ul {
   }
 
   .print-root {
-    display: block;
-  }
-
-  /* El PDF se ve como la vista previa en pantalla, aunque la hoja sea angosta. */
-  .print-root .doc {
-    padding: 14mm 14mm 12mm;
+    position: static;
+    width: auto;
+    visibility: visible;
   }
 
   .print-root .doc-head {
@@ -2827,6 +2892,164 @@ details.how ul {
   justify-items: end;
 }
 
+/* La opción con IA y la tuya: dos cuadros como «Opción aplicada», debajo de él. */
+.choice-alts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* Contenido arriba en los dos cuadros (quedan a la misma altura) y el botón abajo. */
+.choice-box--alt {
+  align-items: start;
+  padding: 22px 24px;
+}
+
+.choice-box--alt .choice-actions {
+  align-self: end;
+}
+
+/* En lugar de una cifra que aún no existe: qué falta para tenerla. */
+.choice-status {
+  justify-self: start;
+  margin: 4px 0 0;
+  padding: 4px 10px;
+  border: 1.5px dashed var(--g500);
+  color: var(--g700);
+  font-size: var(--t-14);
+  font-weight: 700;
+}
+
+.choice-box--alt h3 {
+  font-size: var(--t-20);
+}
+
+.choice-box--alt .choice-figure {
+  font-size: var(--t-28);
+}
+
+.choice-box--alt.is-on {
+  background: var(--g100);
+  box-shadow: inset 6px 0 0 var(--black);
+}
+
+@media (max-width: 1100px) {
+  .choice-alts {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Rediseño: resultado frente a hoy ---------- */
+.outcome {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 24px 40px;
+  align-items: center;
+  padding: 28px 32px;
+  border: 2px solid var(--black);
+  background: var(--white);
+}
+
+.outcome-big {
+  font-size: clamp(3.6rem, 8vw, 6.5rem);
+  font-weight: 800;
+  font-stretch: var(--narrow);
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  color: var(--g500);
+}
+
+.outcome-big[data-good='true'] {
+  color: var(--black);
+}
+
+.outcome-big small {
+  margin-left: 4px;
+  font-size: 0.38em;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.outcome-text {
+  display: grid;
+  gap: 8px;
+}
+
+.outcome-text h3 {
+  margin: 0;
+  font-size: var(--t-28);
+  font-stretch: var(--wide);
+  line-height: 1.15;
+}
+
+.outcome-text p {
+  margin: 0;
+  max-width: 64ch;
+}
+
+.outcome-bars {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  align-items: center;
+  font-size: var(--t-14);
+  font-weight: 650;
+}
+
+.outcome-bars i {
+  display: block;
+  height: 14px;
+  background: var(--g100);
+}
+
+.outcome-bars i b {
+  display: block;
+  height: 100%;
+  background: var(--g300);
+}
+
+.outcome-bars i[data-new] b {
+  background: var(--g500);
+}
+
+.outcome-bars i[data-good='true'] b {
+  background: var(--black);
+}
+
+.outcome-stats {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px 24px;
+  margin: 0;
+  padding-top: 20px;
+  border-top: 2px solid var(--black);
+}
+
+.outcome-stats dt {
+  font-size: var(--t-12);
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--g500);
+}
+
+.outcome-stats dd {
+  margin: 4px 0 0;
+  font-size: var(--t-20);
+  font-weight: 800;
+  font-stretch: var(--narrow);
+}
+
+@media (max-width: 760px) {
+  .outcome {
+    grid-template-columns: 1fr;
+    padding: 22px;
+  }
+}
+
 .picker-tag {
   display: inline-block;
   padding: 2px 7px;
@@ -2910,8 +3133,14 @@ details.how ul {
   gap: 6px;
 }
 
-.curso-sym {
+/* Ancho fijo e igual en las cinco columnas: la línea que une los símbolos cuenta con ello. */
+.doc-table .curso-sym {
+  position: relative;
   width: 34px;
+  min-width: 34px;
+  max-width: 34px;
+  padding-left: 0;
+  padding-right: 0;
   text-align: center !important;
   vertical-align: middle;
 }
@@ -2919,6 +3148,32 @@ details.how ul {
 .curso-sym svg {
   display: inline-block;
   vertical-align: middle;
+}
+
+.curso-table tbody td {
+  background: var(--white);
+}
+
+/* z-index: las celdas de símbolos también están posicionadas y su fondo tapaba la línea. */
+.curso-sym .curso-link {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 1;
+  width: 500%;
+  /* +1 px: cubre el borde entre filas, que si no cortaba la línea. */
+  height: calc(100% + 1px);
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* El símbolo tapa la línea que pasa por su centro (fondo de la fila). */
+.curso-mark {
+  position: relative;
+  z-index: 2;
+  display: inline-grid;
+  padding: 2px;
+  background: inherit;
 }
 
 .curso-note {

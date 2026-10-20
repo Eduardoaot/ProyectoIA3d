@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-const BEST_KEY = 'cauce-montacargas-record'
+const BEST_KEY = 'cauce-pacman-record'
 
 function readBest() {
     try {
@@ -18,104 +18,149 @@ function saveBest(v) {
     }
 }
 
-/* Montacargas: los pedidos aparecen en el almacén como tarimas con una figura (○ □ △).
-   Hay que recogerlas (hasta dos a la vez) y llevarlas al andén de su figura antes de que se
-   acabe su tiempo, sin chocar con los operarios. Espacio da un acelerón corto; el rayo da turbo.
-   Cada entrega seguida sube el combo; cada 4 entregas sube el nivel (más pedidos, menos tiempo,
-   más operarios y más rápidos). Flechas o WASD para manejar, clic para ir, P o Esc para pausar. */
+/* Pac-Man en la nave: el montacargas recorre los pasillos entre estantes juntando piezas (◆).
+   Cuatro inspectores lo persiguen, cada uno a su modo (como los fantasmas del original):
+   uno va directo, otro se adelanta, otro le corta el paso con el primero y otro se acerca y
+   se aleja. Las tuercas grandes los asustan unos segundos: entonces se los puede atrapar y
+   vuelven a la oficina. Por el pasillo del medio se sale por un lado y se entra por el otro.
+   Flechas o WASD (o clic hacia donde ir), P o Esc para pausar. */
 
-const COLS = 16
-const ROWS = 9
-const SHAPES = ['circ', 'cuad', 'tri']
-const DOCKS = [
-    { c: 15, r: 1, shape: 'circ' },
-    { c: 15, r: 4, shape: 'cuad' },
-    { c: 15, r: 7, shape: 'tri' },
+// # estante · . pieza · o tuerca · - puerta de la oficina · G oficina · P salida del montacargas
+const MAZE = [
+    '#######################',
+    '#o.........#.........o#',
+    '#.###.####.#.####.###.#',
+    '#.....................#',
+    '#.###.#.###-###.#.###.#',
+    '#.....#.#GGGGG#.#.....#',
+    '......#.#GGGGG#.#......',
+    '#.###.#.#######.#.###.#',
+    '#.....#....P....#.....#',
+    '#.###.####.#.####.###.#',
+    '#o..#......#......#..o#',
+    '#.....................#',
+    '#######################',
 ]
-const RACKS = new Set(
-    [
-        ...[2, 3, 4, 5, 8, 9, 10, 11].flatMap((c) => [`${c},2`, `${c},6`]),
-        ...[6, 7, 8, 9].map((c) => `${c},4`),
-    ],
-)
-// Recorridos de los operarios, en el orden en que entran según el nivel.
-const PATROLS = [
-    { axis: 'r', fixed: 13, from: 0, to: 8 },
-    { axis: 'c', fixed: 3, from: 0, to: 12 },
-    { axis: 'c', fixed: 5, from: 0, to: 12 },
-    { axis: 'r', fixed: 1, from: 0, to: 8 },
-    { axis: 'c', fixed: 8, from: 12, to: 14 },
+const ROWS = MAZE.length
+const COLS = MAZE[0].length
+const TUNNEL = 6
+const DOOR = [11, 4]
+const OUT = [11, 3] // casilla justo afuera de la oficina
+const HOME = [11, 5] // donde revive un inspector atrapado
+const START = [11, 8]
+const BONUS_AT = 60 // piezas comidas para que aparezca la tarima de bono
+
+const DIRS = { up: [0, -1], left: [-1, 0], down: [0, 1], right: [1, 0] }
+const ORDER = ['up', 'left', 'down', 'right'] // desempate, como en el original
+const BACK = { up: 'down', down: 'up', left: 'right', right: 'left' }
+// Dispersión y persecución se alternan; al final solo persiguen.
+const PHASES = [
+    ['scatter', 6],
+    ['chase', 18],
+    ['scatter', 5],
+    ['chase', 20],
+    ['scatter', 4],
+    ['chase', Infinity],
 ]
-const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }
-const CAP = 2 // tarimas que caben en las horquillas
-const SPEED = 7.5 // casillas por segundo
 
-const isDock = (c, r) => DOCKS.some((d) => d.c === c && d.r === r)
-const free = (c, r) => c >= 0 && r >= 0 && c < COLS && r < ROWS && !RACKS.has(`${c},${r}`)
+const GHOSTS = [
+    { id: 'directo', mark: 'circ', shade: '#000', corner: [COLS - 2, -2], start: OUT, wait: 0 },
+    { id: 'adelantado', mark: 'cuad', shade: '#3b3b3b', corner: [1, -2], start: [11, 6], wait: 2 },
+    { id: 'cortador', mark: 'tri', shade: '#5a5a5a', corner: [COLS - 1, ROWS], start: [10, 6], wait: 5 },
+    { id: 'timido', mark: 'cruz', shade: '#767676', corner: [0, ROWS], start: [12, 6], wait: 8 },
+]
 
-/* Camino más corto por casillas libres (para ir con el clic). */
-function bfs(from, to) {
-    if (!free(to[0], to[1])) return null
-    const key = (c, r) => `${c},${r}`
+const cellAt = (c, r) => (r >= 0 && r < ROWS && c >= 0 && c < COLS ? MAZE[r][c] : r === TUNNEL ? ' ' : '#')
+const key = (c, r) => `${c},${r}`
+
+// ¿Se puede pasar? La puerta y la oficina solo para los inspectores que salen o vuelven.
+function open(c, r, inside = false) {
+    const t = cellAt(c, r)
+    if (t === '#') return false
+    if (t === '-' || t === 'G') return inside
+    return true
+}
+
+function wrap(e) {
+    if (e.c < 0) e.c = e.x = COLS - 1
+    else if (e.c >= COLS) e.c = e.x = 0
+}
+
+/* Siguiente paso del camino más corto (para los ojos que vuelven a la oficina). */
+function stepToward(from, to) {
+    const goal = key(...to)
     const prev = new Map([[key(...from), null]])
     const q = [from]
     while (q.length) {
         const [c, r] = q.shift()
-        if (c === to[0] && r === to[1]) {
-            const path = []
-            let k = key(c, r)
-            while (k && k !== key(...from)) {
-                const [pc, pr] = k.split(',').map(Number)
-                path.unshift([pc, pr])
-                k = prev.get(k)
-            }
-            return path
+        if (key(c, r) === goal) {
+            let k = goal
+            while (prev.get(k) && prev.get(k) !== key(...from)) k = prev.get(k)
+            return k.split(',').map(Number)
         }
-        for (const [dc, dr] of Object.values(DIRS)) {
-            const n = [c + dc, r + dr]
-            if (free(...n) && !prev.has(key(...n))) {
-                prev.set(key(...n), key(c, r))
-                q.push(n)
-            }
+        for (const d of ORDER) {
+            const n = [c + DIRS[d][0], r + DIRS[d][1]]
+            if (n[0] < 0 || n[0] >= COLS || !open(n[0], n[1], true) || prev.has(key(...n))) continue
+            prev.set(key(...n), key(c, r))
+            q.push(n)
         }
     }
     return null
 }
 
-function newGame() {
-    return {
-        playing: true,
-        paused: false,
-        t: 0,
-        score: 0,
-        lives: 3,
-        level: 1,
-        delivered: 0,
-        combo: 1,
-        p: { c: 0, r: 4, x: 0, y: 4, to: null, dir: 'right', load: [], invul: 0, turbo: 0, dash: 0, cool: 0 },
+function dirTo(from, to) {
+    const dc = to[0] - from[0]
+    const dr = to[1] - from[1]
+    return dc > 0 ? 'right' : dc < 0 ? 'left' : dr > 0 ? 'down' : 'up'
+}
+
+function newDots() {
+    const dots = new Map()
+    MAZE.forEach((row, r) => [...row].forEach((t, c) => (t === '.' || t === 'o') && dots.set(key(c, r), t === 'o' ? 'power' : 'dot')))
+    return dots
+}
+
+function placeActors(g) {
+    g.p = { c: START[0], r: START[1], x: START[0], y: START[1], to: null, dir: 'left', want: 'left', mouth: 0 }
+    g.ghosts = GHOSTS.map((d) => ({
+        ...d,
+        c: d.start[0],
+        r: d.start[1],
+        x: d.start[0],
+        y: d.start[1],
+        to: null,
+        dir: 'left',
+        state: d.wait === 0 ? 'out' : 'house',
+        left: d.wait,
         path: [],
-        held: [],
-        pallets: [],
-        spawn: 0,
-        boost: null,
-        boostIn: 8,
-        workers: [],
-        fx: [],
-        sparks: [],
-        flash: 0,
-        shake: 0,
-    }
+    }))
+    g.phase = 0
+    g.phaseLeft = PHASES[0][1]
+    g.fright = 0
+    g.chain = 0
+    g.ready = 1.6
+}
+
+function newGame() {
+    const g = { playing: true, paused: false, over: false, score: 0, lives: 3, level: 1, eaten: 0, dots: newDots(), bonus: null, fx: [], flash: 0, dying: 0 }
+    placeActors(g)
+    return g
 }
 
 function shapePath(ctx, shape, x, y, s) {
     ctx.beginPath()
     if (shape === 'circ') ctx.arc(x, y, s * 0.5, 0, Math.PI * 2)
-    else if (shape === 'cuad') ctx.rect(x - s * 0.45, y - s * 0.45, s * 0.9, s * 0.9)
-    else {
+    else if (shape === 'cuad') ctx.rect(x - s * 0.42, y - s * 0.42, s * 0.84, s * 0.84)
+    else if (shape === 'tri') {
         ctx.moveTo(x, y - s * 0.52)
-        ctx.lineTo(x + s * 0.55, y + s * 0.45)
-        ctx.lineTo(x - s * 0.55, y + s * 0.45)
+        ctx.lineTo(x + s * 0.55, y + s * 0.42)
+        ctx.lineTo(x - s * 0.55, y + s * 0.42)
         ctx.closePath()
+    } else {
+        ctx.moveTo(x - s * 0.4, y - s * 0.4)
+        ctx.lineTo(x + s * 0.4, y + s * 0.4)
+        ctx.moveTo(x + s * 0.4, y - s * 0.4)
+        ctx.lineTo(x - s * 0.4, y + s * 0.4)
     }
 }
 
@@ -123,7 +168,7 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
     const host = useRef(null)
     const canvas = useRef(null)
     const game = useRef(null)
-    const [hud, setHud] = useState({ playing: false, paused: false, over: false, score: 0, lives: 3, level: 1, combo: 1, best: readBest() })
+    const [hud, setHud] = useState({ playing: false, paused: false, over: false, score: 0, lives: 3, level: 1, best: readBest() })
 
     useEffect(() => {
         const cv = canvas.current
@@ -160,384 +205,434 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
 
         const sync = () => {
             const g = game.current
-            setHud((s) => ({ ...s, playing: g.playing, paused: g.paused, score: g.score, lives: g.lives, level: g.level, combo: g.combo }))
+            setHud((s) => ({ ...s, playing: g.playing, paused: g.paused, score: g.score, lives: g.lives, level: g.level }))
         }
 
         const px = (c) => ox + (c + 0.5) * cell
         const py = (r) => oy + (r + 0.5) * cell
         const pop = (g, text, c, r) => g.fx.push({ text, x: c, y: r, t: 0 })
 
-        const hurt = (g, why, c, r) => {
-            g.lives -= 1
-            g.combo = 1
-            g.flash = 0.35
-            g.shake = 0.35
-            pop(g, why, c, r)
-            if (g.lives <= 0) end(g)
+        const speeds = (g) => {
+            const up = Math.min(g.level - 1, 6) * 0.25
+            return { pac: 5.6 + up, ghost: 5.1 + up, fright: 3.2, eyes: 11, house: 3, tunnel: 3 }
         }
 
-        const level = (g) => {
-            const n = Math.min(PATROLS.length, 1 + g.level)
-            while (g.workers.length < n) {
-                const pt = PATROLS[g.workers.length]
-                const pos = pt.from + Math.random() * (pt.to - pt.from)
-                g.workers.push({ ...pt, pos, dir: Math.random() < 0.5 ? 1 : -1 })
+        /* Avanza una entidad hacia `to`; al llegar devuelve true (está en el centro de su casilla). */
+        const advance = (e, v) => {
+            const dx = e.to[0] - e.x
+            const dy = e.to[1] - e.y
+            const d = Math.abs(dx) + Math.abs(dy)
+            if (d <= v) {
+                e.x = e.c = e.to[0]
+                e.y = e.r = e.to[1]
+                e.to = null
+                wrap(e)
+                return v - d
+            }
+            e.x += Math.sign(dx) * v
+            e.y += Math.sign(dy) * v
+            return -1
+        }
+
+        const eat = (g) => {
+            const k = key(g.p.c, g.p.r)
+            const t = g.dots.get(k)
+            if (t) {
+                g.dots.delete(k)
+                g.eaten += 1
+                if (t === 'power') {
+                    g.score += 50
+                    g.fright = Math.max(2, 7 - g.level)
+                    g.chain = 0
+                    for (const gh of g.ghosts) {
+                        if (gh.state === 'out') {
+                            gh.scared = true
+                            // Al asustarse dan media vuelta, como en el original.
+                            if (gh.to) {
+                                ;[gh.to, gh.c, gh.r] = [[gh.c, gh.r], gh.to[0], gh.to[1]]
+                                gh.dir = BACK[gh.dir]
+                            }
+                        }
+                    }
+                } else g.score += 10
+                if (g.eaten === BONUS_AT) g.bonus = { c: START[0], r: START[1], left: 9 }
+                if (!g.dots.size) {
+                    g.level += 1
+                    g.dots = newDots()
+                    g.eaten = 0
+                    g.bonus = null
+                    g.flash = 0.4
+                    placeActors(g)
+                    pop(g, `Nivel ${g.level}`, 11, 6)
+                }
+                sync()
+            }
+            if (g.bonus && g.bonus.c === g.p.c && g.bonus.r === g.p.r) {
+                const pts = 100 * g.level
+                g.score += pts
+                pop(g, `+${pts}`, g.p.c, g.p.r)
+                g.bonus = null
+                sync()
             }
         }
 
-        const spawnPallet = (g) => {
-            const max = Math.min(6, 3 + Math.floor(g.level / 2))
-            if (g.pallets.length >= max) return
-            for (let k = 0; k < 40; k++) {
-                const c = Math.floor(Math.random() * 12)
-                const r = Math.floor(Math.random() * ROWS)
-                if (!free(c, r) || isDock(c, r) || (c === g.p.c && r === g.p.r) || g.pallets.some((q) => q.c === c && q.r === r)) continue
-                const life = Math.max(7, 15 - g.level * 1.2)
-                g.pallets.push({ c, r, shape: SHAPES[Math.floor(Math.random() * 3)], left: life, life })
-                return
-            }
-        }
-
-        const burst = (g, c, r, n = 14) => {
-            for (let k = 0; k < n; k++) {
-                const a = Math.random() * Math.PI * 2
-                const v = 2 + Math.random() * 4
-                g.sparks.push({ x: c, y: r, vx: Math.cos(a) * v, vy: Math.sin(a) * v, t: 0 })
-            }
-        }
-
-        const arrive = (g) => {
+        const movePac = (g, dt) => {
             const p = g.p
-            const i = g.pallets.findIndex((q) => q.c === p.c && q.r === p.r)
-            if (i >= 0 && p.load.length < CAP) {
-                p.load.push(g.pallets[i])
-                g.pallets.splice(i, 1)
+            const v = speeds(g).pac
+            let left = v * dt
+            // Media vuelta inmediata, aunque vaya entre dos casillas.
+            if (p.to && p.want === BACK[p.dir]) {
+                ;[p.to, p.c, p.r] = [[p.c, p.r], p.to[0], p.to[1]]
+                p.dir = p.want
             }
-            if (g.boost && g.boost.c === p.c && g.boost.r === p.r) {
-                p.turbo = 5
-                g.boost = null
-                pop(g, 'TURBO', p.c, p.r)
+            for (let guard = 0; guard < 3 && left > 0; guard++) {
+                if (!p.to) {
+                    const pick = [p.want, p.dir].find((d) => open(p.c + DIRS[d][0], p.r + DIRS[d][1]))
+                    if (!pick) return
+                    p.dir = pick
+                    p.to = [p.c + DIRS[pick][0], p.r + DIRS[pick][1]]
+                }
+                const rest = advance(p, left)
+                if (rest < 0) break
+                left = rest
+                eat(g)
+                // Si se acabó el nivel, todo se reacomodó: este montacargas ya no es el del juego.
+                if (!g.playing || g.p !== p) return
             }
-            const dock = DOCKS.find((d) => d.c === p.c && d.r === p.r)
-            if (!dock || !p.load.length) return
-            const good = p.load.filter((q) => q.shape === dock.shape)
-            if (!good.length) return pop(g, 'Otro andén', p.c, p.r)
-            let pts = 0
-            for (const q of good) {
-                pts += 10 * g.combo + Math.ceil(q.left)
-                g.combo = Math.min(6, g.combo + 1)
-                g.delivered += 1
-            }
-            // Dos de una sola vuelta: premio doble.
-            if (good.length > 1) pts *= 2
-            g.score += pts
-            p.load = p.load.filter((q) => q.shape !== dock.shape)
-            pop(g, `+${pts}${good.length > 1 ? ' DOBLE' : g.combo > 2 ? ` ×${g.combo - 1}` : ''}`, p.c, p.r)
-            burst(g, p.c, p.r, good.length > 1 ? 26 : 14)
-            if (Math.floor(g.delivered / 4) + 1 > g.level) {
-                g.level = Math.floor(g.delivered / 4) + 1
-                pop(g, `Nivel ${g.level}`, 7.5, 4)
-                level(g)
-            }
-            sync()
+            p.mouth += dt * 14
         }
 
-        const nextStep = (g) => {
+        const target = (g, gh) => {
             const p = g.p
-            let target = null
-            if (g.path.length) target = g.path.shift()
-            else {
-                const k = g.held[g.held.length - 1]
-                if (k) {
-                    const [dc, dr] = DIRS[k]
-                    p.dir = k
-                    if (free(p.c + dc, p.r + dr)) target = [p.c + dc, p.r + dr]
+            const [dc, dr] = DIRS[p.dir]
+            if (gh.scared) return null
+            if (PHASES[g.phase][0] === 'scatter') return gh.corner
+            if (gh.id === 'adelantado') return [p.c + dc * 4, p.r + dr * 4]
+            if (gh.id === 'cortador') {
+                const b = g.ghosts[0]
+                const a = [p.c + dc * 2, p.r + dr * 2]
+                return [a[0] * 2 - b.c, a[1] * 2 - b.r]
+            }
+            if (gh.id === 'timido' && Math.hypot(gh.c - p.c, gh.r - p.r) < 6) return gh.corner
+            return [p.c, p.r]
+        }
+
+        const chooseDir = (g, gh) => {
+            const opts = ORDER.filter((d) => d !== BACK[gh.dir] && open(gh.c + DIRS[d][0], gh.r + DIRS[d][1]))
+            if (!opts.length) return BACK[gh.dir]
+            const t = target(g, gh)
+            if (!t) return opts[Math.floor(Math.random() * opts.length)]
+            let best = opts[0]
+            let bd = Infinity
+            for (const d of opts) {
+                const n = [gh.c + DIRS[d][0], gh.r + DIRS[d][1]]
+                const dd = (n[0] - t[0]) ** 2 + (n[1] - t[1]) ** 2
+                if (dd < bd) {
+                    bd = dd
+                    best = d
                 }
             }
-            if (!target) return
-            const dc = target[0] - p.c
-            const dr = target[1] - p.r
-            p.dir = dc > 0 ? 'right' : dc < 0 ? 'left' : dr > 0 ? 'down' : 'up'
-            p.to = target
+            return best
+        }
+
+        const moveGhost = (g, gh, dt) => {
+            const sp = speeds(g)
+            if (gh.state === 'house') {
+                gh.left -= dt
+                if (gh.left <= 0) {
+                    gh.state = 'leaving'
+                    gh.path = [...(gh.c !== HOME[0] ? [[HOME[0], gh.r]] : []), HOME, DOOR, OUT].filter((q, i, a) => !(q[0] === gh.c && q[1] === gh.r) && (i === 0 || key(...q) !== key(...a[i - 1])))
+                }
+                return
+            }
+            const v = gh.state === 'eyes' ? sp.eyes : gh.state === 'leaving' ? sp.house : gh.scared ? sp.fright : gh.r === TUNNEL && (gh.c < 5 || gh.c > COLS - 6) ? sp.tunnel : sp.ghost
+            let left = v * dt
+            for (let guard = 0; guard < 3 && left > 0; guard++) {
+                if (!gh.to) {
+                    if (gh.state === 'leaving' || gh.state === 'entering') {
+                        if (!gh.path.length) {
+                            if (gh.state === 'entering') {
+                                gh.state = 'leaving'
+                                gh.path = [DOOR, OUT]
+                                continue
+                            }
+                            gh.state = 'out'
+                            gh.scared = false
+                            gh.dir = 'left'
+                        } else {
+                            gh.to = gh.path.shift()
+                            gh.dir = dirTo([gh.c, gh.r], gh.to)
+                        }
+                    } else if (gh.state === 'eyes') {
+                        if (gh.c === OUT[0] && gh.r === OUT[1]) {
+                            gh.state = 'entering'
+                            gh.path = [DOOR, HOME]
+                            continue
+                        }
+                        const n = stepToward([gh.c, gh.r], OUT)
+                        if (!n) return
+                        gh.dir = dirTo([gh.c, gh.r], n)
+                        gh.to = n
+                    }
+                    if (gh.state === 'out' && !gh.to) {
+                        gh.dir = chooseDir(g, gh)
+                        gh.to = [gh.c + DIRS[gh.dir][0], gh.r + DIRS[gh.dir][1]]
+                    }
+                }
+                const rest = advance(gh, left)
+                if (rest < 0) break
+                left = rest
+            }
+        }
+
+        const hit = (g) => {
+            const p = g.p
+            for (const gh of g.ghosts) {
+                if (gh.state !== 'out' || Math.abs(gh.x - p.x) + Math.abs(gh.y - p.y) > 0.7) continue
+                if (gh.scared) {
+                    g.chain += 1
+                    const pts = 200 * 2 ** (g.chain - 1)
+                    g.score += pts
+                    pop(g, `+${pts}`, gh.x, gh.y)
+                    gh.state = 'eyes'
+                    gh.scared = false
+                    sync()
+                } else {
+                    g.lives -= 1
+                    g.dying = 1.1
+                    g.flash = 0.35
+                    sync()
+                    return
+                }
+            }
         }
 
         const update = (g, dt) => {
-            g.t += dt
             g.flash = Math.max(0, g.flash - dt)
-            const p = g.p
-            p.invul = Math.max(0, p.invul - dt)
-            p.turbo = Math.max(0, p.turbo - dt)
-            p.dash = Math.max(0, p.dash - dt)
-            p.cool = Math.max(0, p.cool - dt)
-            g.shake = Math.max(0, g.shake - dt)
-            // Montacargas: avanza de casilla en casilla.
-            if (!p.to) nextStep(g)
-            if (p.to) {
-                const speed = SPEED * (p.turbo ? 1.5 : 1) * (p.dash ? 2.1 : 1) * dt
-                const dx = p.to[0] - p.x
-                const dy = p.to[1] - p.y
-                const d = Math.hypot(dx, dy)
-                if (d <= speed) {
-                    p.x = p.c = p.to[0]
-                    p.y = p.r = p.to[1]
-                    p.to = null
-                    arrive(g)
-                    if (!g.playing) return
-                    nextStep(g)
-                } else {
-                    p.x += (dx / d) * speed
-                    p.y += (dy / d) * speed
+            for (const f of g.fx) f.t += dt
+            g.fx = g.fx.filter((f) => f.t < 1.1)
+            // Atrapado: una pausa corta y se reacomoda todo (o se acaba la partida).
+            if (g.dying > 0) {
+                g.dying -= dt
+                if (g.dying <= 0) {
+                    if (g.lives <= 0) return end(g)
+                    placeActors(g)
                 }
+                return
             }
-            // Pedidos: el tiempo corre también mientras se llevan.
-            g.spawn -= dt
-            if (g.spawn <= 0) {
-                spawnPallet(g)
-                g.spawn = Math.max(1.1, 3.2 - g.level * 0.3)
+            if (g.ready > 0) {
+                g.ready -= dt
+                return
             }
-            // Rayo de turbo de vez en cuando, en una casilla libre.
-            g.boostIn -= dt
-            if (g.boost) {
-                g.boost.left -= dt
-                if (g.boost.left <= 0) g.boost = null
-            } else if (g.boostIn <= 0) {
-                g.boostIn = 10 + Math.random() * 6
-                for (let k = 0; k < 30; k++) {
-                    const c = Math.floor(Math.random() * 14)
-                    const r = Math.floor(Math.random() * ROWS)
-                    if (free(c, r) && !isDock(c, r) && !g.pallets.some((q) => q.c === c && q.r === r)) {
-                        g.boost = { c, r, left: 7 }
-                        break
+            if (g.fright > 0) {
+                g.fright -= dt
+                if (g.fright <= 0) for (const gh of g.ghosts) gh.scared = false
+            } else {
+                g.phaseLeft -= dt
+                if (g.phaseLeft <= 0 && g.phase < PHASES.length - 1) {
+                    g.phase += 1
+                    g.phaseLeft = PHASES[g.phase][1]
+                    for (const gh of g.ghosts) {
+                        if (gh.state === 'out' && gh.to) {
+                            ;[gh.to, gh.c, gh.r] = [[gh.c, gh.r], gh.to[0], gh.to[1]]
+                            gh.dir = BACK[gh.dir]
+                        }
                     }
                 }
             }
-            for (let i = g.pallets.length - 1; i >= 0; i--) {
-                const q = g.pallets[i]
-                q.left -= dt
-                if (q.left <= 0) {
-                    g.pallets.splice(i, 1)
-                    hurt(g, 'Pedido perdido', q.c, q.r)
-                    sync()
-                    if (!g.playing) return
-                }
+            if (g.bonus) {
+                g.bonus.left -= dt
+                if (g.bonus.left <= 0) g.bonus = null
             }
-            for (const q of [...p.load]) {
-                q.left -= dt
-                if (q.left <= 0) {
-                    p.load = p.load.filter((x) => x !== q)
-                    hurt(g, 'Se venció', p.x, p.y)
-                    sync()
-                    if (!g.playing) return
+            movePac(g, dt)
+            if (!g.playing) return
+            hit(g)
+            if (g.dying > 0) return
+            for (const gh of g.ghosts) moveGhost(g, gh, dt)
+            hit(g)
+        }
+
+        const drawGhost = (g, gh) => {
+            const x = px(gh.x)
+            const y = py(gh.y)
+            const s = cell * 0.42
+            const t = performance.now() / 120
+            const [dc, dr] = DIRS[gh.dir]
+            if (gh.state !== 'eyes') {
+                const ending = gh.scared && g.fright < 2 && Math.floor(performance.now() / 180) % 2 === 0
+                ctx.beginPath()
+                ctx.arc(x, y - s * 0.15, s, Math.PI, 0)
+                ctx.lineTo(x + s, y + s * 0.85)
+                // Falda en ondas que se mueven: el bata del inspector.
+                for (let k = 0; k <= 4; k++) {
+                    const fx = x + s - (k * s * 2) / 4
+                    const fy = y + s * (k % 2 === Math.floor(t) % 2 ? 0.85 : 0.55)
+                    ctx.lineTo(fx, fy)
                 }
-            }
-            // Operarios: van y vienen; chocar con uno cuesta una vida y la carga.
-            const speedW = 2 + g.level * 0.3
-            for (const wk of g.workers) {
-                wk.pos += wk.dir * speedW * dt
-                if (wk.pos <= wk.from || wk.pos >= wk.to) {
-                    wk.pos = Math.min(wk.to, Math.max(wk.from, wk.pos))
-                    wk.dir *= -1
+                ctx.closePath()
+                ctx.fillStyle = gh.scared ? (ending ? '#c2c2c2' : '#fff') : gh.shade
+                ctx.fill()
+                if (gh.scared) {
+                    ctx.strokeStyle = '#000'
+                    ctx.lineWidth = 2
+                    ctx.stroke()
+                    // Cara de susto: ojos chicos y boca en zigzag.
+                    ctx.fillStyle = '#000'
+                    ctx.fillRect(x - s * 0.42, y - s * 0.4, s * 0.22, s * 0.22)
+                    ctx.fillRect(x + s * 0.2, y - s * 0.4, s * 0.22, s * 0.22)
+                    ctx.beginPath()
+                    for (let k = 0; k <= 4; k++) ctx.lineTo(x - s * 0.5 + (k * s) / 4, y + s * (k % 2 ? 0.1 : 0.3))
+                    ctx.lineWidth = 1.6
+                    ctx.stroke()
+                    return
                 }
-                const wx = wk.axis === 'r' ? wk.fixed : wk.pos
-                const wy = wk.axis === 'r' ? wk.pos : wk.fixed
-                if (!p.invul && !p.dash && Math.hypot(wx - p.x, wy - p.y) < 0.62) {
-                    p.invul = 1.6
-                    p.load = []
-                    hurt(g, '¡Cuidado!', p.x, p.y)
-                    sync()
-                    if (!g.playing) return
-                }
+                // Su figura en la frente, para distinguirlos.
+                shapePath(ctx, gh.mark, x, y + s * 0.42, s * 0.42)
+                ctx.strokeStyle = '#fff'
+                ctx.lineWidth = 1.6
+                ctx.stroke()
             }
-            for (const f of g.fx) f.t += dt
-            g.fx = g.fx.filter((f) => f.t < 1.1)
-            for (const k of g.sparks) {
-                k.t += dt
-                k.x += k.vx * dt
-                k.y += k.vy * dt
-                k.vx *= 0.92
-                k.vy *= 0.92
+            // Ojos que miran hacia donde va.
+            for (const side of [-1, 1]) {
+                const ex = x + side * s * 0.38
+                const ey = y - s * 0.25
+                ctx.fillStyle = '#fff'
+                ctx.beginPath()
+                ctx.arc(ex, ey, s * 0.27, 0, Math.PI * 2)
+                ctx.fill()
+                ctx.strokeStyle = '#000'
+                ctx.lineWidth = 1.2
+                ctx.stroke()
+                ctx.fillStyle = '#000'
+                ctx.beginPath()
+                ctx.arc(ex + dc * s * 0.12, ey + dr * s * 0.12, s * 0.12, 0, Math.PI * 2)
+                ctx.fill()
             }
-            g.sparks = g.sparks.filter((k) => k.t < 0.6)
+        }
+
+        const drawPac = (g) => {
+            const p = g.p
+            const x = px(p.x)
+            const y = py(p.y)
+            const s = cell * 0.42
+            const ang = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 }[p.dir]
+            // Al ser atrapado, la boca se abre hasta desaparecer.
+            const open_ = g.dying > 0 ? Math.PI * (1 - g.dying / 1.1) : (Math.abs(Math.sin(p.mouth)) * 0.7 + 0.05) * (Math.PI / 4)
+            ctx.save()
+            ctx.translate(x, y)
+            ctx.rotate(ang)
+            ctx.fillStyle = '#000'
+            ctx.beginPath()
+            ctx.moveTo(0, 0)
+            ctx.arc(0, 0, s, open_, Math.PI * 2 - open_)
+            ctx.closePath()
+            ctx.fill()
+            ctx.restore()
+            if (g.dying > 0) return
+            // Casco de obra: siempre arriba, aunque el cuerpo gire.
+            ctx.fillStyle = '#fff'
+            ctx.strokeStyle = '#000'
+            ctx.lineWidth = 1.6
+            ctx.beginPath()
+            ctx.arc(x, y - s * 0.55, s * 0.5, Math.PI, 0)
+            ctx.closePath()
+            ctx.fill()
+            ctx.stroke()
+            ctx.fillStyle = '#000'
+            ctx.fillRect(x - s * 0.72, y - s * 0.6, s * 1.44, s * 0.14)
         }
 
         const draw = () => {
             const g = game.current
-            ctx.setTransform(ctx.getTransform().a, 0, 0, ctx.getTransform().d, 0, 0)
             ctx.clearRect(0, 0, w, h)
             ctx.fillStyle = '#fff'
             ctx.fillRect(0, 0, w, h)
-            if (g.shake > 0) ctx.translate((Math.random() - 0.5) * 10 * g.shake * 3, (Math.random() - 0.5) * 10 * g.shake * 3)
-            // Piso con cuadrícula y franja de andenes.
             ctx.fillStyle = '#f4f4f4'
             ctx.fillRect(ox, oy, cell * COLS, cell * ROWS)
-            ctx.fillStyle = '#e6e6e6'
-            ctx.fillRect(ox + cell * 14, oy, cell * 2, cell * ROWS)
-            ctx.strokeStyle = '#e2e2e2'
-            ctx.lineWidth = 1
-            for (let c = 0; c <= COLS; c++) {
-                ctx.beginPath()
-                ctx.moveTo(ox + c * cell + 0.5, oy)
-                ctx.lineTo(ox + c * cell + 0.5, oy + ROWS * cell)
-                ctx.stroke()
-            }
-            for (let r = 0; r <= ROWS; r++) {
-                ctx.beginPath()
-                ctx.moveTo(ox, oy + r * cell + 0.5)
-                ctx.lineTo(ox + COLS * cell, oy + r * cell + 0.5)
-                ctx.stroke()
+            // Estantes: bloques oscuros con la línea de cada repisa.
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const t = MAZE[r][c]
+                    const x = ox + c * cell
+                    const y = oy + r * cell
+                    if (t === '#') {
+                        ctx.fillStyle = '#2b2b2b'
+                        ctx.fillRect(x, y, cell, cell)
+                        ctx.fillStyle = '#4a4a4a'
+                        ctx.fillRect(x + 2, y + cell * 0.48, cell - 4, 1.5)
+                    } else if (t === 'G') {
+                        ctx.fillStyle = '#e6e6e6'
+                        ctx.fillRect(x, y, cell, cell)
+                    } else if (t === '-') {
+                        ctx.fillStyle = '#000'
+                        ctx.fillRect(x, y + cell * 0.42, cell, cell * 0.16)
+                    }
+                }
             }
             ctx.strokeStyle = '#000'
             ctx.lineWidth = 2
             ctx.strokeRect(ox, oy, cell * COLS, cell * ROWS)
-            // Estantes.
-            for (const k of RACKS) {
+            // Piezas (◆) y tuercas que laten.
+            const dots = g.dots || newDots()
+            const beat = 1 + Math.sin(performance.now() / 160) * 0.12
+            for (const [k, t] of dots) {
                 const [c, r] = k.split(',').map(Number)
-                ctx.fillStyle = '#3b3b3b'
-                ctx.fillRect(ox + c * cell + 1, oy + r * cell + 3, cell - 2, cell - 6)
-                ctx.fillStyle = '#767676'
-                ctx.fillRect(ox + c * cell + 3, oy + r * cell + cell * 0.45, cell - 6, 2)
-            }
-            const load = g.p?.load || []
-            // Andenes: el de la figura que se lleva parpadea.
-            for (const d of DOCKS) {
-                const on = load.some((q) => q.shape === d.shape)
-                const blink = on && Math.floor(performance.now() / 250) % 2 === 0
-                ctx.fillStyle = blink ? '#000' : '#fff'
-                ctx.strokeStyle = '#000'
-                ctx.lineWidth = 2
-                ctx.fillRect(ox + d.c * cell + 2, oy + d.r * cell + 2, cell - 4, cell - 4)
-                ctx.strokeRect(ox + d.c * cell + 2, oy + d.r * cell + 2, cell - 4, cell - 4)
-                shapePath(ctx, d.shape, px(d.c), py(d.r), cell * 0.42)
-                ctx.strokeStyle = blink ? '#fff' : '#000'
-                ctx.stroke()
+                const x = px(c)
+                const y = py(r)
+                ctx.fillStyle = '#000'
+                if (t === 'dot') {
+                    const s = cell * 0.09
+                    ctx.beginPath()
+                    ctx.moveTo(x, y - s)
+                    ctx.lineTo(x + s, y)
+                    ctx.lineTo(x, y + s)
+                    ctx.lineTo(x - s, y)
+                    ctx.closePath()
+                    ctx.fill()
+                } else {
+                    const s = cell * 0.3 * (g.playing ? beat : 1)
+                    ctx.beginPath()
+                    for (let i = 0; i < 6; i++) ctx.lineTo(x + Math.cos((i * Math.PI) / 3) * s, y + Math.sin((i * Math.PI) / 3) * s)
+                    ctx.closePath()
+                    ctx.fill()
+                    ctx.fillStyle = '#f4f4f4'
+                    ctx.beginPath()
+                    ctx.arc(x, y, s * 0.42, 0, Math.PI * 2)
+                    ctx.fill()
+                }
             }
             if (!g.playing && !g.over) return
-            // Camino del clic.
-            if (g.path?.length) {
-                ctx.strokeStyle = '#9a9a9a'
-                ctx.setLineDash([3, 4])
-                ctx.lineWidth = 2
-                ctx.beginPath()
-                ctx.moveTo(px(g.p.x), py(g.p.y))
-                for (const [c, r] of g.path) ctx.lineTo(px(c), py(r))
-                ctx.stroke()
-                ctx.setLineDash([])
-            }
-            // Rayo de turbo.
-            if (g.boost) {
-                const x = px(g.boost.c)
-                const y = py(g.boost.r)
-                const pulse = 1 + Math.sin(performance.now() / 120) * 0.12
-                ctx.fillStyle = '#000'
-                ctx.beginPath()
-                const s = cell * 0.36 * pulse
-                ctx.moveTo(x + s * 0.2, y - s)
-                ctx.lineTo(x - s * 0.6, y + s * 0.15)
-                ctx.lineTo(x - s * 0.05, y + s * 0.15)
-                ctx.lineTo(x - s * 0.2, y + s)
-                ctx.lineTo(x + s * 0.6, y - s * 0.15)
-                ctx.lineTo(x + s * 0.05, y - s * 0.15)
-                ctx.closePath()
-                ctx.fill()
-            }
-            // Tarimas con su tiempo.
-            for (const q of g.pallets) {
-                const x = px(q.c)
-                const y = py(q.r)
-                const urgent = q.left < 3 && Math.floor(performance.now() / 160) % 2 === 0
-                ctx.fillStyle = '#b8b8b8'
-                ctx.fillRect(x - cell * 0.38, y - cell * 0.3, cell * 0.76, cell * 0.6)
-                ctx.fillStyle = '#fff'
-                shapePath(ctx, q.shape, x, y, cell * 0.36)
-                ctx.fill()
-                ctx.strokeStyle = '#000'
-                ctx.lineWidth = 1.6
-                ctx.stroke()
-                ctx.beginPath()
-                ctx.arc(x, y, cell * 0.46, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (q.left / q.life))
-                ctx.strokeStyle = urgent ? '#000' : '#555'
-                ctx.lineWidth = urgent ? 3 : 2
-                ctx.stroke()
-            }
-            // Operarios con casco.
-            for (const wk of g.workers) {
-                const x = px(wk.axis === 'r' ? wk.fixed : wk.pos)
-                const y = py(wk.axis === 'r' ? wk.pos : wk.fixed)
+            // Tarima de bono.
+            if (g.bonus) {
+                const x = px(g.bonus.c)
+                const y = py(g.bonus.r)
+                const s = cell * 0.36
                 ctx.fillStyle = '#767676'
-                ctx.beginPath()
-                ctx.arc(x, y + cell * 0.08, cell * 0.24, 0, Math.PI * 2)
-                ctx.fill()
-                ctx.fillStyle = '#000'
-                ctx.beginPath()
-                ctx.arc(x, y - cell * 0.06, cell * 0.2, Math.PI, 0)
-                ctx.fill()
-                ctx.fillRect(x - cell * 0.26, y - cell * 0.07, cell * 0.52, cell * 0.06)
-            }
-            // Montacargas (con estela cuando va rápido).
-            const p = g.p
-            if (p.turbo || p.dash) {
-                ctx.strokeStyle = p.dash ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.22)'
-                ctx.lineWidth = cell * 0.5
-                ctx.lineCap = 'round'
-                const [dx, dy] = DIRS[p.dir]
-                ctx.beginPath()
-                ctx.moveTo(px(p.x) - dx * cell * 0.3, py(p.y) - dy * cell * 0.3)
-                ctx.lineTo(px(p.x) - dx * cell * 1.3, py(p.y) - dy * cell * 1.3)
-                ctx.stroke()
-                ctx.lineCap = 'butt'
-            }
-            const blinkInv = p.invul > 0 && Math.floor(performance.now() / 110) % 2 === 0
-            if (!blinkInv) {
-                const x = px(p.x)
-                const y = py(p.y)
-                const ang = { right: 0, down: Math.PI / 2, left: Math.PI, up: -Math.PI / 2 }[p.dir]
-                ctx.save()
-                ctx.translate(x, y)
-                ctx.rotate(ang)
-                const s = cell
-                ctx.fillStyle = '#000'
-                ctx.fillRect(-s * 0.36, -s * 0.28, s * 0.5, s * 0.56)
+                ctx.fillRect(x - s, y - s * 0.7, s * 2, s * 1.4)
                 ctx.fillStyle = '#fff'
-                ctx.fillRect(-s * 0.28, -s * 0.18, s * 0.2, s * 0.36)
-                ctx.fillStyle = '#000'
-                ctx.fillRect(s * 0.14, -s * 0.22, s * 0.3, s * 0.07)
-                ctx.fillRect(s * 0.14, s * 0.15, s * 0.3, s * 0.07)
-                if (p.load.length) {
-                    ctx.fillStyle = '#b8b8b8'
-                    ctx.fillRect(s * 0.12, -s * 0.24, s * 0.34, s * 0.48)
-                    ctx.rotate(-ang)
-                    p.load.forEach((q, k) => {
-                        const off = p.load.length > 1 ? (k ? 0.12 : -0.12) * s : 0
-                        const cx = Math.cos(ang) * s * 0.29 - Math.sin(ang) * off
-                        const cy = Math.sin(ang) * s * 0.29 + Math.cos(ang) * off
-                        ctx.fillStyle = '#fff'
-                        shapePath(ctx, q.shape, cx, cy, s * (p.load.length > 1 ? 0.18 : 0.24))
-                        ctx.fill()
-                        ctx.strokeStyle = '#000'
-                        ctx.lineWidth = 1.4
-                        ctx.stroke()
-                    })
-                }
-                ctx.restore()
+                for (let k = -1; k <= 1; k++) ctx.fillRect(x - s + 2, y + k * s * 0.42 - 1, s * 2 - 4, 2)
+                ctx.strokeStyle = '#000'
+                ctx.lineWidth = 1.5
+                ctx.strokeRect(x - s, y - s * 0.7, s * 2, s * 1.4)
             }
-            // Chispas de cada entrega.
-            for (const k of g.sparks) {
-                ctx.globalAlpha = Math.max(0, 1 - k.t / 0.6)
+            if (!(g.dying > 0 && g.dying < 0.8)) for (const gh of g.ghosts) drawGhost(g, gh)
+            drawPac(g)
+            if (g.ready > 0) {
+                ctx.textAlign = 'center'
+                ctx.font = `800 ${Math.max(12, cell * 0.6)}px Archivo, system-ui, sans-serif`
                 ctx.fillStyle = '#000'
-                ctx.fillRect(px(k.x) - 2, py(k.y) - 2, 4, 4)
+                ctx.fillText('¡LISTO!', px(11), py(START[1] - 1.5) + cell * 0.2)
             }
-            ctx.globalAlpha = 1
-            // Mensajes que suben.
             ctx.textAlign = 'center'
             ctx.font = `800 ${Math.max(11, cell * 0.45)}px Archivo, system-ui, sans-serif`
             for (const f of g.fx) {
                 ctx.globalAlpha = Math.max(0, 1 - f.t)
                 ctx.fillStyle = '#000'
-                ctx.fillText(f.text, px(f.x), py(f.y) - f.t * cell * 1.2)
+                ctx.fillText(f.text, px(f.x), py(f.y) - f.t * cell)
             }
             ctx.globalAlpha = 1
             if (g.flash > 0) {
-                ctx.fillStyle = `rgba(0,0,0,${g.flash * 0.5})`
+                ctx.fillStyle = `rgba(0,0,0,${g.flash * 0.4})`
                 ctx.fillRect(0, 0, w, h)
             }
         }
@@ -571,7 +666,6 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
             const g = game.current
             if (!g.playing) return
             g.paused = force ?? !g.paused
-            g.held = []
             dirty = true
             sync()
         }
@@ -588,40 +682,24 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
                 }
                 return
             }
-            if (k === ' ' && g.playing && !g.paused) {
-                e.preventDefault()
-                if (!g.p.cool) {
-                    g.p.dash = 0.45
-                    g.p.cool = 2.2
-                }
-                return
-            }
             const dir = keyDir(k)
             if (!dir || !g.playing) return
             e.preventDefault()
-            g.path = []
-            if (!g.held.includes(dir)) g.held.push(dir)
+            g.p.want = dir
         }
-        const onUp = (e) => {
-            const g = game.current
-            const dir = keyDir(e.key.toLowerCase())
-            if (dir && g.held) g.held = g.held.filter((d) => d !== dir)
-        }
+        // Clic o toque: gira hacia ese lado (el eje en que el clic está más lejos).
         const onClick = (e) => {
             const g = game.current
             if (!g.playing || g.paused) return
             const r = el.getBoundingClientRect()
-            const c = Math.floor((e.clientX - r.left - ox) / cell)
-            const rr = Math.floor((e.clientY - r.top - oy) / cell)
-            const from = g.p.to || [g.p.c, g.p.r]
-            const path = bfs(from, [c, rr])
-            if (path) g.path = path
+            const dx = e.clientX - r.left - px(g.p.x)
+            const dy = e.clientY - r.top - py(g.p.y)
+            g.p.want = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up'
         }
         const onVis = () => document.hidden && togglePause(true)
         const onBlur = () => togglePause(true)
 
         el.addEventListener('keydown', onDown)
-        el.addEventListener('keyup', onUp)
         el.addEventListener('pointerdown', onClick)
         el.addEventListener('blur', onBlur)
         document.addEventListener('visibilitychange', onVis)
@@ -631,7 +709,6 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
             cancelAnimationFrame(raf)
             ro.disconnect()
             el.removeEventListener('keydown', onDown)
-            el.removeEventListener('keyup', onUp)
             el.removeEventListener('pointerdown', onClick)
             el.removeEventListener('blur', onBlur)
             document.removeEventListener('visibilitychange', onVis)
@@ -641,12 +718,7 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
     const start = () => {
         const tp = game.current.togglePause
         game.current = Object.assign(newGame(), { togglePause: tp })
-        const g = game.current
-        g.workers = [
-            { ...PATROLS[0], pos: 6, dir: -1 },
-            { ...PATROLS[1], pos: 2, dir: 1 },
-        ]
-        setHud((s) => ({ ...s, playing: true, paused: false, over: false, score: 0, lives: 3, level: 1, combo: 1 }))
+        setHud((s) => ({ ...s, playing: true, paused: false, over: false, score: 0, lives: 3, level: 1 }))
         host.current.focus({ preventScroll: true })
     }
 
@@ -661,7 +733,6 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
                 <span className="wgame-stats num">
                     <b>{hud.score}</b> pts
                     <span>Nivel {hud.level}</span>
-                    {hud.combo > 1 && <span className="wgame-combo">×{hud.combo}</span>}
                     <span className="wgame-lives" aria-label={`${hud.lives} vidas`}>
                         {Array.from({ length: 3 }, (_, i) => (
                             <i key={i} data-off={i >= hud.lives} />
@@ -674,15 +745,15 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
                     </button>
                 )}
             </div>
-            <div ref={host} className="wgame-field" tabIndex={0} aria-label="Minijuego del montacargas: flechas o WASD para manejar, Espacio para acelerar, clic para ir a una casilla, P para pausar">
+            <div ref={host} className="wgame-field" tabIndex={0} aria-label="Minijuego tipo Pac-Man: flechas o WASD para moverte, clic hacia donde ir, P para pausar">
                 <canvas ref={canvas} />
                 {!hud.playing && (
                     <button type="button" className="wgame-start" onClick={start}>
                         <strong>{hud.over ? `${hud.score} puntos · nivel ${hud.level}` : label}</strong>
                         <span className="small">
-                            {hud.over ? `Récord: ${hud.best}. Clic para otra ronda.` : 'Lleva las tarimas al andén de su figura (○ □ △) antes de que se venzan. Cargas dos a la vez: entrégalas juntas y vale doble. Esquiva a los operarios.'}
+                            {hud.over ? `Récord: ${hud.best}. Clic para otra ronda.` : 'Junta todas las piezas (◆) de la nave sin que te atrapen los inspectores. Con una tuerca grande se asustan: atrápalos para mandarlos a la oficina.'}
                         </span>
-                        {!hud.over && <span className="wgame-keys small">Flechas o WASD · Espacio acelera · clic para ir · P pausa</span>}
+                        {!hud.over && <span className="wgame-keys small">Flechas o WASD · clic hacia donde ir · P pausa</span>}
                     </button>
                 )}
                 {hud.playing && hud.paused && (

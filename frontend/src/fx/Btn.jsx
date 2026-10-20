@@ -1,7 +1,11 @@
 import { useRef } from 'react'
 import { motion, useMotionValue, useSpring } from 'motion/react'
 
-export default function Btn({ children, variant, size, wide, glyph = true, strength = 0.28, className = '', ...rest }) {
+// Cuánto puede desplazarse el botón hacia el cursor: poco, para no tapar el texto de al lado.
+const REACH = 4
+const clamp = (v) => Math.max(-REACH, Math.min(REACH, v))
+
+export default function Btn({ children, variant, size, wide, glyph = true, strength = 0.08, className = '', ...rest }) {
     const ref = useRef(null)
     const x = useMotionValue(0)
     const y = useMotionValue(0)
@@ -11,8 +15,8 @@ export default function Btn({ children, variant, size, wide, glyph = true, stren
     const onMove = (e) => {
         if (rest.disabled) return
         const r = ref.current.getBoundingClientRect()
-        x.set((e.clientX - (r.left + r.width / 2)) * strength)
-        y.set((e.clientY - (r.top + r.height / 2)) * strength * 1.4)
+        x.set(clamp((e.clientX - (r.left + r.width / 2)) * strength))
+        y.set(clamp((e.clientY - (r.top + r.height / 2)) * strength))
     }
     const onLeave = () => {
         x.set(0)

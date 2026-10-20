@@ -58,10 +58,6 @@ export default function Summary({ plant, analysis, chosen, context, onPrint, onR
                         <Btn size="small" onClick={onPrint}>
                             Ver el reporte otra vez
                         </Btn>
-
-                        <button type="button" className="btn btn--ghost btn--small" onClick={onRestart}>
-                            Empezar otra planta
-                        </button>
                     </div>
                 </Appear>
             </div>
@@ -71,6 +67,11 @@ export default function Summary({ plant, analysis, chosen, context, onPrint, onR
             </Appear>
 
             <p className="fin">FIN</p>
+
+            <div className="fin-next">
+                <p className="small">¿Tienes otra planta en mente?</p>
+                <Btn onClick={onRestart}>Crear una nueva planta</Btn>
+            </div>
         </section>
     )
 }

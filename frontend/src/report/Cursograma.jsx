@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import { fmt } from '../api'
 
 /* Cursograma analítico (diagrama de proceso de la ASME): cada paso del material con su
@@ -79,9 +80,43 @@ export function cursograma(plant, legsNow = [], legsNew = null) {
     return { rows, count, dist: total('d'), distNew: legsNew ? total('dNew') : null }
 }
 
+/* Tramo de la línea que une los símbolos dentro de una fila. Las cinco columnas de símbolos
+   miden lo mismo, así que en unidades de columna el símbolo está en (i + 0,5, 0,5). Para que
+   la línea de un símbolo al siguiente sea recta, cruza el borde entre filas en proporción a sus
+   alturas (h: anterior, esta, siguiente); sin medidas, se supone que miden lo mismo. */
+function Link({ prev, at, next, h = [1, 1, 1] }) {
+    const cross = (a, b, ha, hb) => a + (b - a) * (ha / (ha + hb)) + 0.5
+    const pts = [prev != null && `${cross(prev, at, h[0], h[1])},0`, `${at + 0.5},0.5`, next != null && `${cross(at, next, h[1], h[2])},1`].filter(Boolean).join(' ')
+    return (
+        <svg className="curso-link" viewBox={`0 0 ${ACTS.length} 1`} preserveAspectRatio="none" aria-hidden="true">
+            <polyline points={pts} fill="none" stroke="#000" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        </svg>
+    )
+}
+
 export default function Cursograma({ plant, legsNow, legsNew, nameNew }) {
     const c = cursograma(plant, legsNow, legsNew)
     const withNew = c.distNew != null
+    const col = c.rows.map((r) => ACTS.findIndex((a) => a.id === r.act))
+    const body = useRef(null)
+    const [hs, setHs] = useState(null)
+
+    // Altura de cada fila (una descripción larga ocupa dos renglones). Solo importan las
+    // proporciones, así que sirve aunque la vista previa esté escalada.
+    useLayoutEffect(() => {
+        const tb = body.current
+        if (!tb) return
+        const measure = () => {
+            const next = [...tb.rows].map((r) => r.getBoundingClientRect().height)
+            if (next.some((v) => !v)) return
+            setHs((prev) => (prev && prev.length === next.length && prev.every((v, i) => Math.abs(v - next[i]) < 0.5) ? prev : next))
+        }
+        measure()
+        const ro = new ResizeObserver(measure)
+        for (const r of tb.rows) ro.observe(r)
+        return () => ro.disconnect()
+    }, [c.rows.length])
+    const hAt = (i) => hs?.[i] || 1
     return (
         <div className="cursograma">
             <table className="doc-table curso-sum">
@@ -129,14 +164,19 @@ export default function Cursograma({ plant, legsNow, legsNew, nameNew }) {
                         <th>Observaciones</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody ref={body}>
                     {c.rows.map((r, i) => (
                         <tr key={i}>
                             <td className="num">{i + 1}</td>
                             <td>{r.text}</td>
-                            {ACTS.map((a) => (
+                            {ACTS.map((a, j) => (
                                 <td key={a.id} className="curso-sym">
-                                    {r.act === a.id && <Symbol act={a.id} size={16} />}
+                                    {j === 0 && c.rows.length > 1 && <Link prev={i > 0 ? col[i - 1] : null} at={col[i]} next={i < c.rows.length - 1 ? col[i + 1] : null} h={[hAt(i - 1), hAt(i), hAt(i + 1)]} />}
+                                    {r.act === a.id && (
+                                        <span className="curso-mark">
+                                            <Symbol act={a.id} size={16} />
+                                        </span>
+                                    )}
                                 </td>
                             ))}
                             <td className="num">{r.d != null ? fmt(r.d, 1) : ''}</td>

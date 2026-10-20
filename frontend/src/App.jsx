@@ -190,8 +190,8 @@ export default function App() {
             />
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
-        if (step === 2) return <Diagnosis plant={plant} analysis={analysis} weights={project.weights} onReweigh={reweigh} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} onNext={() => go(4)} />
+        if (step === 2) return <Diagnosis plant={plant} analysis={analysis} onNext={() => go(3)} />
+        if (step === 3) return <Redesign plant={plant} analysis={analysis} weights={project.weights} onReweigh={reweigh} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} onNext={() => go(4)} />
         if (step === 4) return <Report plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
         return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onRestart={restart} />
     })()
@@ -212,6 +212,7 @@ export default function App() {
                     </button>
 
                     <div className="rail-steps">
+                      <div className="rail-track">
                         <div className="rail-line" aria-hidden="true">
                             <motion.div className="rail-line-fill" animate={{ scaleY: Math.min(project.maxStep || 0, 5) / 5 }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} />
                         </div>
@@ -231,6 +232,7 @@ export default function App() {
                                 <span className="rail-tip">{name}</span>
                             </button>
                         ))}
+                      </div>
                     </div>
 
                     <div className="rail-ai" title={aiTitle}>

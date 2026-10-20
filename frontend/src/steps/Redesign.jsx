@@ -1,40 +1,115 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, fmt, pct } from '../api'
+import { has } from '../capabilities'
 import FlowPlan from '../charts/FlowPlan'
+import Criteria from '../components/Criteria'
 import WaitPanel from '../components/WaitPanel'
 import { startWait } from '../components/wait'
 import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 import OptionPicker from '../components/OptionPicker'
-import FlowsPanel from '../components/FlowsPanel'
-import { protectLocked, samePlant } from '../proposals'
+import { samePlant } from '../proposals'
 import PlantView from '../three/PlantView'
+import useCaps from '../useCaps'
 
-export function Delta({ label, unit, before, after, decimals = 0, goodWhenUp }) {
-	const p = pct(before, after)
-	const good = goodWhenUp ? p > 0 : p < 0
-	const max = Math.max(before || 0, after || 0) || 1
+/* Lo que gana (o pierde) la opción aplicada frente a hoy, dicho en una frase y con cifras grandes. */
+function Outcome({ plant, cur, m, name, after, positions }) {
+	const before = cur.piece_m
+	const now = m.piece_m
+	const p = pct(before, now)
+	const diff = (now || 0) - (before || 0)
+	const max = Math.max(before || 0, now || 0) || 1
+	const good = p < 0
+	const names = Object.fromEntries(after.stations.map((s) => [s.id, s.name]))
+	const moved = plant.stations.filter((s) => {
+		const a = plant.layout[s.id]
+		const b = positions?.[s.id]
+		return a && b && Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) > 0.1
+	}).length
+
+	const stats = [
+		{ label: 'Máquinas que se mueven', value: `${moved} de ${plant.stations.length}` },
+		cur.daily_m != null && m.daily_m != null && { label: 'Metros al día', value: `${fmt(cur.daily_m)} → ${fmt(m.daily_m)} m` },
+		cur.lead_h != null && m.lead_h != null && { label: 'Tiempo de entrega', value: `${fmt(cur.lead_h, 1)} → ${fmt(m.lead_h, 1)} h` },
+		m.bottleneck && { label: 'Cuello de botella', value: names[m.bottleneck] || m.bottleneck },
+	].filter(Boolean)
 
 	return (
-		<div className="kpi">
-			<div className="kpi-value num">
+		<div className="outcome">
+			<div className="outcome-big num" data-good={good}>
 				{p > 0 ? '+' : p < 0 ? '−' : ''}
 				{Math.abs(p)}
 				<small>%</small>
 			</div>
 
-			<div className="kpi-label">{label}</div>
-
-			<div className="kpi-sub">
-				{fmt(before, decimals)} → {fmt(after, decimals)} {unit}
+			<div className="outcome-text">
+				<span className="inspector-kicker">Recorrido de una pieza</span>
+				<h3>
+					{Math.abs(diff) < 0.05
+						? `Con «${name}» cada pieza recorre lo mismo que hoy.`
+						: `Con «${name}» cada pieza recorre ${fmt(Math.abs(diff), 1)} m ${diff < 0 ? 'menos' : 'más'} que hoy.`}
+				</h3>
+				<p className="small">
+					{good
+						? 'Menos metros por pieza es menos tiempo moviendo material, menos montacargas y menos manipulación.'
+						: p > 0
+							? 'Este acomodo alarga el recorrido. Puede convenir por otros criterios (espacio, obra, cercanía entre áreas): revisa «Cómo se comparan» abajo.'
+							: 'El recorrido queda igual; la diferencia está en otros criterios.'}
+				</p>
 			</div>
 
-			<div className="kpi-bars" aria-hidden="true">
-				<span style={{ width: `${((before || 0) / max) * 100}%`, background: '#c2c2c2' }} />
-				<span style={{ width: `${((after || 0) / max) * 100}%`, background: good ? '#000' : '#767676' }} />
+			<div className="outcome-bars" aria-hidden="true">
+				<span>Hoy</span>
+				<i>
+					<b style={{ width: `${((before || 0) / max) * 100}%` }} />
+				</i>
+				<span className="num">{fmt(before, 1)} m</span>
+
+				<span>{name}</span>
+				<i data-new data-good={good}>
+					<b style={{ width: `${((now || 0) / max) * 100}%` }} />
+				</i>
+				<span className="num">{fmt(now, 1)} m</span>
 			</div>
+
+			<dl className="outcome-stats">
+				{stats.map((s) => (
+					<div key={s.label}>
+						<dt>{s.label}</dt>
+						<dd className="num">{s.value}</dd>
+					</div>
+				))}
+			</dl>
 		</div>
+	)
+}
+
+/* Opción fuera de la ventana de acomodos (la de IA y la tuya): mismo formato que «Opción aplicada». */
+function AltCard({ kicker, title, m, empty, cur, on, text, note, action }) {
+	const p = m ? pct(cur.piece_m, m.piece_m) : null
+	return (
+		<Appear className={`choice-box choice-box--alt${on ? ' is-on' : ''}`}>
+			<div className="choice-main">
+				<span className="inspector-kicker">{kicker}</span>
+				<h3>
+					{title}
+					{on && <span className="picker-tag">Aplicada</span>}
+				</h3>
+				{m ? (
+					<p className="choice-figure num">
+						{fmt(m.piece_m, 1)}
+						<small> m por pieza</small>
+						{p != null && <small className="choice-delta">{p > 0 ? `+${p}` : p} % frente a hoy</small>}
+					</p>
+				) : (
+					<p className="choice-status">{empty}</p>
+				)}
+				<p className="small">{text}</p>
+				{note && <p className="small warn">{note}</p>}
+			</div>
+			{!on && action && <div className="choice-actions">{action}</div>}
+		</Appear>
 	)
 }
 
@@ -61,15 +136,23 @@ function worksDiff(base, other) {
 	return n
 }
 
-export default function Redesign({ plant, analysis, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, notify = () => {}, onNext }) {
+export default function Redesign({ plant, analysis, weights, onReweigh, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, onNext }) {
 	const [picking, setPicking] = useState(false)
 	const cur = analysis.current
 	const alts = analysis.alternatives
+	const caps = useCaps()
 
 	const view = useRef(null)
+	const editorRef = useRef(null)
 
-	const [showOriginal, setShowOriginal] = useState(!redesign.choice)
-	const choice = redesign.choice
+	// Sin elección guardada se aplica la recomendada: el paso abre con una propuesta, no vacío.
+	const fallback = alts.some((a) => a.id === analysis.recommended) ? analysis.recommended : alts.find((a) => a.id !== 'ia')?.id
+	const choice = redesign.choice ?? fallback ?? null
+	const [showOriginal, setShowOriginal] = useState(!choice)
+
+	useEffect(() => {
+		if (!redesign.choice && fallback) setRedesign({ choice: fallback })
+	}, [redesign.choice, fallback, setRedesign])
 
 	const alt = alts.find((a) => a.id === choice)
 	const savedCustom = redesign.custom ? (redesign.custom.positions ? redesign.custom : { plant, positions: redesign.custom }) : null
@@ -89,8 +172,9 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 
 	const works = worksDiff(plant, custom?.plant)
 
+	// Las cifras de «Tu rediseño» se calculan aunque no esté aplicado: su cuadro las muestra.
 	useEffect(() => {
-		if (choice !== 'propio' || !custom) return
+		if (!custom) return
 
 		const c = new AbortController()
 		const t = setTimeout(() => {
@@ -104,11 +188,11 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 			clearTimeout(t)
 			c.abort()
 		}
-	}, [choice, redesign.custom])
+	}, [redesign.custom])
 
 	const [compact, setCompact] = useState({ loading: false, error: null })
 
-	// La quinta opción se pide a la IA solo cuando el usuario la quiere (tarda uno o dos minutos).
+	// La opción con IA se pide solo cuando el usuario la quiere (tarda uno o dos minutos).
 	const askCompact = async () => {
 		setCompact({ loading: true, error: null })
 		try {
@@ -125,6 +209,7 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 		}
 	}
 
+	// Aplicar una opción es elegirla: se ve en el 3D, se edita abajo y es la que va al reporte.
 	const pick = (id) => {
 		const a = alts.find((x) => x.id === id)
 		const pos = id === 'propio' ? custom.positions : a.positions
@@ -151,28 +236,6 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 		setShowOriginal(false)
 	}
 
-	// Aplicar copia la propuesta a «Tu rediseño» en un solo paso que se puede deshacer.
-	// Lo fijo conserva su lugar aunque la propuesta lo haya movido (funciona con cualquier backend).
-	const apply = (a) => {
-		const { positions: pos, moved } = protectLocked(plant, plant.layout, a.positions)
-		const prev = { choice: redesign.choice ?? null, custom: redesign.custom ?? null, metrics: redesign.metrics ?? null, basedOnRev: redesign.basedOnRev }
-		setRedesign({ choice: 'propio', custom: { plant, positions: pos }, metrics: null, basedOnRev: analysisRev, undoApply: [...(redesign.undoApply || []), prev].slice(-20) })
-		setShowOriginal(false)
-		view.current?.setLayout(pos, { legs: moved.length ? undefined : a.metrics.legs })
-		notify(moved.length ? `Se aplicó «${a.name}». ${moved.join(', ')} ${moved.length > 1 ? 'están fijos y se quedaron' : 'está fijo y se quedó'} en su lugar.` : `Se aplicó «${a.name}» a tu rediseño. Puedes deshacerlo.`)
-	}
-
-	const undoApply = () => {
-		const stack = redesign.undoApply || []
-		const prev = stack[stack.length - 1]
-		if (!prev) return
-		setRedesign({ ...prev, undoApply: stack.slice(0, -1) })
-		const pos = prev.choice === 'propio' ? (prev.custom?.positions || prev.custom) : alts.find((x) => x.id === prev.choice)?.positions
-		if (pos) view.current?.setLayout(pos, {})
-		else setShowOriginal(true)
-		notify('Se deshizo la última propuesta aplicada.')
-	}
-
 	const onLive = (live) => {
 		if (choice === 'propio' && custom && !showOriginal) view.current?.setLayout(custom.positions, { animate: false, legs: live.legs })
 	}
@@ -189,60 +252,100 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 		}
 	}, [showing, metrics, cur, plant])
 
+	const [busy, setBusy] = useState(false)
+	const reweigh = async (w) => {
+		setBusy(true)
+		await onReweigh(w)
+		setBusy(false)
+	}
+
 	const aiAlt = alts.find((a) => a.id === 'ia')
-	const cards = [
-		...alts.filter((a) => a.id !== 'ia').map((a) => ({ id: a.id, name: a.name, summary: a.summary, works: a.works, m: a.metrics })),
-		aiAlt
-			? { id: 'ia', name: aiAlt.name, summary: aiAlt.summary, works: aiAlt.works, m: aiAlt.metrics, reasons: aiAlt.reasons, source: aiAlt.source, model: aiAlt.model }
-			: { id: 'ia', name: 'Compacta con IA', pending: true },
-		...(custom ? [{ id: 'propio', name: 'Tu rediseño', summary: 'Tu versión, ajustada a mano en el editor de abajo.', works: works ? `${works} cambios de obra (paredes, zonas, portones o máquinas).` : 'Solo mover máquinas.', m: redesign.metrics }] : []),
-	]
+	// La ventana solo trae los acomodos calculados; la de IA y la tuya van en el cuadro principal.
+	const cards = alts.filter((a) => a.id !== 'ia').map((a) => ({ id: a.id, name: a.name, summary: a.summary, works: a.works, m: a.metrics }))
+	const extra = [
+		aiAlt && { id: 'ia', name: aiAlt.name, summary: aiAlt.summary, m: aiAlt.metrics },
+		custom && { id: 'propio', name: 'Tu rediseño', summary: `Tu versión, ajustada a mano en el editor de abajo. ${works ? `${works} cambios de obra (paredes, zonas, portones o máquinas).` : 'Solo mover máquinas.'}`, m: redesign.metrics },
+	].filter(Boolean)
+
+	const shown = showOriginal ? null : [...cards, ...extra].find((c) => c.id === choice)
+	const p = shown?.m ? pct(cur.piece_m, shown.m.piece_m) : null
+	const tag = shown && (shown.id === analysis.recommended ? 'Recomendada' : shown.id === 'propio' ? 'Tuya' : shown.id === 'ia' ? 'IA' : null)
 
 	return (
 		<section className="step">
 			<header className="step-head">
 				<span className="step-index"><b>Paso 4 de 6</b><span>Rediseño</span></span>
 				<RevealTitle text="Elige cómo ordenar la planta." />
-				<p className="lede">Cuatro acomodos calculados para tu flujo y uno que la IA busca para ocupar el menor espacio, siempre respetando tu planta y lo que fijaste. Selecciona una opción para ver cómo se mueven las máquinas.</p>
+				<p className="lede">Ya aplicamos el acomodo recomendado. Puedes cambiarlo por otro de los calculados para tu flujo, pedirle a la IA uno que ocupe el menor espacio o ajustarlo a mano, siempre respetando tu planta y lo que fijaste.</p>
 			</header>
 
-			{(() => {
-				const cardOf = cards.find((c) => c.id === choice && !c.pending)
-				const shown = showOriginal ? null : cardOf
-				const best = cards.find((c) => c.id === analysis.recommended)
-				const p = shown?.m ? pct(cur.piece_m, shown.m.piece_m) : null
-				return (
-					<Appear className="choice-box">
-						<div className="choice-main">
-							<span className="inspector-kicker">{shown ? 'Opción que estás viendo' : 'Estado de hoy'}</span>
-							<h3>
-								{shown ? shown.name : 'Sin rediseño elegido'}
-								{shown?.id === analysis.recommended && <span className="picker-tag">Recomendada</span>}
-								{shown?.id === 'propio' && <span className="picker-tag">Tuya</span>}
-							</h3>
-							<p className="choice-figure num">
-								{fmt(shown?.m ? shown.m.piece_m : cur.piece_m, 1)}
-								<small> m por pieza</small>
-								{p != null && <small className="choice-delta">{p > 0 ? `+${p}` : p} % frente a hoy</small>}
-							</p>
-							<p className="small">
-								{shown ? shown.summary : best ? `La recomendada es «${best.name}» (${fmt(best.m?.piece_m, 1)} m por pieza). ${analysis.recommended_reason || ''}` : 'Elige un acomodo para ver cómo se mueven las máquinas.'}
-							</p>
-						</div>
-						<div className="choice-actions">
-							<Btn size="small" onClick={() => setPicking(true)}>
-								{shown ? 'Cambiar opción' : 'Elegir opción'}
+			<Appear className="choice-box">
+				<div className="choice-main">
+					<span className="inspector-kicker">{shown ? 'Opción aplicada' : 'Estado de hoy'}</span>
+					<h3>
+						{shown ? shown.name : 'Sin rediseño aplicado'}
+						{tag && <span className="picker-tag">{tag}</span>}
+					</h3>
+					<p className="choice-figure num">
+						{fmt(shown?.m ? shown.m.piece_m : cur.piece_m, 1)}
+						<small> m por pieza</small>
+						{p != null && <small className="choice-delta">{p > 0 ? `+${p}` : p} % frente a hoy</small>}
+					</p>
+					<p className="small">{shown ? shown.summary : 'Así está la planta hoy. Aplica un acomodo para ver cómo se mueven las máquinas.'}</p>
+				</div>
+				<div className="choice-actions">
+					<Btn size="small" onClick={() => setPicking(true)}>
+						Cambiar opción
+					</Btn>
+					<span className="small">{cards.length} acomodos calculados</span>
+				</div>
+			</Appear>
+
+			<div className="choice-alts">
+				<AltCard
+					kicker="Opción con IA"
+					title={aiAlt?.name || 'Compacta con IA'}
+					m={aiAlt?.metrics}
+					empty={compact.loading ? 'Calculando…' : 'Sin calcular todavía'}
+					cur={cur}
+					on={choice === 'ia' && !showOriginal}
+					text={aiAlt ? aiAlt.summary : 'Junta las máquinas en el menor espacio sin alargar el recorrido. La IA tarda uno o dos minutos en pensarla.'}
+					note={compact.error}
+					action={
+						aiAlt ? (
+							<Btn size="small" variant="ghost" onClick={() => pick('ia')}>
+								Aplicar
 							</Btn>
-							{shown && shown.id !== 'propio' && shown.m?.legs && (
-								<button type="button" className="btn btn--ghost btn--small" onClick={() => apply(alts.find((x) => x.id === shown.id))} title="Copia esta propuesta a «Tu rediseño» para ajustarla. Se puede deshacer.">
-									Aplicar a tu rediseño
-								</button>
-							)}
-							<span className="small">{cards.filter((c) => !c.pending).length} opciones calculadas</span>
-						</div>
-					</Appear>
-				)
-			})()}
+						) : (
+							<Btn size="small" onClick={askCompact} disabled={compact.loading}>
+								{compact.loading ? 'Calculando…' : 'Calcular con IA'}
+							</Btn>
+						)
+					}
+				/>
+				<AltCard
+					kicker="Hecha por ti"
+					title="Tu rediseño"
+					m={custom ? redesign.metrics : null}
+					empty={custom ? 'Calculando…' : 'Aún sin cambios'}
+					cur={cur}
+					on={choice === 'propio' && !showOriginal}
+					text={custom ? (extra.find((c) => c.id === 'propio')?.summary) : 'Todavía no lo tienes: se crea solo en cuanto cambias algo en el editor de abajo.'}
+					action={
+						custom ? (
+							<Btn size="small" variant="ghost" onClick={() => pick('propio')}>
+								Aplicar
+							</Btn>
+						) : (
+							positions && (
+								<Btn size="small" variant="ghost" onClick={() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+									Ir al editor
+								</Btn>
+							)
+						)
+					}
+				/>
+			</div>
 
 			<OptionPicker
 				open={picking}
@@ -253,20 +356,12 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 				recommended={analysis.recommended}
 				ideal={analysis.ideal}
 				onPick={(id) => (pick(id), setPicking(false))}
-				onApply={(id) => (apply(alts.find((x) => x.id === id)), setPicking(false))}
-				compact={compact}
-				onAskCompact={() => (setPicking(false), askCompact())}
 			/>
 
-			{(redesign.undoApply?.length > 0 || (custom && redesign.basedOnRev != null && redesign.basedOnRev !== analysisRev)) && (
-				<div className="row small" style={{ marginTop: 12 }}>
-					{custom && redesign.basedOnRev != null && redesign.basedOnRev !== analysisRev && <span>«Tu rediseño» se hizo sobre una versión anterior del plano: se conservó tal cual, revísalo.</span>}
-					{redesign.undoApply?.length > 0 && (
-						<button type="button" className="btn btn--ghost btn--small" onClick={undoApply}>
-							Deshacer lo aplicado
-						</button>
-					)}
-				</div>
+			{custom && redesign.basedOnRev != null && redesign.basedOnRev !== analysisRev && (
+				<p className="small" style={{ marginTop: 12 }}>
+					«Tu rediseño» se hizo sobre una versión anterior del plano: se conservó tal cual, revísalo.
+				</p>
 			)}
 
 			{compact.loading && <WaitPanel kind="compact" className="reading--wide" title="Buscando el acomodo más compacto…" game={null} />}
@@ -289,7 +384,17 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 
 			{positions && (
 				<>
-					<div className="chart-head" style={{ margin: '40px 0 16px' }}>
+					<Appear style={{ marginTop: 32 }}>
+						{metrics ? (
+							<Outcome plant={plant} cur={cur} m={metrics} name={name} after={selPlant} positions={positions} />
+						) : (
+							<div className="outcome">
+								<p className="small">Calculando…</p>
+							</div>
+						)}
+					</Appear>
+
+					<div className="chart-head" ref={editorRef} style={{ margin: '40px 0 16px', scrollMarginTop: 24 }}>
 						<div>
 							<h2>Ajusta el rediseño</h2>
 							<p className="small">Cambia lo que quieras: máquinas, rutas, paredes, zonas y portones.</p>
@@ -297,16 +402,6 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 					</div>
 
 					<PlanEditor plant={selPlant} positions={positions} onChange={onEdit} catalog={catalog} mode="full" onMetrics={onLive} title="Editor del rediseño" />
-
-					<Appear className="kpis" style={{ marginTop: 32, gridTemplateColumns: 'minmax(0, 1fr)' }}>
-						{metrics ? (
-							<Delta label="Recorrido de una pieza" unit="m" before={cur.piece_m} after={metrics.piece_m} decimals={1} />
-						) : (
-							<div className="kpi">
-								<p className="small">Calculando…</p>
-							</div>
-						)}
-					</Appear>
 
 					<div className="grid-2" style={{ marginTop: 32 }}>
 						<Appear className="block">
@@ -318,23 +413,23 @@ export default function Redesign({ plant, analysis, redesign, setRedesign, onAdd
 						</Appear>
 					</div>
 
-					{cur.flows && (
-						<div style={{ marginTop: 24 }}>
-							<FlowsPanel plant={plant} current={cur} metrics={metrics} name={name} />
-						</div>
-					)}
-
 					{metrics?.avoid_hits?.length > 0 && (
 						<p className="small" style={{ marginTop: 16 }}>
 						Aviso: {metrics.avoid_hits.map((h) => h.text).join('; ')}.
 						</p>
 					)}
-
-					<div className="row" style={{ marginTop: 32 }}>
-						<Btn onClick={onNext}>Generar el reporte</Btn>
-						<span className="small">Se usará «{name}».</span>
-					</div>
 				</>
+			)}
+
+			<Appear className="block" style={{ marginTop: 32 }}>
+				<Criteria key={analysis.plant_version + JSON.stringify(analysis.weights_used || {})} analysis={analysis} canWeigh={has(caps, 'weights') && !!onReweigh} weights={weights} onReweigh={reweigh} busy={busy} />
+			</Appear>
+
+			{positions && (
+				<div className="row" style={{ marginTop: 32 }}>
+					<Btn onClick={onNext}>Generar el reporte</Btn>
+					<span className="small">Se usará «{name}».</span>
+				</div>
 			)}
 		</section>
 	)

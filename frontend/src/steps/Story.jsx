@@ -183,7 +183,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         <div className="story-sheet" style={{ border: 0 }}>
                             <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Tengo mi planta productora…" aria-label="Detalles de tu planta" style={{ minHeight: 260 }} />
                         </div>
-                        <div className="story-bar" style={{ justifyContent: 'flex-end' }}>
+                        <div className="story-bar" style={{ justifyContent: 'flex-start' }}>
                             <Btn
                                 onClick={async () => {
                                     if (await onRead()) scrollToEditor()
