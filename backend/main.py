@@ -21,6 +21,7 @@ from cauce.simulate import simulate
 from cauce.compact import compact_alternative, footprint
 from cauce.providers import caps, get_provider
 from cauce.story import STORY_SCHEMA, STORY_SYSTEM, build_plant
+from cauce.workspace_routes import create_router
 
 app = FastAPI(title="Cauce")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -33,6 +34,8 @@ editor = get_provider("editor")  # asistente del editor: instrucción -> operaci
 spatial = get_provider("espacial")  # agentes que leen el espacio
 seer = get_provider("vision")  # imágenes de referencia (solo si el modelo tiene visión)
 context_organizer = get_provider("contexto")  # especialistas por tema y consolidador
+context_organizer.max_output_tokens = 4096
+app.include_router(create_router(lambda: context_organizer))
 
 
 async def spatial_or_extractor():
