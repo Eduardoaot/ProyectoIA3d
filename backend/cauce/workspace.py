@@ -95,7 +95,7 @@ def confirm(project, ids, target="proposals"):
                 entry["supersedes"] = previous["id"]
             segment.append(entry)
             value["entry_id"] = entry["id"]
-        elif not str(value.get("description") or "").strip():
+        elif not str(value.get("name") if target == "operators" else value.get("description") or "").strip():
             blocked.append({"id": value["id"], "reason": "Actividad sin descripción"})
             continue
         value.update(status="confirmed", confirmedAt=now())

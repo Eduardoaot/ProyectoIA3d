@@ -99,6 +99,11 @@ async def interpret_block(kind, block, provider, source_id=None, topic=None):
             warnings.append(str(exc))
     if raw["activities"] and not activities:
         raise ValueError("Ninguna actividad tenía evidencia válida: " + "; ".join(warnings))
+    numbered = set(re.findall(r"^\s*(\d+)[.)]\s+", text, re.MULTILINE))
+    returned = {a["externalId"] for a in activities}
+    missing = numbered - returned
+    if missing:
+        warnings.append("Filas numeradas no identificadas en la respuesta: " + ", ".join(sorted(missing, key=int)))
     return {"activities": activities, "warnings": warnings}
 
 
@@ -108,6 +113,8 @@ async def run(workspace_id, job_id, provider):
     store.save_job(workspace_id, value)
     try:
         for block in blocks(value["text"]):
+            if block["index"] in value["completed_blocks"]:
+                continue
             if store.job(workspace_id, job_id)["status"] == "cancelled":
                 value["status"] = "cancelled"
                 return
@@ -159,6 +166,16 @@ def launch(workspace_id, body, provider):
     value = {"id": uuid.uuid4().hex, "kind": body.kind, "topic": body.topic, "source_id": body.source_id,
         "text": text, "base_revision": saved["revision"], "status": "queued", "created": store.now(),
         "processed": 0, "total": len(text), "completed_blocks": [], "errors": [], "result": {"proposals": [], "activities": []}}
+    if body.retry_job_id:
+        previous = store.job(workspace_id, body.retry_job_id)
+        if previous["text"] != text or previous["kind"] != body.kind:
+            raise ValueError("El texto o el tipo cambió; inicia una interpretación nueva")
+        failed = {error["block"] for error in previous["errors"]}
+        complete = [b for b in previous["completed_blocks"] if b not in failed]
+        ranges = [(b["offset"], b["offset"] + len(b["text"])) for b in blocks(text) if b["index"] in complete]
+        value["completed_blocks"] = complete
+        for key in ("proposals", "activities"):
+            value["result"][key] = [row for row in previous["result"][key] if any(start <= row.get("offset", -1) < end for start, end in ranges)]
     store.save_job(workspace_id, value)
     TASKS[value["id"]] = asyncio.create_task(run(workspace_id, value["id"], provider))
     return value

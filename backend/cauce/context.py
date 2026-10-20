@@ -64,4 +64,11 @@ def lines(context) -> list[str]:
         tag = ", ".join(x for x in (e.get("source"), f"confianza {e['confidence']}" if e.get("confidence") else None, e.get("date")) if x)
         unit = f" {e['unit']}" if e.get("unit") else ""
         out.append(f"Dato ({e.get('segment')}{', ' + tag if tag else ''}): {e.get('key') or e['id']} = {_value(e.get('value'))}{unit}.")
+    if isinstance(context, dict):
+        for activity in context.get("activities", []):
+            if activity.get("status") == "confirmed":
+                out.append(f"Actividad aceptada: {activity.get('description', '')}. Fuente: {activity.get('source_id') or activity.get('sourceId') or 'usuario'}.")
+        for person in context.get("operators", []):
+            if person.get("status") == "confirmed":
+                out.append(f"Asignación aportada: {person.get('name')}; área {person.get('station')}; máquina {person.get('machine')}; turno {person.get('shift')}. No implica eficiencia calculada.")
     return out

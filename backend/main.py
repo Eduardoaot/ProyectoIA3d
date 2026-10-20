@@ -46,6 +46,7 @@ async def spatial_or_extractor():
 
 class StoryInterface(BaseModel):
     text: str
+    context: dict | None = None
 
 
 class OrganizeContextInterface(BaseModel):
@@ -81,7 +82,7 @@ class ChatInterface(BaseModel):
 
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
-FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors", "simulate", "context_agents", "context_workspace", "context_jobs"]
+FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors", "simulate", "context_agents", "context_workspace", "context_jobs", "context_documents", "work_studies", "operator_import"]
 
 
 def provider_caps(p) -> dict:
@@ -122,6 +123,9 @@ async def context_organize(body: OrganizeContextInterface):
 
 @app.post("/api/story")
 async def story(body: StoryInterface):
+    if body.context and (ctxmod.current(body.context) or body.context.get("activities")):
+        # Esta vía usa únicamente la revisión aceptada; el relato sin revisar no sustituye correcciones.
+        body = body.model_copy(update={"text": "\n".join(ctxmod.lines(body.context))})
     extracted, error = None, None
     
     try:
@@ -146,7 +150,9 @@ async def story(body: StoryInterface):
 
     result = build_plant(body.text, extracted, reading)
     result["spatial"] = {**result["spatial"], "detail": score, "needed": MIN_CUES, "model": model, "errors": {k: v["error"] for k, v in (reading or {}).items() if v["error"]}}
-    return {**result, "error": error, "extracted": extracted, "agents_raw": {k: v["data"] for k, v in (reading or {}).items()}}
+    if body.context:
+        result["notes"].append("Boceto a partir del contexto aceptado. Verifica dimensiones y posiciones: los datos no observados siguen siendo supuestos del boceto.")
+    return {**result, "error": error, "extracted": extracted, "agents_raw": {k: v["data"] for k, v in (reading or {}).items()}, "context_version": context_version(body.context)}
 
 
 # Cálculo puro (sin IA): funciones normales, FastAPI las corre en otro hilo y el servidor sigue atendiendo.
@@ -202,6 +208,9 @@ def analyze_route(body: PlantInterface):
     }
     if weights_note:
         out["weights_note"] = weights_note
+    if isinstance(body.context, dict) and ("activities" in body.context or "operators" in body.context):
+        from cauce.workspace_deliverables import build
+        out["studies"] = build(body.context, plant, out)
     return out
 
 
@@ -253,6 +262,15 @@ def facts(ctx: ContextInterface) -> str:
         p = plant.get("params", {})
         lines.append(f"Supuestos: {p.get('demand')} piezas al día, lote de {p.get('batch')}, {p.get('trucks')} camiones al día.")
     lines += ctxmod.lines(ctx.context)
+    if isinstance(ctx.context, dict) and ctx.context.get("activities"):
+        from cauce.workspace_deliverables import build
+        study = build(ctx.context)
+        lines.append("Estudio de actividades aceptadas (no certifica cronometraje):")
+        for row in study["rows"][:30]:
+            lines.append(f"Actividad {row['id']}: {row['description']}; tipo {row['type']}; tiempo {row['time_min'] if row['time_min'] is not None else 'sin dato'} min; distancia {row['distance_m'] if row['distance_m'] is not None else 'sin dato'} m; fuente {row.get('source_id') or row['origin']}.")
+        lines.append(study["note"])
+        if len(study["rows"]) > 30:
+            lines.append(f"Se presentan 30 de {len(study['rows'])} actividades al redactor; la tabla estructurada del estudio conserva todas las filas.")
     if a:
         cur = a["current"]
         lines.append(f"Hoy una pieza recorre {cur['piece_m']} m dentro de la planta.")
