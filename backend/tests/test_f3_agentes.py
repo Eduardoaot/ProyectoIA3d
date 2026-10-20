@@ -45,7 +45,10 @@ def test_lo_que_la_instruccion_protege_no_se_toca(client, fake, plant):
         "ops": [{"op": "move", "id": "horno", "near": "despacho"}, {"op": "move", "id": "pintura", "near": "soldadura"}],
     })
     assert body["rejected"][0]["reason"] == "La instrucción pide no mover «Horno de secado»"
-    assert body["ops"][0]["op"] == "move" and body["ops"][0]["id"] == "pintura"
+    # Lo protegido además queda fijo (lock) para el rediseño; el resto de las operaciones sigue.
+    assert {o["id"] for o in body["ops"] if o["op"] == "lock"} == {"horno", "oficina"}
+    moves = [o for o in body["ops"] if o["op"] == "move"]
+    assert len(moves) == 1 and moves[0]["id"] == "pintura"
 
 
 def test_el_asistente_no_inventa_cifras(client, fake, plant):

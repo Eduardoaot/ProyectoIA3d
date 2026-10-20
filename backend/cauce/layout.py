@@ -85,6 +85,30 @@ def _poly(plant):
     return poly
 
 
+GATE_CLEAR = 3.0  # fondo libre frente a un portón (m)
+
+
+def gate_clear(plant):
+    """Rectángulos que no se ocupan frente a los portones que traen ancho (`w`). Los de antes no reservan nada."""
+    key = tuple((g["id"], g["x"], g.get("z"), g.get("w")) for g in plant.get("gates", []) if g.get("w"))
+    if not key:
+        return ()
+    return _gate_clear(plant["size"]["w"], plant["size"]["d"], outline(plant), key)
+
+
+@lru_cache(maxsize=64)
+def _gate_clear(W, D, poly, key):
+    plant = {"size": {"w": W, "d": D}, "outline": poly, "gates": [{"id": k[0], "x": k[1], "z": k[2]} for k in key]}
+    out = []
+    for gid, _, _, w in key:
+        x0, z0 = gate_pt(plant, gid, 0.0)
+        x1, z1 = gate_pt(plant, gid, GATE_CLEAR)
+        horizontal = abs(z1 - z0) >= abs(x1 - x0)  # el portón está en un muro a lo ancho
+        h = w / 2
+        out.append((min(x0, x1) - h, min(z0, z1), max(x0, x1) + h, max(z0, z1)) if horizontal else (min(x0, x1), min(z0, z1) - h, max(x0, x1), max(z0, z1) + h))
+    return tuple(out)
+
+
 def feasible(plant, r, placed):
     W, D = plant["size"]["w"], plant["size"]["d"]
     e = EDGE - 1e-6
@@ -93,9 +117,13 @@ def feasible(plant, r, placed):
     # De la prueba más barata a la más cara.
     if any(_overlap(r, q, GAP) for q in placed):
         return False
-    if any(_overlap(r, zone_rect(z), ZONE_GAP) for z in plant.get("zones", [])):
+    # Un área de trabajo marca dónde va algo: las máquinas pueden quedar dentro.
+    if any(_overlap(r, zone_rect(z), ZONE_GAP) for z in plant.get("zones", []) if z["kind"] != "area"):
         return False
     if _hits_wall(r, plant.get("walls", [])):
+        return False
+    # Frente a cada portón con ancho propio queda libre el paso de los camiones y montacargas.
+    if any(_overlap(r, q, 0) for q in gate_clear(plant)):
         return False
     poly = _poly(plant)
     if poly:
@@ -477,7 +505,7 @@ def collisions(plant, positions):
     for k, r in rects.items():
         if r[0] < -1e-6 or r[1] < -1e-6 or r[2] > W + 1e-6 or r[3] > D + 1e-6:
             bad.add(k)
-        if any(_overlap(r, zone_rect(z), 0) for z in plant.get("zones", [])):
+        if any(_overlap(r, zone_rect(z), 0) for z in plant.get("zones", []) if z["kind"] != "area"):
             bad.add(k)
     ks = list(rects)
     for i, a in enumerate(ks):
@@ -515,6 +543,9 @@ def alternatives(plant):
     out = []
     for aid, name, summary, works, cost in ALTERNATIVES:
         pos = _build(plant, aid, order, fixed)
+        # Garantía final: lo fijo queda exactamente donde está hoy (lugar y giro), lo haya respetado o no el método.
+        for sid, v in fixed.items():
+            pos[sid] = list(v)
         ops = rebalance_ops(plant, pos) if plant.get("use_assumptions") else None
         m = evaluate(plant, pos, ops)
         alt = {"id": aid, "name": name, "summary": summary, "works": works, "works_cost": cost, "positions": pos, "metrics": m, "locked_respected": locked_respected(plant, pos), "method": METHODS[aid], "assumptions": list(ASSUMPTIONS[aid])}

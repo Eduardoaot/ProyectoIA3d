@@ -1,4 +1,6 @@
 import asyncio
+import json
+import pathlib
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -101,6 +103,29 @@ async def catalog_route():
     return catalog.public()
 
 
+FLOW_SCHEMA = {"type": "object", "properties": {"flujo": STORY_SCHEMA["properties"]["flujo"]}, "required": ["flujo"]}
+REVIEW_SYSTEM = (pathlib.Path(__file__).resolve().parent / "cauce" / "agents" / "revisor.md").read_text(encoding="utf-8").strip()
+
+
+async def review_flow(provider, text: str, extracted: dict) -> dict:
+    """El flujo corregido por el revisor si es válido (solo nombres de la lista); si falla, el original."""
+    names = [str(x.get("nombre")) for x in extracted.get("estaciones") or [] if isinstance(x, dict) and x.get("nombre")]
+    prompt_ = f"Historia:\n{text}\n\nEstaciones: {json.dumps(names, ensure_ascii=False)}\n\nFlujo propuesto: {json.dumps(extracted.get('flujo') or [], ensure_ascii=False)}"
+    try:
+        out = await provider.json(REVIEW_SYSTEM, prompt_, FLOW_SCHEMA)
+    except Exception:  # noqa: BLE001
+        return extracted
+    flujo = out.get("flujo") if isinstance(out, dict) else None
+    if not isinstance(flujo, list) or check({"flujo": flujo}, FLOW_SCHEMA):
+        return extracted
+    known = {n.strip().lower() for n in names}
+    flujo = [f for f in flujo if isinstance(f, dict) and str(f.get("de", "")).strip().lower() in known and str(f.get("a", "")).strip().lower() in known]
+    # Un revisor que deja menos de la mitad de las conexiones probablemente se equivocó: se queda el original.
+    if len(flujo) < max(1, len(extracted.get("flujo") or []) // 2):
+        return extracted
+    return {**extracted, "flujo": flujo, "flujo_revisado": True}
+
+
 @app.post("/api/story")
 async def story(body: StoryInterface):
     extracted, error = None, None
@@ -115,6 +140,10 @@ async def story(body: StoryInterface):
                 extracted = retry
     except Exception as e:
         error = str(e)
+
+    # Segunda lectura: un revisor compara el flujo con la historia (ramas, salidas que faltan, retornos).
+    if isinstance(extracted, dict) and len(extracted.get("estaciones") or []) >= 3:
+        extracted = await review_flow(extractor, body.text, extracted)
 
     # Si la historia describe el espacio, se consulta a un agente por cada tipo de interpretación.
     score, _ = detail(body.text)
