@@ -1,4 +1,21 @@
 .context-workspace { position: fixed; inset: 0; z-index: 80; background: #fff; color: #161616; display: flex; flex-direction: column; font-family: var(--font); font-size: 14px; }
+.cw-backend-tools { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 32px; padding-bottom: 16px; border-bottom: 1px solid #ddd; }
+.cw-backend-tools button, .cw-backend-tools label { font: inherit; font-size: 11px; background: white; border: 1px solid #ddd; padding: 8px 10px; color: #333; }
+.cw-backend-tools input { display: block; max-width: 200px; font-size: 11px; margin-top: 4px; }
+.cw-job-status:not(:empty) { padding: 16px 24px; background: #f4f4f1; font-size: 12px; }
+.cw-job-status pre { max-height: 180px; overflow: auto; white-space: pre-wrap; }
+.cw-confirm-all { margin-bottom: 24px; }
+.cw-study-input { display: grid; gap: 16px; margin-bottom: 28px; }
+.cw-priority-toggle { display: flex; gap: 12px; align-items: center; padding: 20px 0; font-size: 14px; }
+.cw-priority-toggle input { accent-color: black; }
+.cw-question { display: grid; gap: 12px; padding: 22px 0; border-bottom: 1px solid #ddd; }
+.cw-study-inventory { display: grid; gap: 16px; margin: 20px 0; }
+.cw-study-inventory > div { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.cw-table-wrap { overflow-x: auto; max-width: 100%; margin: 20px 0; }
+.cw-result-table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.cw-result-table td, .cw-result-table th { border-bottom: 1px solid #ddd; padding: 12px; text-align: left; }
+.cw-result-table input { max-width: 150px; min-width: 90px; border: 1px solid #ccc; padding: 8px; font: inherit; }
+@media print { .doc .cw-table-wrap { overflow: visible; } .doc .cw-result-table { font-size: 9px; table-layout: fixed; } .doc .cw-result-table td { overflow-wrap: anywhere; } .doc .cw-result-table tr { break-inside: avoid; } }
 .context-workspace button, .context-workspace input, .context-workspace textarea, .context-workspace select { font-family: inherit; }
 .context-workspace button { cursor: pointer; }
 .context-workspace button:disabled { cursor: default; opacity: .4; }

@@ -7,6 +7,7 @@ import { isStale } from './proposals'
 import { contextPayload } from './context'
 import { summarize } from './context2'
 import { deleteAttachments, reviewSignature } from './contextWorkspace'
+import { acceptedContext, workspaceRequest } from './workspaceApi'
 import ContextWorkspace from './components/context/ContextWorkspace'
 import './components/context/context-entry.css'
 import FlowMark from './brand/FlowMark'
@@ -33,7 +34,7 @@ const preload = () => import('./steps/Plant')
 const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen', 'Taller de mejora (extra)']
 
 /* Lo mínimo que necesita el ingeniero para hablar de la planta (sin trazos). */
-function slim(project, ch, segmented = false) {
+function slim(project, ch, segmented = false, workspace = false) {
     const { plant, analysis } = project
     if (!plant) return null
 
@@ -51,7 +52,7 @@ function slim(project, ch, segmented = false) {
         },
         redesign: ch && ch.metrics ? { name: ch.name, metrics: pick(ch.metrics) } : null,
         // Texto si el backend no conoce el contexto segmentado; objeto si lo anuncia.
-        context: contextPayload(project.context, project.text, segmented),
+        context: workspace ? acceptedContext(project) : contextPayload(project.context, project.text, segmented),
     }
 }
 
@@ -74,7 +75,8 @@ export default function App() {
     const { plant, analysis, draft, info } = project
     const ch = useMemo(() => chosenOf(project), [project])
     const segmented = has(caps, 'segmented_context')
-    const context = useMemo(() => slim(project, ch, segmented), [project, ch, segmented])
+    const workspaceEnabled = has(caps, 'context_workspace')
+    const context = useMemo(() => slim(project, ch, segmented, workspaceEnabled), [project, ch, segmented, workspaceEnabled])
     const summary = useMemo(() => summarize(project.draft, project.plant), [project.draft, project.plant])
     const signature = useMemo(() => reviewSignature(project), [project])
     const confirmed = !!signature && project.context2Ok === signature
@@ -125,7 +127,7 @@ export default function App() {
 
         try {
             const done = startWait('story')
-            const r = await api.story(project.text)
+            const r = await api.story(project.text, has(caps, 'context_workspace') ? acceptedContext(project) : undefined)
             done()
             update({ draft: upgradePlant(r.plant), info: { source: r.source, notes: r.notes, ai_assumptions: r.ai_assumptions, assumptions: r.assumptions, error: r.error, spatial: r.spatial } })
             setReading(false)
@@ -148,7 +150,7 @@ export default function App() {
         setError(null)
 
         try {
-            const out = await api.analyze(draft, { context: contextPayload(project.context, project.text, segmented), ...(has(caps, 'weights') && project.weights ? { weights: project.weights } : {}) })
+            const out = await api.analyze(draft, { context: has(caps, 'context_workspace') ? acceptedContext(project) : contextPayload(project.context, project.text, segmented), ...(has(caps, 'weights') && project.weights && project.prioritiesEnabled !== false ? { weights: project.weights } : {}) })
             update((p) => ({
                 plant: draft,
                 analysis: out,
@@ -200,9 +202,12 @@ export default function App() {
     }
 
     const clearContext = async () => {
+        let saved
+        if (project.serverWorkspaceId && project.serverRevision) saved = await workspaceRequest(`/${project.serverWorkspaceId}/clear-context`, { method: 'POST', body: { expected_revision: project.serverRevision } })
         const files = project.contextWorkspace?.attachments || []
         await deleteAttachments(files.map((file) => file.id))
         library.clearContext()
+        if (saved) update({ serverRevision: saved.revision })
     }
 
     const ready = !!(plant && analysis)
@@ -230,8 +235,8 @@ export default function App() {
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
         if (step === 2) return <Diagnosis plant={plant} analysis={analysis} report={report} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} weights={project.weights} onOpenContext={openContext} onNext={() => go(4)} />
-        if (step === 4) return <Report plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
+        if (step === 3) return <Redesign plant={plant} analysis={analysis} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} weights={project.prioritiesEnabled === false ? undefined : project.weights} onOpenContext={openContext} onNext={() => go(4)} />
+        if (step === 4) return <Report studyContext={workspaceEnabled ? acceptedContext(project) : null} plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
         if (step === 5) return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onWorkshop={() => go(6)} onRestart={restart} />
 
         return <Workshop context={context} chosen={ch} game={project.game} setGame={(f) => update((p) => ({ game: typeof f === 'function' ? f(p.game) : f }))} notify={notify} />
@@ -320,6 +325,8 @@ export default function App() {
                     onTextChange={(text) => update({ text, printed: false })}
                     onContextChange={(context) => update({ context, printed: false })}
                     onWorkspaceChange={(patch) => update((p) => ({ contextWorkspace: { ...p.contextWorkspace, ...(typeof patch === 'function' ? patch(p.contextWorkspace || {}) : patch) }, printed: false }))}
+                    onProjectChange={update}
+                    onPrioritiesToggle={(prioritiesEnabled) => update({ prioritiesEnabled, printed: false })}
                     onWeightsChange={(weights) => update({ weights, printed: false })}
                     summary={summary}
                     confirmed={confirmed}

@@ -23,7 +23,8 @@ export const api = {
     // Nunca falla: si el backend no la conoce, devuelve { features: [] }.
     getCapabilities: () => loadCapabilities(),
     catalog: () => get('/api/catalog'),
-    story: (text) => post('/api/story', { text }),
+    studies: (body) => post('/api/studies/build', body),
+    story: (text, context) => post('/api/story', { text, ...(context ? { context } : {}) }),
     organizeContext: (text) => post('/api/context/organize', { text }),
     routes: (plant, positions, signal) => post('/api/routes', { plant, positions }, signal),
     evaluate: (plant, positions, rebalance = true, signal) => post('/api/evaluate', { plant, positions, rebalance }, signal),

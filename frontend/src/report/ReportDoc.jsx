@@ -4,6 +4,7 @@ import FlowMark from '../brand/FlowMark'
 import Wordmark from '../brand/Wordmark'
 import FlowPlan from '../charts/FlowPlan'
 import RelChart from '../charts/RelChart'
+import { StudyDeliverables } from '../components/context/BackendPanels'
 
 const Delta = ({ before, after, up }) => {
 	const p = pct(before, after)
@@ -234,6 +235,7 @@ export default function ReportDoc({ plant, analysis, chosen, notes = [], reportT
 				<span>Cauce · el recorrido de tu planta, en orden.</span>
 				<span>Los números salen del plano y de los supuestos indicados; confírmalos con datos medidos.</span>
 			</footer>
+			{analysis.studies && <StudyDeliverables result={analysis.studies} />}
 		</article>
 	)
 }

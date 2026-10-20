@@ -40,7 +40,7 @@ export default function WorkStudies({ plant, activities = [], attachments = [], 
         const id = newId()
         onChange([...activities, {
             id, sequence, type: 'operacion', description: '',
-            time: '', timeUnit: 'min', distance: '', stationId: '', routeId: '', sourceId: '',
+            time: '', timeUnit: 'min', distance: '', stationId: '', routeId: '', sourceId: '', status: 'confirmed',
         }])
         setExpanded(id)
     }
@@ -56,7 +56,7 @@ export default function WorkStudies({ plant, activities = [], attachments = [], 
             </div>
 
             <div className="work-studies__note">
-                <b>Borrador para revisión.</b> La captura es manual por ahora. Deja vacíos los tiempos y las distancias que no conozcas; adjuntar un estudio no confirma sus datos.
+                <b>Borrador para revisión.</b> Puedes organizar un texto completo o capturar actividades. Deja vacíos los tiempos y las distancias que no conozcas; adjuntar un estudio no confirma sus datos.
             </div>
 
             {studies.length > 0 && (

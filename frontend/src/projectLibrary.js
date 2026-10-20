@@ -59,6 +59,6 @@ export function updateProject(library, projectId, change) {
 export function clearProjectContext(library, projectId) {
     return updateProject(library, projectId, {
         text: '', info: null, context: { segments: {} }, contextWorkspace: { proposals: [], attachments: [], activities: [] },
-        weights: null, context2Ok: null, analysisInputSignature: null, printed: false,
+        weights: null, prioritiesEnabled: true, context2Ok: null, analysisInputSignature: null, printed: false,
     })
 }
