@@ -1,8 +1,10 @@
 import copy
+import asyncio
 
 import pytest
 
 from cauce import workspace as service, workspace_store as store
+from cauce import workspace_jobs as jobs
 
 
 @pytest.fixture(autouse=True)
@@ -58,3 +60,42 @@ def test_consolidation_preserves_discard_and_unknowns():
     assert service.accepted_context(p)["activities"] == []
     with pytest.raises(ValueError):
         service.confirm(p, ["unknown"])
+
+
+def test_blocking_preserves_every_character():
+    text = "\n".join(f"{i}. Operación {i}: texto de la observación" for i in range(1, 121))
+    pieces = jobs.blocks(text)
+    assert len(pieces) > 1
+    assert "".join(b["text"] for b in pieces) == text
+    for block in pieces:
+        assert text[block["offset"]:block["offset"] + len(block["text"])] == block["text"]
+
+
+def test_study_reader_rejects_unsupported_number():
+    class Provider:
+        async def json(self, system, text, schema):
+            return {"activities": [{"description": "Cortar", "excerpt": "Cortar la pieza", "type": "operacion", "time": 12, "timeUnit": "min", "distance": None}]}
+    with pytest.raises(ValueError, match="evidencia válida"):
+        asyncio.run(jobs.interpret_block("studies", {"text": "Cortar la pieza", "offset": 0}, Provider()))
+
+
+def test_120_activities_unknowns_and_no_overwrite():
+    class Provider:
+        async def json(self, system, text, schema):
+            return {"activities": [{"description": line, "excerpt": line, "type": "operacion", "time": None,
+                "timeUnit": "min", "distance": None, "externalId": line.split(".")[0], "predecessors": []} for line in text.splitlines() if line]}
+    text = "\n".join(f"{i}. Actividad de fabricación {i}" for i in range(1, 121))
+    store.write("demo", service.prepare({}), 0)
+    value = {"id": "job", "kind": "studies", "text": text, "base_revision": 1, "status": "queued", "result": {"proposals": [], "activities": []}, "completed_blocks": [], "errors": []}
+    store.save_job("demo", value)
+    asyncio.run(jobs.run("demo", "job", Provider()))
+    result = store.job("demo", "job")
+    assert result["status"] == "done"
+    activities = store.read("demo")["project"]["contextWorkspace"]["activities"]
+    assert len(activities) == 120 and len({a["id"] for a in activities}) == 120
+    assert all(a["time"] is None and a["distance"] is None for a in activities)
+    assert all(a["status"] == "pending" for a in activities)
+    store.save_job("demo", {**value, "id": "conflict"})
+    asyncio.run(jobs.run("demo", "conflict", Provider()))
+    assert store.job("demo", "conflict")["status"] == "conflict"
+    assert len(store.read("demo")["project"]["contextWorkspace"]["activities"]) == 120

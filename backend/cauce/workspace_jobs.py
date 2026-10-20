@@ -1,0 +1,164 @@
+"""Trabajos recuperables por bloques. Las revisiones aceptadas nunca se pisan."""
+from __future__ import annotations
+
+import asyncio
+import re
+import uuid
+from pathlib import Path
+
+from .agents.context_workspace import TOPIC_GUIDANCE, organize_context
+from .versions import digest
+from .workspace import merge_result, normalize
+from . import workspace_store as store
+
+TASKS = {}
+STUDY_SCHEMA = {"type": "object", "properties": {"activities": {"type": "array", "items": {
+    "type": "object", "properties": {"description": {"type": "string"}, "excerpt": {"type": "string"},
+        "type": {"type": "string", "enum": ["operacion", "transporte", "inspeccion", "espera", "almacenamiento"]},
+        "externalId": {"type": "string"}, "time": {"type": ["number", "null"]}, "timeUnit": {"type": "string", "enum": ["s", "min", "h"]},
+        "distance": {"type": ["number", "null"]}, "predecessors": {"type": "array", "items": {"type": "string"}}},
+    "required": ["description", "excerpt", "type", "externalId", "time", "timeUnit", "distance", "predecessors"], "additionalProperties": False,
+}}}, "required": ["activities"], "additionalProperties": False}
+
+
+def blocks(text, limit=1800):
+    """No trunca: cada carácter pertenece a un bloque con desplazamiento original."""
+    out, start = [], 0
+    while start < len(text):
+        end = min(len(text), start + limit)
+        if end < len(text):
+            boundary = text.rfind("\n", start, end)
+            if boundary > start + limit // 2:
+                end = boundary + 1
+        out.append({"index": len(out), "offset": start, "text": text[start:end]})
+        start = end
+    return out
+
+
+def selected_topics(text, topic=None):
+    if topic in TOPIC_GUIDANCE:
+        return (topic,)
+    cues = {
+        "negocio": "cliente|demanda|producto|fabric|pedido|objetivo",
+        "tiempos": "minut|segundo|hora|ciclo|espera|tiempo",
+        "maquinas": "maquina|equipo|horno|ancho|metro|espacio|ubic",
+        "flujo": "flujo|material|ruta|transport|entrada|salida|regres",
+        "personal": "persona|operador|operari|turno|personal",
+        "calidad": "calidad|defecto|inspecc|rechazo|retrabajo",
+        "restricciones": "fijo|no se puede|no mover|restric|presupuesto",
+        "referencias": "foto|imagen|plano adjunto",
+    }
+    normalized = normalize(text)
+    return tuple(["operaciones"] + [topic for topic, pattern in cues.items() if re.search(pattern, normalized)])
+
+
+def supported_number(value, excerpt):
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ValueError("Valor numérico inválido")
+    number = float(value)
+    if number < 0 or not number < float("inf"):
+        raise ValueError("Valor numérico inválido")
+    numbers = [float(n.replace(",", ".")) for n in re.findall(r"(?<!\w)\d+(?:[.,]\d+)?", excerpt)]
+    if number not in numbers:
+        raise ValueError("La magnitud no está respaldada por el fragmento original")
+    return number
+
+
+async def interpret_block(kind, block, provider, source_id=None, topic=None):
+    text = block["text"]
+    if kind == "context":
+        result = await organize_context(text, provider, selected_topics(text, topic))
+        if result["errors"] and not result["proposals"]:
+            raise ValueError("; ".join(f"{k}: {v}" for k, v in result["errors"].items()))
+        for proposal in result["proposals"]:
+            proposal.update(source_id=source_id, offset=block["offset"] + text.index(proposal["excerpt"]))
+        return {"proposals": result["proposals"], "warnings": result["errors"]}
+    prompt = Path(__file__).with_name("agents").joinpath("study-reader.md").read_text(encoding="utf-8")
+    raw = await provider.json(prompt, text, STUDY_SCHEMA)
+    if not isinstance(raw, dict) or not isinstance(raw.get("activities"), list):
+        raise ValueError("El especialista no devolvió una lista de actividades")
+    activities, warnings = [], []
+    for item in raw["activities"]:
+        try:
+            excerpt, description = str(item.get("excerpt") or "").strip(), str(item.get("description") or "").strip()
+            if not excerpt or excerpt not in text or not description or item.get("type") not in ("operacion", "transporte", "inspeccion", "espera", "almacenamiento"):
+                raise ValueError("Actividad sin evidencia literal, descripción o tipo válido")
+            offset = block["offset"] + text.index(excerpt)
+            fingerprint = digest([source_id, excerpt, offset])
+            activity = {"id": f"actividad-{fingerprint[:24]}", "fingerprint": fingerprint, "description": description,
+                "excerpt": excerpt, "offset": offset, "sourceId": source_id or "", "source_id": source_id,
+                "type": item["type"], "time": supported_number(item.get("time"), excerpt), "timeUnit": item.get("timeUnit", "min"),
+                "distance": supported_number(item.get("distance"), excerpt), "stationId": "", "routeId": "", "status": "pending",
+                "externalId": str(item.get("externalId") or ""), "predecessors": [str(v) for v in item.get("predecessors", [])]}
+            if activity["timeUnit"] not in ("s", "min", "h"):
+                raise ValueError("Unidad de tiempo no soportada")
+            activities.append(activity)
+        except (ValueError, TypeError, AttributeError) as exc:
+            warnings.append(str(exc))
+    if raw["activities"] and not activities:
+        raise ValueError("Ninguna actividad tenía evidencia válida: " + "; ".join(warnings))
+    return {"activities": activities, "warnings": warnings}
+
+
+async def run(workspace_id, job_id, provider):
+    value = store.job(workspace_id, job_id)
+    value.update(status="running")
+    store.save_job(workspace_id, value)
+    try:
+        for block in blocks(value["text"]):
+            if store.job(workspace_id, job_id)["status"] == "cancelled":
+                value["status"] = "cancelled"
+                return
+            try:
+                part = await interpret_block(value["kind"], block, provider, value.get("source_id"), value.get("topic"))
+                value["result"]["proposals"].extend(part.get("proposals", []))
+                value["result"]["activities"].extend(part.get("activities", []))
+                if part.get("warnings"):
+                    value["errors"].append({"block": block["index"], "detail": part["warnings"]})
+                value["completed_blocks"].append(block["index"])
+            except Exception as exc:
+                value["errors"].append({"block": block["index"], "detail": str(exc)[:400]})
+            value["processed"] = block["offset"] + len(block["text"])
+            store.save_job(workspace_id, value)
+        if not value["completed_blocks"]:
+            value["status"] = "error"
+        else:
+            for index, item in enumerate(value["result"]["activities"]):
+                item["sequence"] = index + 1
+            value["result"].update(source="ia", warnings=value["errors"], blocks={"completed": value["completed_blocks"], "total": len(blocks(value["text"]))})
+            if value["kind"] == "studies":
+                value["result"]["inventory"] = [{"type": "cursograma_analitico", "status": "draft", "source_id": value.get("source_id"), "activities": len(value["result"]["activities"])}]
+            try:
+                saved = store.mutate(workspace_id, value["base_revision"], lambda project: merge_result(project, value["result"]))
+                value.update(status="partial" if value["errors"] else "done", applied_revision=saved["revision"])
+            except store.Conflict:
+                value.update(status="conflict", error="El expediente cambió mientras se interpretaba. El resultado está conservado; repite con la versión actual.")
+    except asyncio.CancelledError:
+        value.update(status="cancelled")
+    except Exception as exc:
+        value.update(status="error", error=str(exc)[:400])
+    finally:
+        store.save_job(workspace_id, value)
+        TASKS.pop(job_id, None)
+
+
+def launch(workspace_id, body, provider):
+    saved = store.read(workspace_id)
+    if saved["revision"] != body.expected_revision:
+        raise store.Conflict("El expediente cambió antes de iniciar la interpretación.")
+    text = body.text
+    if body.source_id:
+        document, _ = store.document(workspace_id, body.source_id)
+        if document.get("status") != "text_extracted":
+            raise ValueError("El documento está pendiente de lectura")
+        text = document["text"]
+    if not text.strip() or len(text) > 500000:
+        raise ValueError("Proporciona entre 1 y 500 000 caracteres. Divide documentos mayores sin omitir su contenido.")
+    value = {"id": uuid.uuid4().hex, "kind": body.kind, "topic": body.topic, "source_id": body.source_id,
+        "text": text, "base_revision": saved["revision"], "status": "queued", "created": store.now(),
+        "processed": 0, "total": len(text), "completed_blocks": [], "errors": [], "result": {"proposals": [], "activities": []}}
+    store.save_job(workspace_id, value)
+    TASKS[value["id"]] = asyncio.create_task(run(workspace_id, value["id"], provider))
+    return value

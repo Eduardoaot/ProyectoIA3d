@@ -92,7 +92,7 @@ def _clean(raw: object, topic: str, text: str) -> list[dict]:
     return items
 
 
-async def organize_context(text: str, provider) -> dict:
+async def organize_context(text: str, provider, topics=None) -> dict:
     """Un agente por sección y uno que organiza el borrador maestro.
 
     Si un especialista falla, las demás secciones sobreviven y se informa el fallo.
@@ -117,12 +117,13 @@ async def organize_context(text: str, provider) -> dict:
         except Exception as exc:  # fallo parcial visible, sin perder otros temas
             return topic, [], str(exc)[:160]
 
-    results = await asyncio.gather(*(specialist(topic) for topic in TOPICS))
+    selected = tuple(t for t in (topics or TOPICS) if t in TOPICS)
+    results = await asyncio.gather(*(specialist(topic) for topic in selected))
     by_topic = {topic: items for topic, items, _ in results}
     errors = {topic: error for topic, _, error in results if error}
-    proposals = [item for topic in TOPICS for item in by_topic[topic]]
+    proposals = [item for topic in TOPICS for item in by_topic.get(topic, [])]
     allowed = {item["id"]: item for item in proposals}
-    sections = {topic: [item["id"] for item in by_topic[topic]] for topic in TOPICS}
+    sections = {topic: [item["id"] for item in by_topic.get(topic, [])] for topic in TOPICS}
     questions = []
 
     if proposals:
