@@ -111,3 +111,12 @@ export async function downloadAttachment(id) {
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+export async function deleteAttachments(ids) {
+    if (!ids.length) return
+    await attachmentStore('readwrite', (store) => {
+        let request
+        for (const id of ids) request = store.delete(id)
+        return request
+    })
+}

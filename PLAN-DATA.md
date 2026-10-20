@@ -31,6 +31,13 @@ Verificación de esta entrega: 58 pruebas unitarias, compilación y prueba en Ch
 - El frontend usa esa ruta cuando el backend anuncia `context_agents`. Si no hay proveedor listo o el backend es anterior, conserva la clasificación local por palabras clave e indica esa limitación. Las propuestas requieren confirmación humana; el JSON maestro se puede consultar en «Así entendimos tu planta» y no modifica el plano.
 - Este avance **no sustituye D0–D8**: el JSON maestro todavía no es una versión aceptada y persistida en backend, no se ha conectado con el constructor del plano, ni se han generado cursogramas finales. El límite inicial de esta ruta es de 8000 caracteres por envío; el procesamiento recuperable de documentos largos sigue en D3–D4.
 
+## Gestión local de proyectos y contexto
+
+- **Mis proyectos** permite crear y abrir varios proyectos en el mismo navegador. Cada uno conserva por separado relato, plano, análisis, contexto segmentado, propuestas, estudios, referencias, prioridades y confirmaciones.
+- El primer inicio copia el proyecto previo de `cauce-proyecto-v3` (o la migración v2) a `cauce-proyectos-v1` sin borrar las claves anteriores. La colección es la fuente de verdad; `cauce-proyecto-v3` queda como copia compatible del proyecto activo.
+- **Borrar contexto de este proyecto** requiere confirmación. Elimina texto, entradas, propuestas, estudios, referencias, prioridades y los originales de sus adjuntos en IndexedDB; conserva el plano y los otros proyectos. El análisis anterior queda marcado como pendiente de actualizar.
+- Esta gestión sigue siendo **local al navegador**: no sincroniza proyectos ni adjuntos entre computadoras. La persistencia y exportación completas en servidor continúan en D0–D3.
+
 ## Revisión con el usuario: acuerdos e ideas pendientes (20 de octubre de 2026)
 
 Esta sección registra la conversación posterior a la revisión del prototipo. Distingue requisitos acordados de propuestas técnicas que todavía deben cerrarse. Lo descrito como próximo trabajo **no está implementado**. La solicitud de esta revisión es actualizar el plan, sin comenzar cambios de código.
