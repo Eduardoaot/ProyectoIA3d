@@ -23,15 +23,66 @@ Para revisar: `cd frontend`, `npm ci`, `npm run dev`; abrir el enlace local y en
 
 Verificación de esta entrega: 58 pruebas unitarias, compilación y prueba en Chrome con el caso de transformadores, API simulada y perfil aislado. Se comprobaron propuestas, historial, archivos TXT/PDF, estudios, prioridades, confirmación, persistencia tras recarga, foco de teclado y seis vistas a 390 px. La prueba de navegador se ejecuta con Vite activo mediante `node tests/context-workspace.browser.mjs`; `CAUCE_BROWSER` permite indicar otro Chromium. El lint conserva advertencias previas del proyecto.
 
+## Revisión con el usuario: acuerdos e ideas pendientes (20 de octubre de 2026)
+
+Esta sección registra la conversación posterior a la revisión del prototipo. Distingue requisitos acordados de propuestas técnicas que todavía deben cerrarse. Lo descrito como próximo trabajo **no está implementado**. La solicitud de esta revisión es actualizar el plan, sin comenzar cambios de código.
+
+### Acordado para las siguientes entregas
+
+- **La IA interpreta y organiza la información.** El usuario puede describir toda su operación de una vez; no tiene que repartir el relato entre diez formularios. Una misma descripción puede aportar información a varios temas.
+- **Confirmación por lote.** Añadir **«Confirmar todos los datos»** para revisar e incorporar propuestas en conjunto, conservando edición y confirmación individual. Entender el relato no garantiza que represente correctamente la operación; confirmar significa aceptar una interpretación, no certificar una medición. Las ambigüedades deben quedar visibles.
+- **Captura cotidiana y breve.** Dejar como campos principales **«¿De qué se trata?»** y **«Descripción»**. Usar ejemplos que inviten a mencionar unidades, procedencia, aproximación y persona responsable, sin exigir esos campos por separado al inicio. Aplicar esta entrada a los diez temas, conservando sus herramientas particulares para archivos, imágenes y estudios.
+- **Conservar procedencia sin cargar de trabajo al usuario.** Extraer metadatos cuando el relato los aporte; si falta información, conservarla como desconocida. La IA no puede afirmar que una cifra está medida o comprobada por haberla interpretado. Los detalles pueden consultarse y corregirse de forma secundaria.
+- **Prioridades activables.** Permitir encender o apagar las prioridades de decisión. Falta definir exactamente el criterio de comparación que se utilizará al apagarlas; no presentar como implementada una eliminación del puntaje multicriterio actual.
+- **Mantener «Sí, confirmar esta versión».** El usuario acepta la protección de revisión del contexto/plano. Aclarar qué confirma, cuándo se habilita y por qué está deshabilitado. En el prototipo requiere que exista un plano; evitar un botón deshabilitado sin explicación.
+- **Especialistas y consolidador compartido.** Adoptar la separación entre interpretar por especialidad y consolidar un contexto maestro coherente. No se fija una cantidad rígida de dos agentes por tema ni veinte ejecuciones obligatorias por entrada.
+- **Estudios por carga masiva.** Pegar texto plano de un proceso o adjuntar un estudio completo, organizarlo y mostrar sus actividades en filas/cuadros editables. El caso objetivo incluye procesos con más de cien actividades. Agregar actividad por actividad sigue disponible como alternativa, sin ser el recorrido principal.
+- **Base de operadores.** Incorporar la carga de una tabla con nombre de operador, estación o área, máquina, turno y eficiencia y/o valoración de ritmo, para vincular personas con su operación y consultar datos específicos. Las métricas calculadas y los datos necesarios para sustentarlas deben definirse antes de implementarlas.
+- **Dos preguntas rectoras.** El contexto debe servir para explicar cómo está distribuida y funciona la planta actualmente, y qué podría mejorarse con los datos y restricciones disponibles. Diferenciar siempre situación actual, objetivo del usuario y propuesta del sistema.
+
+Ejemplo orientativo para el campo Descripción:
+
+> El corte tarda aproximadamente 12 minutos por pieza. Laura, supervisora del turno de mañana, tomó el tiempo durante la última semana. El equipo está junto a recepción y no puede moverse por su instalación eléctrica.
+
+Este ejemplo contiene tiempo, procedencia, persona, turno, ubicación y restricción. El sistema puede relacionarlos sin pedir que el usuario repita la misma historia en varios temas.
+
+### Ideas propuestas, todavía sin decisión final
+
+| Idea | Intención | Qué falta decidir |
+|---|---|---|
+| Coordinador de estudios y especialista por tipo | Identificar qué estudios recibió el sistema, qué puede entregar y cómo interpretar cada uno | Catálogo inicial, límites de cada especialista y separación entre interpretar un estudio recibido y producir uno nuevo |
+| Preguntas útiles para entender la planta | Pedir únicamente la información que realmente falta | Una sección debajo de prioridades, un bloque dentro de «Así entendimos» o un chat guiado; evitar multiplicar secciones |
+| Diagrama previo al plano, parecido a Mermaid | Revisar operaciones, materiales, ramas y uniones antes de dibujar el espacio | Entrega futura después de conectar esta parte; biblioteca, formato e interacción pendientes |
+| Confirmación de contexto antes del plano | Aceptar la información organizada y después revisar el plano construido | Si habrá dos momentos explícitos o si basta confirmación de datos más la confirmación actual; no dar por aprobado un cambio de esta secuencia |
+| Eficiencia individual y valoración de ritmo | Consultar desempeño con significado y fuentes claras | Definiciones, período, unidades, observaciones necesarias y qué cifras son importadas frente a calculadas |
+| Prioridades apagadas | Hacer opcional el ajuste por parte del usuario | Usar pesos base visibles o un criterio base distinto; acordarlo antes de alterar la recomendación |
+
+### Cómo evaluar los diez temas
+
+Los diez temas se conservan provisionalmente como navegación comprensible. No son diez compartimentos exclusivos ni una garantía de suficiencia. Comprobar la cobertura de estas necesidades en el contexto consolidado:
+
+| Necesidad | Información que debe conocerse o quedar marcada como faltante | Temas relacionados |
+|---|---|---|
+| Producto y demanda | Productos/materiales, cantidades, lotes, frecuencia y objetivos | Negocio, Operaciones, Flujo |
+| Proceso real | Actividades, entradas/salidas, variantes, ramas, uniones y retornos | Operaciones, Estudios, Flujo |
+| Recursos | Equipos, cantidades, unidades paralelas y asignaciones de personas | Máquinas, Personal |
+| Distribución actual | Dimensiones, posiciones o relaciones espaciales, accesos, pasillos, muros y servicios | Máquinas y espacio, Restricciones, Imágenes |
+| Funcionamiento | Tiempos, turnos, transportes, esperas, calidad y fuentes | Tiempos, Personal, Calidad, Estudios |
+| Mejora viable | Problemas observados, metas, elementos fijos y límites de inversión/cambio | Negocio, Restricciones, Prioridades |
+
+Un orden de operaciones no determina las posiciones físicas de las máquinas. Si solo se conoce el proceso, el sistema debe decir que falta reconstruir la distribución actual. No presentar un acomodo sugerido como si fuera el plano observado.
+
+Las preguntas de seguimiento deben derivarse de esta cobertura: por ejemplo, preguntar por la posición del horno si se conoce su existencia pero no su ubicación. No volver a preguntar lo ya respondido en un documento ni obligar a completar todos los temas para trabajar con un alcance limitado.
+
 ## Experiencia propuesta
 
 1. En la esquina superior derecha del paso inicial: botón **«Ver contexto de la planta»**, visible también en pasos posteriores para consultar o corregir. Abre una página o panel de ancho completo con navegación lateral, parecido en organización a `/docs` del backend. La interfaz debe mostrar ejemplos y lenguaje cotidiano, no exigir claves técnicas como `pulido.t_ciclo`.
-2. Portada **«Cuéntanos sobre tu planta»**: cuadro de texto libre y botón **«Organizar información»**. La IA propone datos estructurados por tema. Cada propuesta enseña fragmento de origen, valor, unidad, confianza y estado; el usuario puede corregirla o confirmarla antes de incorporarla. El texto original se conserva. Si no hay IA disponible, siguen funcionando la captura manual y los archivos.
-3. Temas: **Negocio**, **Operaciones**, **Tiempos**, **Máquinas y espacio**, **Flujo de materiales**, **Personal**, **Calidad**, **Restricciones**, **Estudios del trabajo** y **Imágenes y layouts**. Cada tema muestra un resumen legible, datos vigentes, archivos asociados y «Agregar / corregir». Mantener historial, fuente, fecha y nivel de confianza del contexto actual.
+2. Portada **«Cuéntanos sobre tu planta»**: cuadro de texto libre y botón **«Organizar información»**. La IA propone datos estructurados por tema con fragmento de origen y estado. Ofrecer edición, confirmación individual y **«Confirmar todos los datos»**; los metadatos se consultan en un detalle secundario. El texto original se conserva. Si no hay IA disponible, siguen funcionando la captura manual y los archivos.
+3. Temas: **Negocio**, **Operaciones**, **Tiempos**, **Máquinas y espacio**, **Flujo de materiales**, **Personal**, **Calidad**, **Restricciones**, **Estudios del trabajo** y **Imágenes y layouts**. Cada tema muestra un resumen legible, datos vigentes, archivos asociados y «Agregar / corregir». La captura principal pide solo «¿De qué se trata?» y «Descripción», con ejemplos orientativos. Mantener historial, fuente, fecha y nivel de confianza del contexto actual sin exigir su llenado separado al inicio.
 4. En cada tema: adjuntar documentos de contexto. Registrar nombre, tipo, fecha, origen y tema. Extraer texto solo de formatos realmente soportados; mostrar «adjunto, pendiente de lectura» para lo demás. Las imágenes y planos van en su tema, con nota del usuario; únicamente afirmar «interpretada» cuando un proveedor con visión la haya leído. Los archivos nunca deben confundirse con hechos verificados.
-5. **Estudios del trabajo**: admitir cursogramas analíticos y sinópticos, diagramas de recorrido, hojas de tiempos, métodos y otros estudios. Poder marcar un documento como «estudio existente» y vincular sus operaciones a estaciones/rutas del plano. Si el sistema extrae actividades, presentarlas para revisión con tipo (operación, transporte, inspección, espera, almacenamiento), secuencia, tiempo, distancia y fuente. Dejar vacío lo desconocido.
-6. **Prioridades de decisión**: mover «Qué pesa más para ti» a este lugar, con explicación breve y valores iniciales visibles. El usuario puede ajustarlas aquí o volver a ellas antes de recalcular una recomendación. La vista de rediseño muestra un resumen y enlace a estas prioridades.
-7. **«Así entendimos tu planta»**: resumen por tema, datos faltantes, contradicciones y supuestos, con enlaces para corregir. Antes del análisis, confirmar una versión concreta del contexto y del plano. Si cualquiera cambia, avisar que el análisis/reporte anterior requiere actualización. Conservar la confirmación actual de `Context2` y ampliarla, no eliminar esa protección.
+5. **Estudios del trabajo**: pegar un texto completo o adjuntar cursogramas analíticos y sinópticos, diagramas de recorrido, hojas de tiempos, métodos y otros estudios. Organizar procesos de más de cien actividades en filas/cuadros editables, con tipo (operación, transporte, inspección, espera, almacenamiento), relaciones de precedencia, tiempo, distancia y fuente. Vincular operaciones a estaciones/rutas y dejar vacío lo desconocido. La captura individual es opcional.
+6. **Prioridades de decisión**: mover «Qué pesa más para ti» a este lugar, con explicación breve, interruptor y valores iniciales visibles. El usuario puede activarlas, ajustarlas o volver a ellas antes de recalcular. La vista de rediseño muestra estado, resumen y enlace. La semántica del modo apagado está pendiente de decisión.
+7. **«Así entendimos tu planta»**: resumen por tema, datos faltantes, contradicciones y supuestos, con enlaces para corregir. Antes del análisis, confirmar una versión concreta del contexto y del plano. Si cualquiera cambia, avisar que el análisis/reporte anterior requiere actualización. Conservar la protección de `Context2` y explicar cualquier requisito que impida confirmar.
 
 ## Flujo y reporte
 
@@ -40,13 +91,192 @@ Verificación de esta entrega: 58 pruebas unitarias, compilación y prueba en Ch
 - El reporte agrega **cursograma analítico actual** y, cuando hay rediseño sustentado, **cursograma propuesto**; **cursograma sinóptico o mapa de proceso** cuando los datos alcancen; tabla de tiempos y recorridos; supuestos, fuentes, datos faltantes y recomendaciones concretas. En flujos ramificados, mostrar ramas y uniones sin inventar orden total.
 - Si el usuario subió un estudio, usarlo como fuente revisable y citarlo; si no, generar un **borrador derivado del plano y las rutas**. Cada renglón indica si procede de un documento, una medición, el modelo de planta o una inferencia. Tiempo/distancia desconocidos se muestran como «sin dato»; nunca como cero. El reporte no debe llamarlo estudio cronometrado si no hubo medición.
 
-## Contrato y orden de implementación
+## Plan de desarrollo del backend y conexión con el frontend
 
-1. **Modelo de datos y migración.** Extender el contexto segmentado existente con `estudios`, adjuntos/metadatos, propuestas pendientes, prioridades y vínculo a estaciones/rutas. Definir almacenamiento y límites antes de aceptar documentos grandes: hoy las imágenes se guardan en el navegador con límite de 1 MB. Importar proyectos anteriores sin perder entradas ni imágenes. Mantener compatibilidad de `contextPayload` y de las capacidades del backend.
-2. **Interfaz inicial.** Construir navegación por temas, captura libre, edición manual, vista «Así entendimos» y acceso persistente. Reubicar las tres interfaces existentes sin cambiar aún la lógica de análisis. Confirmar con un caso real de `pruebas/transformadores.json`.
-3. **Lectura asistida.** Añadir endpoints/capacidad para extraer propuestas del texto y de formatos de documento elegidos. Distinguir extracción, clasificación e inferencia. Nunca guardar automáticamente como hecho lo que proponga un agente; pedir revisión y registrar procedencia.
-4. **Flujo ramificado.** Revisar esquema, editor, métricas y visualización para convergencias/divergencias y múltiples productos; conservar las rutas existentes. Comprobar distancias y frecuencias por arco antes de agregarlas.
-5. **Entregables del ingeniero.** Generar las tablas y diagramas estructurados desde datos confirmados, y solo después pedir a la IA redacción explicativa. Validar cifras y referencias antes de imprimir/exportar. Comparar cursograma subido contra el generado cuando ambos existan.
+Esta secuencia sustituye el orden inicial de cinco pasos: la interfaz ya se prototipó primero por petición del usuario. Es un plan de implementación, no una declaración de funcionalidades existentes. Los nombres de rutas, campos y módulos nuevos son propuestas que se concretan en D0. No modificar `coordinacion/CONTRATO-v3.md` con esta actualización; documentar su extensión compatible por separado antes de tocar el código.
+
+### Punto de partida comprobado en el repositorio
+
+- `backend/main.py` ya ofrece `/api/story`, `/api/analyze`, `/api/report`, `/api/chat`, `/api/plan/ops`, `/api/references/read` y `/api/capabilities`, entre otras rutas. `/api/story` recibe texto y crea una planta; no recibe todavía el contexto maestro confirmado.
+- `backend/cauce/context.py` conoce nueve segmentos, acepta texto o contexto segmentado y conserva las entradas vigentes con historial. Todavía no incorpora estudios, documentos, propuestas ni una base individual de operadores.
+- `backend/cauce/providers/base.py`, `providers/__init__.py` y `agents/roles.py` aportan la interfaz y configuración por rol. `agents/spatial.py` ya separa lecturas de edificio, zonas, acomodo y paredes. Reutilizar estas piezas.
+- `versions.py` ya calcula versiones canónicas de planta y contexto. El análisis recibe contexto y registra su versión; esto no significa que traduzca automáticamente los datos del contexto a parámetros de cálculo del motor.
+- La eficiencia de `params` usada por `engine.py` es un factor global de tiempo disponible. No representa una base individual ni una valoración de ritmo por operador.
+- El frontend conserva propuestas, adjuntos y actividades en `project.contextWorkspace`; su organización por palabras clave y los archivos IndexedDB todavía no tienen una conexión equivalente en backend.
+
+### Arquitectura propuesta
+
+Recorrido de datos:
+
+```text
+Texto completo / documentos / tabla de operadores
+  → ingreso, extracción y fuentes originales
+  → selección de especialistas pertinentes
+  → propuestas de contexto y actividades con evidencia
+  → consolidador compartido + validaciones de código
+  → revisión y confirmación individual o por lote
+  → versión aceptada del contexto maestro
+  → propuesta de plano actual + verificación espacial
+  → confirmación del plano
+  → cálculo del motor + estudios y reporte sustentados
+```
+
+Responsabilidades:
+
+| Pieza | Responsabilidad | Límite |
+|---|---|---|
+| Orquestador | Seleccionar especialistas y coordinar su ejecución | Ejecutar solo los necesarios; respetar límites del proveedor y registrar fallos parciales |
+| Especialistas de contexto | Interpretar procesos, recursos, espacio, personas u otras áreas pertinentes | Proponer datos con referencias, sin escribir directamente sobre la versión aceptada |
+| Coordinador de estudios, si se aprueba | Identificar estudios recibidos y entregables posibles, con datos necesarios | Distinguir documento recibido, estudio interpretado, borrador generado y estudio no sustentable |
+| Especialistas de estudios, catálogo por definir | Interpretar o estructurar el tipo de estudio correspondiente | Usar un esquema específico; no inventar tiempos ni tratar una inferencia como observación |
+| Consolidador compartido | Resolver identidades y duplicados; reunir aportes y detectar incompatibilidades | No elegir silenciosamente entre afirmaciones contradictorias ni sobrescribir correcciones del usuario |
+| Validadores y repositorio | Validar esquemas, unidades y referencias; aplicar cambios versionados | Solo el código guarda cambios válidos y confirmados de forma atómica |
+| Constructor/verificador del plano | Usar contexto aceptado y lectura espacial existente para proponer la situación actual | No confundir secuencia de actividades con posiciones; respetar elementos fijos y trabajo manual |
+| Motor y entregables | Calcular métricas y construir tablas/diagramas trazables | La IA interpreta y redacta; los cálculos y verificaciones numéricas se realizan en código |
+
+El JSON maestro es una representación consolidada del contexto; no exige que varios agentes editen concurrentemente un mismo archivo. Cada ejecución devuelve propuestas y el servicio aplica los cambios validados contra una revisión concreta.
+
+### D0 — Cerrar contrato, estados y decisiones de implementación
+
+**Entregable:** extensión de contrato y ejemplos de peticiones/respuestas para frontend y backend, sin romper los clientes anteriores.
+
+- Separar contexto original, propuestas, datos aceptados, actividades, documentos, operadores, preguntas abiertas, preferencias y referencias al plano. Mantener el formato de planta v3; si se necesita modificarlo, justificar y probar una migración antes.
+- Definir versión propia del contexto maestro, identificadores estables y referencias a fragmentos, páginas, filas o actividades de origen. Un dato podrá relacionarse con varios temas sin duplicar su identidad.
+- Definir estado de revisión y procedencia por separado. Propuesta, aceptado, descartado, ambiguo y sustituido no equivalen a medido, estimado, inferido o desconocido. La confianza de interpretación tampoco certifica exactitud de la medición.
+- Acordar representación de valores ausentes, unidades, rangos y contradicciones. No sustituir faltantes por cero ni inventar un intervalo para expresar baja confianza.
+- Definir semántica del interruptor de prioridades; preservar `weights_used` real del análisis y registrar su versión. No confundir desactivar ajustes personales con desactivar automáticamente todo criterio de comparación.
+- Resolver almacenamiento local del servicio: proyectos, originales y revisiones persistentes; evaluar SQLite más archivos frente a almacenamiento en archivos. Definir exportación/restauración del conjunto y límites configurables. La elección queda pendiente de esta fase.
+- Definir trabajos largos: estado, progreso, resultado parcial, cancelación y recuperación tras fallo/reinicio. No resolver un proceso de cien actividades con una petición opaca que pueda truncarse.
+- Añadir capacidades solo cuando la funcionalidad correspondiente exista. Los nombres nuevos se acuerdan aquí; conservar el comportamiento del backend anterior cuando no se anuncien.
+
+**Verificación:** fixtures de proyecto anterior y del prototipo, migración reversible por copia, roundtrip sin perder historial/imágenes/actividades y ejemplos explícitos de conflicto y faltante.
+
+### D1 — Servicio de contexto maestro, revisiones y revisión por lote
+
+**Entregable:** poder leer/guardar un proyecto y aceptar propuestas sin depender aún de IA.
+
+- Crear modelos y servicios separados del enrutamiento de `main.py`. Organización sugerida: `schemas/context_workspace.py`, `services/context_workspace.py`, `repositories/projects.py` y `routers/context_workspace.py`, ajustando los nombres al contrato aprobado.
+- Reutilizar `context.py` y `versions.py` mediante adaptadores compatibles. No repartir la misma lógica de entradas vigentes entre varios módulos.
+- Incorporar el borrador frontend al contexto maestro mediante migración explícita. Los originales IndexedDB solo se transferirán cuando el usuario active su carga; un metadato sin binario seguirá indicando que el original falta en el servidor.
+- Registrar confirmación individual y **«Confirmar todos los datos»** contra revisión e identificadores concretos. Idempotencia para reintentos y comprobación de revisión esperada: una confirmación de una vista antigua no acepta propuestas nuevas.
+- El botón masivo acepta las propuestas revisables del conjunto mostrado; los conflictos o errores estructurales quedan aparte con explicación. Definir esta excepción en el contrato y hacer visible el resultado del lote.
+- Conservar originales, versiones anteriores, decisiones de descarte y correcciones; impedir que una organización posterior resucite datos descartados o sustituya datos corregidos sin revisión.
+
+**Conexión:** reducir captura a los dos campos acordados, detalle opcional de metadatos y acción masiva. Mantener captura local cuando la capacidad nueva no exista.
+
+**Verificación:** confirmación repetida, edición concurrente, lote parcialmente bloqueado, importación del proyecto anterior y persistencia tras reiniciar el servicio.
+
+### D2 — Interpretación asistida y consolidación de texto completo
+
+**Entregable:** «Organizar información» conectado a IA real con resultados revisables.
+
+- Crear orquestador, esquemas y prompts por especialidad usando la interfaz de proveedores actual. Un rol no implica un modelo distinto ni un servicio siempre activo. Seleccionar especialistas según el contenido, con concurrencia limitada y tiempos máximos.
+- Conservar el relato completo y segmentarlo respetando identificadores y referencias. Compartir un índice de entidades para que dos especialistas no inventen operadores o estaciones distintos con el mismo nombre.
+- Consolidar unidades, entidades y afirmaciones equivalentes sin alterar su evidencia. Situación actual, objetivo y propuesta permanecen separados; las contradicciones generan preguntas, no una elección oculta de la IA.
+- Devolver propuestas, vínculos a fragmentos originales, dudas, cobertura y fallos de especialistas. Validar cada salida contra esquema y límites antes de mostrarla o guardarla como propuesta.
+- Mantener guardado manual y reintento de la parte fallida si el proveedor no está disponible. No presentar la clasificación local por palabras clave como interpretación completa de IA.
+
+**Conexión:** cargar propuestas en la vista existente; permitir corregir, confirmar individualmente o por lote y conservar originales.
+
+**Verificación:** texto que aporta a varios temas, cuatro hornos instalados/dos operando, negaciones, cambios del usuario, referencias ambiguas y proveedor falso con respuestas inválidas o fallos parciales.
+
+### D3 — Documentos de contexto y extracción real
+
+**Entregable:** evidencia documental recuperable y procesable por el mismo recorrido de propuestas.
+
+- Servicio de ingreso/descarga con metadatos, tamaño, tipo comprobado, identificador/hash y estados de extracción independientes de la confirmación de datos.
+- Empezar por TXT/MD/CSV; elegir después lectores de PDF con texto y XLSX según muestras reales y dependencias justificadas. Un archivo escaneado necesita OCR o visión; los formatos no soportados quedan pendientes, sin simular lectura.
+- Conservar referencias a páginas/filas/fragmentos y mostrar cualquier límite o truncamiento. Procesar documentos largos por partes recuperables, sin dar por leído lo que no se procesó.
+- Mantener el flujo de visión existente y anunciar su disponibilidad real; una imagen adjunta no es una imagen interpretada.
+- Añadir exportación/restauración de originales junto con el contexto o un manifiesto que indique los archivos faltantes. Respetar originales que todavía existan solo en el navegador.
+
+**Verificación:** texto extraíble, PDF sin texto, archivo no soportado, tipo inválido, límite excedido, duplicado y restauración en un entorno limpio.
+
+### D4 — Estudios por texto masivo y tabla de actividades
+
+**Entregable:** pegar un proceso largo y revisar sus actividades en una tabla editable, con evidencia y vínculos.
+
+- Cerrar el catálogo inicial de estudios. Propuesta de primer alcance: cursograma analítico y hoja de tiempos; diagramas sinópticos/de recorrido según información disponible. Otros estudios y sus especialistas se incorporan posteriormente por registro, sin prometerlos antes de implementarlos.
+- Si se aprueba el coordinador, devolver un inventario: estudio recibido, tipo identificado o desconocido, especialista aplicable, entregable posible y datos que faltan. Un documento puede contener varios estudios.
+- Organizar texto o documento completo en actividades con identificador, descripción, tipo, relaciones de precedencia, estación/ruta, producto/material y fuentes. Secuencia de captura no equivale a orden total cuando hay ramas o uniones.
+- Conservar observaciones de tiempos, unidades, repeticiones y distancia cuando existan. Faltantes quedan nulos; los agregados numéricos los calcula código después de validar su base.
+- Procesar más de cien actividades por bloques con resumen común, identificadores estables y reconciliación de relaciones entre bloques. Informar cuántas actividades/partes se procesaron y cuáles faltan; no devolver un estudio aparentemente completo tras una truncación.
+- Presentar tabla por filas/cuadros, edición puntual y confirmación masiva; permitir agregar una actividad y reorganizar el texto sin perder correcciones aceptadas. Una actividad no crea automáticamente una nueva estación física.
+
+**Verificación:** fixture de al menos 120 actividades con ramas, reunión, retorno, tiempos desconocidos y fuentes múltiples; ninguna actividad perdida/duplicada por fronteras entre bloques; edición y reintento sin sobrescribir correcciones.
+
+### D5 — Base de operadores y métricas sustentadas
+
+**Entregable:** importar, revisar y vincular operadores; incorporar únicamente los cálculos cuya definición ya esté acordada.
+
+- Entrada inicial propuesta: CSV con previsualización y mapeo de columnas; XLSX queda sujeto al lector elegido en D3. Conservar fila original y errores por fila; el nombre no es una identidad única, admitir identificador de operador.
+- Modelo propuesto: operador, área/estación, máquina o unidad concreta, turno, período de vigencia y valor aportado. Separar ficha de persona, asignaciones y observaciones: una persona puede cambiar de máquina/turno o atender varias unidades.
+- Separar eficiencia reportada, valoración de ritmo y eficiencia calculada. Registrar definición, escala, período y fuente del indicador; no convertir `0.85`, `85` o una escala de ritmo sin confirmar su significado.
+- Una tabla de asignaciones más un porcentaje no basta para calcular una eficiencia independiente. Definir qué mediciones/producción, tiempo observado o estándar, calidad y período requiere cada indicador; mostrar «sin datos» cuando falte su base.
+- Mantener el factor global `params.efficiency` como concepto distinto. Antes de que nuevos indicadores afecten capacidad o tiempos, especificar qué tiempo es manual, qué tiempo es automático y cómo evitar descontar dos veces un mismo factor.
+- Consultar resultados por persona/asignación y período comparable; mostrar cobertura y método. La IA explica resultados del motor, sin atribuir causas no observadas a una persona.
+
+**Verificación:** homónimos, turnos múltiples, reasignaciones, indicadores con escalas diferentes, faltantes y caso numérico de referencia para cada fórmula aprobada antes de implementarla.
+
+### D6 — Cobertura, preguntas útiles y revisión comprensible
+
+**Entregable:** ayudar a completar lo necesario sin crear un formulario obligatorio de diez apartados.
+
+- Evaluar cobertura de proceso, recursos, espacio, funcionamiento y mejora; separar requisitos bloqueantes para una operación de información opcional para enriquecerla.
+- Generar preguntas concretas sobre faltantes/contradicciones, con tema, motivo y referencias. Priorizar las que permitan reconstruir la distribución actual o evaluar una mejora.
+- Las respuestas alimentan el mismo recorrido de propuestas y consolidación; permitir «No lo sé», posponer y consultar la fuente. No repetir preguntas ya resueltas ni tratar un chat como escritura directa de hechos.
+- Elegir ubicación con el usuario: bloque en revisión, sección debajo de prioridades o chat. La recomendación de diseño es reutilizar un espacio existente antes de ampliar la navegación; sigue siendo una propuesta.
+- Explicar por qué «Sí, confirmar esta versión» no está disponible y ofrecer la acción que falta. Mantener la confirmación del plano antes del análisis; cualquier separación adicional de confirmaciones se decide explícitamente.
+
+**Verificación:** relato completo sin preguntas redundantes, plano sin medidas, ubicación ambigua, falta opcional no bloqueante y pregunta respondida desde un documento previo.
+
+### D7 — Contexto aceptado hacia plano y análisis existentes
+
+**Entregable:** recorrido integrado de datos aceptados a plano revisable y resultados versionados.
+
+- Añadir una entrada compatible a la construcción de planta que reciba la revisión aceptada del contexto y sus vínculos, conservando `/api/story` para los clientes anteriores.
+- Reutilizar `story.py`, especialistas espaciales y validaciones geométricas actuales. No construir una historia resumida que pierda cantidades, unidades, ramas, restricciones o evidencia.
+- Adaptar de forma explícita los campos confirmados a la planta/parámetros que realmente consume el motor; validar unidades, significado y revisión. Datos textuales de contexto no pasan a modificar cálculos por aparecer en el JSON maestro.
+- No inventar dimensiones/posiciones observadas. Si hace falta una hipótesis para un boceto, identificarla, pedir aceptación y conservar su carácter supuesto. No reemplazar el plano manual por una nueva extracción sin acción del usuario.
+- Conservar ramas, uniones y retornos en datos y editor. Probar frecuencias/lotes por arco sin convertir un grafo en una lista única ni contar repetidamente el mismo flujo.
+- Registrar revisiones de contexto aceptado, planta, prioridades, operadores/estudios usados y métodos. Un cambio relevante marca análisis y reporte desactualizados; navegar o abrir un detalle no los invalida ni recalcula.
+- Aplicar la semántica acordada del interruptor de prioridades e informar siempre el criterio y los pesos efectivamente utilizados.
+
+**Verificación:** recorrido completo con transformadores y fixture ramificado; elemento fijo intacto, rediseño manual conservado, confirmación antigua rechazada y regresiones de capacidad/distancia sin cambio no justificado.
+
+### D8 — Estudios entregables, reporte y cierre de integración
+
+**Entregable:** estudios y reporte consistentes con las fuentes y el cálculo, con lista explícita de qué se entrega y qué falta.
+
+- Construir tablas de actividades, tiempos y recorridos desde revisiones aceptadas y resultados del motor; conservar ramas/uniones en los entregables que las admitan. No presentar el borrador secuencial del prototipo como estudio final.
+- Distinguir estudio recibido, estudio interpretado y borrador generado. Si no hubo medición, no llamarlo estudio cronometrado. Si existe estudio previo, citarlo y mostrar discrepancias, sin sustituirlo silenciosamente.
+- Añadir esquemas para cada entregable implementado y un resumen de disponibilidad: generado, parcial o pendiente de datos, con razón. El rediseño solo produce un estudio propuesto cuando sus datos lo sustentan.
+- Extender `facts()` y la validación de informe con los valores autorizados, revisiones y referencias nuevas. La redacción usa estos hechos; las cifras y agregados salen de código.
+- Completar exportación/importación y avisos de resultados desactualizados. Verificar frontend nuevo con backend anterior y cliente anterior con backend nuevo.
+- Cerrar documentación, pruebas de regresión y pruebas de navegador con IA simulada; realizar después un ensayo con el proveedor real y registrar sus límites de calidad/tiempo, sin confundir mocks con validación de interpretación real.
+
+**Verificación:** reporte sin archivo previo, estudio aportado con discrepancia, tiempos desconocidos conservados, cifras no sustentadas rechazadas y expediente exportado/restaurado con sus referencias.
+
+### Cortes de entrega y criterio de avance
+
+- **D0–D2:** primera conexión útil del contexto: entrada breve, IA, propuestas, edición y confirmación masiva.
+- **D3–D4:** documentos y estudios largos sin captura actividad por actividad.
+- **D5–D6:** operadores con semántica acordada y preguntas dirigidas para mejorar cobertura.
+- **D7–D8:** contexto aceptado integrado con plano, análisis y estudios/reporte.
+
+Cada fase incluye su conexión mínima al frontend y pruebas correspondientes; no dejar toda la integración para el final. Mantener un commit y push por fase terminada y verificada, sin mezclar trabajo incompleto con una fase declarada lista. En cambios del motor, escribir primero el caso que falla y conservar las regresiones F0–F9 y `test_regresion_5_4.py`.
+
+La visualización interactiva previa al plano, parecida a Mermaid, queda para una entrega posterior. En esta secuencia sí se conserva la estructura de grafo necesaria para no perder ramas y uniones.
+
+### Decisiones que deben resolverse antes de la fase afectada
+
+1. **D0/D7:** ¿apagar prioridades usa los pesos base actuales o un criterio de comparación diferente?
+2. **D0/D3:** almacenamiento persistente del servicio y formatos adicionales prioritarios, con una muestra real para cada lector.
+3. **D4:** aprobar coordinador/registro de especialistas y catálogo inicial de estudios; determinar qué estudios recibidos o entregados son prioritarios.
+4. **D5:** significado y escala de la eficiencia/valoración de ritmo existentes, fórmula de las métricas calculadas y datos disponibles para sustentarlas.
+5. **D6:** ubicación de preguntas útiles y si se desea separar un momento de confirmación del contexto previo a la construcción del plano.
+
+Estas dudas no bloquean esta actualización documental. Deben aclararse cuando se prepare la fase correspondiente; no asumir que una propuesta técnica equivale a una decisión del usuario.
 
 ## Criterios de aceptación
 
@@ -56,7 +286,12 @@ Verificación de esta entrega: 58 pruebas unitarias, compilación y prueba en Ch
 - Un ejemplo con bifurcación y reunión de rutas aparece correctamente en editor, análisis y reporte.
 - El reporte produce un cursograma analítico útil sin archivo previo y deja en blanco los tiempos no medidos. Si hay estudio previo, cita su fuente y señala discrepancias.
 - Al cambiar contexto, prioridades o plano después de analizar, el usuario ve qué resultado debe recalcular.
+- «Confirmar todos los datos» acepta un lote revisable sin incorporar conflictos ocultos ni requerir cien confirmaciones individuales.
+- La captura principal pide título y descripción; unidades y procedencia explícitas se conservan sin exigir un formulario extenso.
+- Un texto de al menos 120 actividades se organiza en filas editables, conserva su evidencia y no pierde ramas, retornos ni correcciones aceptadas al reprocesarlo.
+- La importación de operadores distingue valores reportados de cálculos y no confunde eficiencia global, eficiencia individual y valoración de ritmo.
+- Las preguntas pendientes responden a faltantes reales y la desactivación de prioridades tiene un comportamiento acordado y visible.
 
 ## Prompt para retomar en casa
 
-> Trabaja en la rama `feature/data` de ProyectoIA3d. Lee `PLAN-DATA.md`, `coordinacion/CONTRATO-v3.md`, `CRITERIOS-IMPLEMENTACION-1.1.md` y el código actual antes de editar. Implementa el plan por fases pequeñas, verificando frontend y backend en cada una. El objetivo es una entrada inicial única de contexto de planta, organizada por temas y con texto libre asistido por IA, documentos por tema, estudios del trabajo, imágenes/layouts y prioridades de decisión. El usuario debe poder ver y corregir qué entendió la IA antes de analizar. Retira las secciones separadas «Datos de la planta», «Referencias con imagen» y «Qué pesa más para ti» de sus pasos actuales, conservando sus datos y capacidades en la nueva interfaz. Admite rutas de proceso que convergen y divergen. Amplía el reporte con cursogramas y entregables de ingeniería respaldados por fuentes, sin inventar tiempos ni mediciones. Preserva proyectos existentes, el historial/procedencia y la validación del reporte. Primero propone el contrato de datos y la secuencia concreta de cambios; después implementa la primera fase.
+> Trabaja en `feature/data` de ProyectoIA3d. Lee `PLAN-DATA.md`, especialmente los acuerdos del 20 de octubre y las decisiones pendientes, junto con `coordinacion/CONTRATO-v3.md`, `CRITERIOS-IMPLEMENTACION-1.1.md` y el código actual. El prototipo frontend ya está entregado; esta revisión solo documentó próximos pasos. Cuando el usuario autorice continuar la implementación, comienza por D0 y prepara una extensión compatible del contrato antes de programar D1. Distingue requisitos aceptados de propuestas pendientes: no fijes sin acuerdo la semántica de prioridades apagadas, fórmulas de operadores, catálogo de especialistas ni ubicación de preguntas. Desarrolla por fases D0–D8, conectando y verificando frontend/backend en cada una, con commit y push por fase terminada. Permite texto completo, captura breve, propuestas con evidencia y confirmación masiva; estudios de más de cien actividades en tabla editable; operadores importados con indicadores bien definidos; consolidación compartida y construcción de plano desde contexto aceptado. Conserva proyectos, historial, originales, elementos fijos, ramas/uniones y validación numérica. El diagrama interactivo previo al plano queda para después de completar esta parte.
