@@ -1,0 +1,48 @@
+{
+ "ops": [
+  {
+   "op": "add",
+   "element": {
+    "id": "pulido-2",
+    "name": "Pulidora 2",
+    "kind": "pulido",
+    "w": 6,
+    "d": 2.6,
+    "t": 4,
+    "ops": 1,
+    "x": 30,
+    "z": 16,
+    "rot": 0
+   },
+   "reason": "junto a pintura"
+  },
+  {
+   "op": "connect",
+   "from": "pintura",
+   "to": "pulido-2",
+   "frac": 1.0,
+   "flow": "material"
+  },
+  {
+   "op": "update",
+   "id": "embobinado",
+   "set": {
+    "count": 10
+   }
+  }
+ ],
+ "rejected": [
+  {
+   "op": {
+    "op": "move",
+    "id": "columna-1",
+    "to": {
+     "x": 10,
+     "z": 10
+    }
+   },
+   "reason": "«Columna estructural» está fija: Columna estructural"
+  }
+ ],
+ "notes": "Se agrega la pulidora en el hueco libre más cercano a pintura."
+}

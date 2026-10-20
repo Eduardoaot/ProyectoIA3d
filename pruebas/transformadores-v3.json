@@ -1,0 +1,551 @@
+{
+  "schema_version": 3,
+  "name": "Transformadores del Bajío (v3)",
+  "industry": "Transformadores tipo seco",
+  "size": {
+    "w": 60,
+    "d": 30
+  },
+  "gates": [
+    {
+      "id": "A",
+      "x": 6,
+      "label": "Portón A"
+    },
+    {
+      "id": "B",
+      "x": 54,
+      "label": "Portón B"
+    }
+  ],
+  "receive_gate": "A",
+  "dispatch_gate": "B",
+  "stations": [
+    {
+      "id": "recepcion",
+      "name": "Recepción de lámina y alambre",
+      "kind": "recepcion",
+      "t": 0,
+      "ops": 0,
+      "t_source": "supuesto",
+      "w": 6,
+      "d": 4.5
+    },
+    {
+      "id": "corte",
+      "name": "Corte de lámina de silicio",
+      "kind": "corte",
+      "t": 30,
+      "ops": 1,
+      "t_source": "supuesto",
+      "w": 6,
+      "d": 4
+    },
+    {
+      "id": "nucleo",
+      "name": "Armado de núcleo",
+      "kind": "ensamble",
+      "t": 45,
+      "ops": 2,
+      "t_source": "supuesto",
+      "w": 4.5,
+      "d": 3
+    },
+    {
+      "id": "embobinado",
+      "name": "Embobinado",
+      "kind": "otro",
+      "t": 90,
+      "ops": 10,
+      "t_source": "usuario",
+      "w": 9.8,
+      "d": 5.7,
+      "count": 10,
+      "unit_w": 2.0,
+      "unit_d": 1.5,
+      "arrangement": "bloque",
+      "ops_per_unit": 1,
+      "t_cycle_min": [
+        60,
+        120
+      ]
+    },
+    {
+      "id": "ensamble",
+      "name": "Montaje de parte activa",
+      "kind": "ensamble",
+      "t": 60,
+      "ops": 4,
+      "t_source": "supuesto",
+      "w": 6.6,
+      "d": 5.6,
+      "count": 4,
+      "unit_w": 3,
+      "unit_d": 2.5,
+      "arrangement": "bloque",
+      "ops_per_unit": 1
+    },
+    {
+      "id": "impregnacion",
+      "name": "Impregnación de barniz",
+      "kind": "pintura",
+      "t": 20,
+      "ops": 1,
+      "t_source": "supuesto",
+      "w": 4,
+      "d": 3
+    },
+    {
+      "id": "horno",
+      "name": "Horno de secado",
+      "kind": "horno",
+      "t": 60,
+      "ops": 0,
+      "t_source": "supuesto",
+      "w": 6,
+      "d": 3,
+      "batch": {
+        "size": 6,
+        "t_min": 360
+      },
+      "locked": true,
+      "lock_reason": "Instalación de gas y extracción"
+    },
+    {
+      "id": "soldadura",
+      "name": "Soldadura de gabinetes",
+      "kind": "soldadura",
+      "t": 50,
+      "ops": 3,
+      "t_source": "supuesto",
+      "w": 10.2,
+      "d": 3.0,
+      "count": 3,
+      "unit_w": 3,
+      "unit_d": 3,
+      "arrangement": "fila",
+      "ops_per_unit": 1
+    },
+    {
+      "id": "pintura",
+      "name": "Pintura de gabinetes",
+      "kind": "pintura",
+      "t": 40,
+      "ops": 1,
+      "t_source": "supuesto",
+      "w": 5,
+      "d": 4.5
+    },
+    {
+      "id": "config",
+      "name": "Configuración y conexiones",
+      "kind": "mesa",
+      "t": 50,
+      "ops": 6,
+      "t_source": "estimado",
+      "w": 8.7,
+      "d": 4.6,
+      "count": 6,
+      "unit_w": 2.5,
+      "unit_d": 2,
+      "arrangement": "bloque",
+      "ops_per_unit": 1,
+      "t_cycle_min": [
+        40,
+        60
+      ]
+    },
+    {
+      "id": "pruebas_int",
+      "name": "Pruebas intermedias",
+      "kind": "inspeccion",
+      "t": 20,
+      "ops": 1,
+      "t_source": "supuesto",
+      "w": 4,
+      "d": 3
+    },
+    {
+      "id": "gabinete",
+      "name": "Montaje en gabinete",
+      "kind": "ensamble",
+      "t": 45,
+      "ops": 4,
+      "t_source": "supuesto",
+      "w": 6.6,
+      "d": 5.6,
+      "count": 4,
+      "unit_w": 3,
+      "unit_d": 2.5,
+      "arrangement": "bloque",
+      "ops_per_unit": 1
+    },
+    {
+      "id": "pruebas",
+      "name": "Pruebas finales",
+      "kind": "inspeccion",
+      "t": 35,
+      "ops": 1,
+      "t_source": "medido",
+      "w": 4,
+      "d": 3
+    },
+    {
+      "id": "despacho",
+      "name": "Despacho",
+      "kind": "despacho",
+      "t": 10,
+      "ops": 1,
+      "t_source": "supuesto",
+      "w": 6,
+      "d": 4.5
+    }
+  ],
+  "zones": [
+    {
+      "id": "oficina",
+      "name": "Oficina",
+      "kind": "oficina",
+      "x": 54,
+      "z": 4,
+      "w": 8,
+      "d": 6
+    },
+    {
+      "id": "banos",
+      "name": "Baños",
+      "kind": "banos",
+      "x": 47,
+      "z": 4,
+      "w": 4,
+      "d": 4
+    },
+    {
+      "id": "columna-1",
+      "name": "Columna estructural 1",
+      "kind": "bloqueado",
+      "x": 33,
+      "z": 18,
+      "w": 1,
+      "d": 1,
+      "locked": true,
+      "lock_reason": "Columna estructural"
+    },
+    {
+      "id": "columna-2",
+      "name": "Columna estructural 2",
+      "kind": "bloqueado",
+      "x": 22,
+      "z": 18,
+      "w": 1,
+      "d": 1,
+      "locked": true,
+      "lock_reason": "Columna estructural"
+    }
+  ],
+  "walls": [
+    {
+      "id": "muro-pintura",
+      "x1": 24,
+      "z1": 21,
+      "x2": 24,
+      "z2": 30
+    }
+  ],
+  "conveyors": [
+    {
+      "id": "banda-1",
+      "name": "Banda a gabinete",
+      "from": "pruebas_int",
+      "to": "gabinete",
+      "points": [
+        [
+          39,
+          14.5
+        ],
+        [
+          39,
+          21.2
+        ]
+      ],
+      "capacity_ppm": 2,
+      "speed_mpm": 6,
+      "locked": false
+    }
+  ],
+  "routes": [
+    {
+      "id": "r1",
+      "from": "recepcion",
+      "to": "corte",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r2",
+      "from": "corte",
+      "to": "nucleo",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r3",
+      "from": "recepcion",
+      "to": "embobinado",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r4",
+      "from": "nucleo",
+      "to": "ensamble",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r5",
+      "from": "embobinado",
+      "to": "ensamble",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r6",
+      "from": "ensamble",
+      "to": "impregnacion",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r7",
+      "from": "impregnacion",
+      "to": "horno",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r8",
+      "from": "horno",
+      "to": "config",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r9",
+      "from": "config",
+      "to": "pruebas_int",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r10",
+      "from": "pruebas_int",
+      "to": "gabinete",
+      "frac": 0.9,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": "banda-1"
+    },
+    {
+      "id": "r11",
+      "from": "pruebas_int",
+      "to": "config",
+      "frac": 0.07,
+      "flow": "material",
+      "is_return": true,
+      "conveyor": null
+    },
+    {
+      "id": "r12",
+      "from": "pruebas_int",
+      "to": "impregnacion",
+      "frac": 0.03,
+      "flow": "material",
+      "is_return": true,
+      "conveyor": null
+    },
+    {
+      "id": "r13",
+      "from": "recepcion",
+      "to": "soldadura",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r14",
+      "from": "soldadura",
+      "to": "pintura",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r15",
+      "from": "pintura",
+      "to": "gabinete",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r16",
+      "from": "gabinete",
+      "to": "pruebas",
+      "frac": 1.0,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r17",
+      "from": "pruebas",
+      "to": "despacho",
+      "frac": 0.95,
+      "flow": "material",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "r18",
+      "from": "pruebas",
+      "to": "gabinete",
+      "frac": 0.05,
+      "flow": "material",
+      "is_return": true,
+      "conveyor": null
+    },
+    {
+      "id": "p1",
+      "from": "horno",
+      "to": "pruebas_int",
+      "frac": 1.0,
+      "flow": "personas",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "v1",
+      "from": "recepcion",
+      "to": "soldadura",
+      "frac": 0.5,
+      "flow": "vehiculos",
+      "is_return": false,
+      "conveyor": null
+    },
+    {
+      "id": "c1",
+      "from": "pruebas",
+      "to": "despacho",
+      "frac": 1.0,
+      "flow": "carga",
+      "is_return": false,
+      "conveyor": null
+    }
+  ],
+  "use_assumptions": true,
+  "params": {
+    "demand": 8,
+    "shift_min": 480,
+    "efficiency": 0.8,
+    "batch": 1,
+    "speed": 25,
+    "load_min": 15,
+    "trucks": 2,
+    "truck_setup": 20,
+    "cv2": 1.0
+  },
+  "layout": {
+    "recepcion": [
+      5,
+      26,
+      0
+    ],
+    "corte": [
+      5,
+      18,
+      0
+    ],
+    "nucleo": [
+      5,
+      10.5,
+      0
+    ],
+    "embobinado": [
+      16,
+      4.5,
+      0
+    ],
+    "ensamble": [
+      16,
+      13,
+      0
+    ],
+    "impregnacion": [
+      27,
+      13,
+      0
+    ],
+    "horno": [
+      28,
+      4,
+      0
+    ],
+    "soldadura": [
+      17,
+      25,
+      0
+    ],
+    "pintura": [
+      29,
+      25,
+      0
+    ],
+    "config": [
+      39,
+      5,
+      0
+    ],
+    "pruebas_int": [
+      39,
+      13,
+      0
+    ],
+    "gabinete": [
+      41,
+      24,
+      0
+    ],
+    "pruebas": [
+      51,
+      14,
+      0
+    ],
+    "despacho": [
+      53,
+      25.5,
+      0
+    ]
+  }
+}

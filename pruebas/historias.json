@@ -1,0 +1,12 @@
+[
+    {"id":"vidrio-detallado","nota":"Vidrio, con cifras y lenguaje distinto al del ejemplo",
+    "texto":"Mi tío manejaba una vidriería en Cali que hacía espejos de baño y puertas de ducha. Llegaban las láminas en camión, las guardaban en caballetes, las cortaban en una mesa grande, les hacían el bisel en una máquina y luego las lavaban. Trabajaban 9 personas y despachaban unas 40 piezas al día en 2 camionetas. Las ventas y la facturación las llevaba mi tía en una oficinita al fondo."},
+    {"id":"aluminio-ventanas","nota":"Aluminio y vidrio: procesos que el código no conoce (perfilería, ensamble)",
+    "texto":"Teníamos una fábrica de ventanas de aluminio. Se cortaban los perfiles con una sierra, se hacían los huecos en una troqueladora, se ensamblaban los marcos en unas mesas y al final se le ponía el vidrio y se embalaba. Éramos 15 trabajadores y salían como 25 ventanas diarias. Había dos entregas al día."},
+    {"id":"carpinteria","nota":"Otro rubro: carpintería, casi nada coincide con el modelo",
+    "texto":"Mi abuelo tenía una carpintería de muebles de cocina. Recibían las tablas, las cortaban con una escuadradora, las lijaban, las pintaban en una cabina y las armaban. Eran 6 operarios. Salían unos 8 muebles por semana y los entregaba él mismo en su camioneta."},
+    {"id":"corta","nota":"Historia muy corta y vaga",
+    "texto":"Mi papá tenía un taller de vidrios. Trabajaban como cinco personas."},
+    {"id":"desordenada","nota":"Larga, coloquial, con problemas contados y números en letra",
+    "texto":"Uy, ese taller era un caos. Entraba el vidrio por el portón de la derecha, se cortaba en la mesa, y luego había que cruzar todo el taller con el carro para pulir porque la pulidora quedó al otro lado. El sandblasting hacía un polvero que ensuciaba lo empacado. Éramos 12 operarios más dos señoras en la oficina. En un buen día sacábamos 90 piezas y se iban en 4 rutas. El portón de atrás siempre estaba tapado con retazos y se perdía un montón de tiempo buscando la pieza correcta entre todo lo terminado."}
+]
