@@ -6,7 +6,7 @@ La vigente de cada `key` es la que ninguna otra reemplazó. facts() usa solo las
 
 from __future__ import annotations
 
-SEGMENTS = ("negocio", "operaciones", "tiempos", "maquinas", "flujo", "personal", "calidad", "restricciones", "referencias")
+SEGMENTS = ("negocio", "operaciones", "tiempos", "maquinas", "flujo", "personal", "calidad", "restricciones", "estudios", "referencias")
 
 
 def entries(context) -> list[dict]:

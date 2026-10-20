@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { loadStored, saveStored } from './migrate'
+import { addProject, clearProjectContext, listProjects, loadLibrary, saveLibrary, selectProject, updateProject } from './projectLibrary'
 
 export const EMPTY = {
     text: '',
@@ -34,28 +34,24 @@ export function blankPlant(params = {}) {
     }
 }
 
-/* Se guarda en cauce-proyecto-v3; la primera vez se copia y migra desde v2, que no se toca. */
-function load() {
-    try {
-        const stored = loadStored(localStorage)
-        return stored ? { ...EMPTY, ...stored } : EMPTY
-    } catch {
-        return EMPTY
-    }
-}
-
 export function useProject() {
-    const [p, setP] = useState(load)
+    const [library, setLibrary] = useState(() => loadLibrary(localStorage))
+    const activeId = library.activeId
+    const p = { ...EMPTY, ...library.projects[activeId].data }
 
     useEffect(() => {
-        const t = setTimeout(() => saveStored(localStorage, p), 300)
-        return () => clearTimeout(t)
-    }, [p])
+        saveLibrary(localStorage, library)
+    }, [library])
 
-    const update = (patch) => setP((prev) => ({ ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) }))
-    const reset = () => setP(EMPTY)
+    // Cada callback queda ligado al proyecto de su render. Una respuesta asíncrona de
+    // otro proyecto no puede modificar el que el usuario acaba de abrir.
+    const update = (patch) => setLibrary((prev) => updateProject(prev, activeId, patch))
+    const reset = () => setLibrary((prev) => updateProject(prev, activeId, { ...EMPTY, name: prev.projects[activeId]?.name }))
+    const create = (name) => setLibrary((prev) => addProject(prev, name, EMPTY))
+    const select = (id) => setLibrary((prev) => selectProject(prev, id))
+    const clearContext = () => setLibrary((prev) => clearProjectContext(prev, activeId))
 
-    return [p, update, reset]
+    return [p, update, reset, { activeId, projects: listProjects(library), create, select, clearContext }]
 }
 
 export function customOf(project) {

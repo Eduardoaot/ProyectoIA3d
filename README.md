@@ -137,7 +137,7 @@ Abre <http://localhost:5173>. Vite redirige todas las llamadas a `/api` hacia `h
 
 ### Dónde se guardan los datos
 
-No hay base de datos. Todo el proyecto (historia, plano, análisis, rediseño, misiones) se guarda en el **localStorage del navegador** con la clave `cauce-proyecto-v2`. Borrar los datos del sitio o usar otra computadora empieza de cero. La foto aérea **no** se guarda: vive solo mientras la pestaña está abierta.
+No hay base de datos de proyectos en el servidor. **Mis proyectos** guarda varios espacios independientes en el navegador con la clave `cauce-proyectos-v1`; el proyecto activo se refleja en `cauce-proyecto-v3` por compatibilidad. Los documentos originales se guardan en IndexedDB. Borrar los datos del sitio o usar otra computadora no traslada estos proyectos ni sus adjuntos. La foto aérea **no** se guarda: vive solo mientras la pestaña está abierta.
 
 ---
 
@@ -359,6 +359,7 @@ Crea la app FastAPI, habilita CORS abierto (es una app local) e instancia las do
 | GET | `/api/catalog` | — | Tipos de estación, tipos de zona, supuestos, listas de áreas sucias y limpias | Editor y supuestos |
 | GET | `/api/example` | — | La planta de ejemplo (taller de vidrio) | Botón "Cargar el taller de vidrio" |
 | POST | `/api/story` | `{ text }` | `plant`, `assumptions`, `source` (ia/reglas), `notes`, `ai_assumptions`, `rules`, `error`, `extracted` | Leer la historia |
+| POST | `/api/context/organize` | `{ text }` (1–8000 caracteres) | `proposals`, `master` (`draft`), `errors` por especialista | Diez especialistas por tema y un consolidador preparan contexto revisable; requiere proveedor listo |
 | POST | `/api/routes` | `{ plant, positions }` | `legs`, `piece_m`, `blocked_legs`, `avoid_hits` | Recorridos en vivo del editor (sin supuestos) |
 | POST | `/api/evaluate` | `{ plant, positions, rebalance }` | Todas las métricas + `ops_moves` | Métricas de "Tu rediseño" |
 | GET | `/api/capabilities` | — | `{ schema_version: 3, features, vision }` | El frontend muestra solo lo que el backend anuncia |
@@ -370,7 +371,7 @@ Crea la app FastAPI, habilita CORS abierto (es una app local) e instancia las do
 | POST | `/api/simulate` | `{ plant, alternative?, replicas?, seed?, positions? }` | `{ seed, replicas, kpis, bottleneck, notes }` con P10, mediana y P90 | Simulación con variabilidad |
 | POST | `/api/references/read` | `{ image, note }` | Descripción de la imagen, o 422 si el proveedor no tiene visión | Referencias con imagen |
 
-`features` hoy: `report_validation`, `segmented_context`, `count`, `locked`, `plan_ops`, `weights`, `flows`, `conveyors`, `simulate`. El contrato completo está en [coordinacion/CONTRATO-v3.md](coordinacion/CONTRATO-v3.md).
+`features` hoy: `report_validation`, `segmented_context`, `count`, `locked`, `plan_ops`, `weights`, `flows`, `conveyors`, `simulate`, `context_agents`. El contrato completo está en [coordinacion/CONTRATO-v3.md](coordinacion/CONTRATO-v3.md). El JSON maestro de `/api/context/organize` es un borrador que no modifica el plano; cada propuesta requiere revisión. Si la IA de contexto no está lista, la interfaz usa la clasificación local por palabras clave e informa esa limitación.
 
 **Validación del informe (`cauce/validate.py`).** Cada oración del informe y del chat se revisa antes de mostrarse: si cita una cifra que no está en `facts()` (con tolerancia de redondeo) o elogia una alternativa que el motor muestra peor que hoy, se descarta y queda en `validation.discarded`.
 
@@ -561,9 +562,10 @@ No hay librería de gráficos ni de estado: los gráficos son SVG hechos a mano 
 
 ### 9.3 `project.js`: el estado guardado
 
-Un solo objeto con: `text` (historia), `info` (lo que entendió la lectura), `draft` (planta en edición), `plant` (planta guardada), `analysis`, `redesign` (`choice`, `custom`, `metrics`), `printed`, `game` (misiones y cuáles se cumplieron) y `maxStep`.
+Cada proyecto tiene su propio objeto con `text` (historia), `info` (lo que entendió la lectura), `draft` (planta en edición), `plant` (planta guardada), `analysis`, `redesign`, `context`, `contextWorkspace`, `printed`, `game` y `maxStep`.
 
-- `useProject()` lo carga de localStorage y lo guarda 300 ms después de cada cambio (si no hay espacio o es modo privado, sigue sin guardar).
+- `useProject()` administra la colección local, migra el proyecto anterior sin borrarlo y mantiene aisladas las respuestas asíncronas de cada proyecto. Si el almacenamiento está bloqueado o lleno, se sigue trabajando en memoria sin persistencia.
+- En **Mis proyectos** se puede crear o abrir un proyecto y borrar solo el contexto del activo. Esta última operación conserva su plano y borra también los originales de sus adjuntos en IndexedDB.
 - `blankPlant()` crea una bodega vacía de 30 × 16 m con dos portones.
 - `customOf()` y `chosen()` resuelven qué rediseño está elegido (una alternativa o "Tu rediseño"), y mantienen compatibilidad con proyectos viejos que guardaban solo posiciones.
 
@@ -904,7 +906,7 @@ npm run build
 1. **Velocidad de la IA local**: `llama3.1:8b` nombra mejor las cosas que el modelo de 3B, pero sin tarjeta de video tarda unos 2 minutos por historia. Un modelo en la nube lo haría en segundos; basta cambiar `CAUCE_EXTRACT_MODEL` y el proveedor.
 2. **Foto aérea manual**: se sube a mano para comparar; no se genera ni se lee con visión para medir máquinas.
 3. **Tamaño del bundle**: ~1 MB porque three.js no está dividido en partes que carguen bajo demanda.
-4. **Sin persistencia en servidor**: el proyecto vive en un navegador; no hay cuentas ni varias plantas por usuario.
+4. **Sin persistencia en servidor**: pueden coexistir varias plantas en un navegador, pero aún no hay cuentas ni sincronización entre computadoras.
 5. **Paredes y portones**: los portones solo van sobre el muro de la calle; las alternativas automáticas no proponen obra (eso se hace en "Tu rediseño").
 6. **Supuestos**: con datos supuestos, los resultados son un orden de magnitud. Con tiempos medidos el método es el mismo y los números se vuelven confiables.
 

@@ -5,8 +5,6 @@ import PlanEditor from '../editor/PlanEditor'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 import { ask } from '../components/Dialog'
-import ContextPanel from '../components/ContextPanel'
-import References from '../components/References'
 
 /* Nombre editable en el mismo chip: clic para escribir, Enter o salir para guardar. */
 function ChipName({ value, onCommit }) {
@@ -154,7 +152,7 @@ function SpatialNote({ spatial }) {
     )
 }
 
-export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, context, setContext }) {
+export default function Story({ text, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2 }) {
     const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
@@ -173,24 +171,28 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                     <b>Paso 1 de 6</b>
                     <span>Detalles y plano</span>
                 </span>
-                <RevealTitle text="Describe cómo es tu planta." />
-                <p className="lede">Describe tu planta y proceso. La IA arma un primer plano. Luego lo corriges tú: mueve máquinas, dibuja rutas, paredes y zonas hasta que quede como realmente es tu espacio.</p>
+                <RevealTitle text="Primero, entendamos tu planta." />
+                <p className="lede">Reúne lo que sabes de tu operación, revisa los datos y construye tu plano. Puedes empezar con una descripción o dibujarlo tú mismo.</p>
             </header>
 
             <div className="split">
                 <Appear className="stack">
-                    <div className="panel">
-                        <div className="story-sheet" style={{ border: 0 }}>
-                            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Tengo mi planta productora…" aria-label="Detalles de tu planta" style={{ minHeight: 260 }} />
-                        </div>
-                        <div className="story-bar" style={{ justifyContent: 'flex-start' }}>
+                    <div className="context-start-card">
+                        <span className="context-eyebrow">01 / EL PUNTO DE PARTIDA</span>
+                        <h2>Cuéntanos sobre<br />tu planta.</h2>
+                        <p>Tu proceso, tus documentos y lo que quieres mejorar. Todo en un mismo lugar.</p>
+                        {text.trim() && <blockquote className="context-story-preview">{text}</blockquote>}
+                        <div className="story-bar">
+                            <Btn variant="ghost" onClick={() => onOpenContext('inicio')}>
+                                {empty ? 'Empezar con mi contexto' : 'Continuar con mi contexto'}
+                            </Btn>
                             <Btn
                                 onClick={async () => {
                                     if (await onRead()) scrollToEditor()
                                 }}
                                 disabled={reading || empty}
                             >
-                                {reading ? 'Analizando…' : 'Analizar'}
+                                {reading ? 'Analizando…' : 'Crear plano desde mi descripción'}
                             </Btn>
                         </div>
                     </div>
@@ -261,15 +263,12 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                         }
                     />
 
-                    {setContext && (
-                        <div style={{ marginTop: 24 }}>
-                            <ContextPanel context={context} setContext={setContext} />
-                        </div>
-                    )}
-
-                    {setContext && (
-                        <div style={{ marginTop: 24 }}>
-                            <References context={context} setContext={setContext} />
+                    {context2 && (
+                        <div className="context-review-card">
+                            <div><h3>Así entendimos tu planta</h3><p className="small">{context2.confirmed ? 'Confirmaste esta versión del plano, contexto y prioridades.' : 'Opcional: revisa el plano junto con los datos y las prioridades antes de analizar.'}</p></div>
+                            <Btn variant="ghost" size="small" onClick={() => onOpenContext('revision')}>
+                                {context2.confirmed ? 'Ver revisión' : 'Revisar y confirmar'}
+                            </Btn>
                         </div>
                     )}
 

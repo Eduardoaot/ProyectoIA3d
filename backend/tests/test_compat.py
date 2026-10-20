@@ -105,6 +105,7 @@ def test_capabilities_coherente(client):
         "flows": lambda: __import__("cauce.flows"),
         "conveyors": lambda: __import__("cauce.flows"),
         "simulate": lambda: "/api/simulate" in routes or (_ for _ in ()).throw(AssertionError("falta /api/simulate")),
+        "context_agents": lambda: "/api/context/organize" in routes or (_ for _ in ()).throw(AssertionError("falta /api/context/organize")),
     }
     for f in body["features"]:
         assert f in needs, f"función desconocida en capabilities: {f}"
