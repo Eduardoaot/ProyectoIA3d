@@ -1,0 +1,8 @@
+# Backend de Cauce (producción).
+fastapi>=0.115
+uvicorn>=0.30
+httpx>=0.27
+pydantic>=2.7
+
+# Simulación de eventos discretos (criterios §6): puro Python, sin dependencias.
+simpy>=4.1

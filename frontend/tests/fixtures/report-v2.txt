@@ -1,0 +1,5 @@
+Hoy una pieza recorre 163 m dentro de la planta. La Línea recta es más eficiente y conviene aplicarla. Con ella se ahorran 47 m por pieza.
+
+Acciones para esta semana:
+1. Marcar en el piso los nuevos lugares antes de mover nada.
+2. Mover primero las estaciones que más recorrido ahorran.

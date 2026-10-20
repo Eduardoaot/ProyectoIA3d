@@ -1,0 +1,340 @@
+{
+ "messages": [
+  {
+   "role": "user",
+   "content": "¿Qué alternativa conviene?"
+  }
+ ],
+ "context": {
+  "plant": {
+   "name": "Transformadores del Bajío",
+   "industry": "Transformadores de distribución",
+   "size": {
+    "w": 48,
+    "d": 24
+   },
+   "gates": [
+    {
+     "id": "A",
+     "x": 6,
+     "label": "Portón A"
+    },
+    {
+     "id": "B",
+     "x": 41,
+     "label": "Portón B"
+    }
+   ],
+   "receive_gate": "A",
+   "dispatch_gate": "B",
+   "stations": [
+    {
+     "id": "recepcion",
+     "name": "Recepción de lámina y alambre",
+     "kind": "recepcion",
+     "w": 6,
+     "d": 4.5,
+     "t": 0,
+     "ops": 0,
+     "t_source": "supuesto"
+    },
+    {
+     "id": "corte",
+     "name": "Corte de lámina de silicio",
+     "kind": "corte",
+     "w": 6,
+     "d": 4,
+     "t": 30,
+     "ops": 1,
+     "t_source": "supuesto"
+    },
+    {
+     "id": "nucleo",
+     "name": "Armado de núcleo",
+     "kind": "ensamble",
+     "w": 4.5,
+     "d": 3,
+     "t": 45,
+     "ops": 2,
+     "t_source": "supuesto"
+    },
+    {
+     "id": "embobinado",
+     "name": "Embobinado",
+     "kind": "otro",
+     "w": 8,
+     "d": 4,
+     "t": 120,
+     "ops": 6,
+     "t_source": "supuesto"
+    },
+    {
+     "id": "ensamble",
+     "name": "Ensamble de parte activa",
+     "kind": "ensamble",
+     "w": 6,
+     "d": 4,
+     "t": 60,
+     "ops": 2,
+     "t_source": "supuesto"
+    },
+    {
+     "id": "horno",
+     "name": "Horno de secado",
+     "kind": "horno",
+     "w": 6,
+     "d": 3,
+     "t": 30,
+     "ops": 0,
+     "t_source": "supuesto"
+    },
+    {
+     "id": "soldadura",
+     "name": "Soldadura de tanques",
+     "kind": "soldadura",
+     "w": 4,
+     "d": 4,
+     "t": 50,
+     "ops": 2,
+     "t_source": "supuesto"
+    },
+    {
+     "id": "pintura",
+     "name": "Pintura de tanques",
+     "kind": "pintura",
+     "w": 5,
+     "d": 4.5,
+     "t": 40,
+     "ops": 1,
+     "t_source": "supuesto"
+    },
+    {
+     "id": "config",
+     "name": "Encubado y llenado de aceite",
+     "kind": "mezcla",
+     "w": 5,
+     "d": 4,
+     "t": 50,
+     "ops": 2,
+     "t_source": "supuesto"
+    },
+    {
+     "id": "pruebas",
+     "name": "Pruebas eléctricas",
+     "kind": "inspeccion",
+     "w": 4,
+     "d": 3,
+     "t": 35,
+     "ops": 1,
+     "t_source": "supuesto"
+    },
+    {
+     "id": "despacho",
+     "name": "Despacho",
+     "kind": "despacho",
+     "w": 6,
+     "d": 4.5,
+     "t": 10,
+     "ops": 1,
+     "t_source": "supuesto"
+    }
+   ],
+   "zones": [
+    {
+     "id": "oficina",
+     "name": "Oficina",
+     "kind": "oficina",
+     "x": 42,
+     "z": 4,
+     "w": 8,
+     "d": 6
+    },
+    {
+     "id": "banos",
+     "name": "Baños",
+     "kind": "banos",
+     "x": 33,
+     "z": 4,
+     "w": 4,
+     "d": 4
+    },
+    {
+     "id": "columna-1",
+     "name": "Columna estructural",
+     "kind": "bloqueado",
+     "x": 24,
+     "z": 12,
+     "w": 1,
+     "d": 1
+    }
+   ],
+   "walls": [
+    {
+     "id": "muro-pintura",
+     "x1": 22,
+     "z1": 15,
+     "x2": 22,
+     "z2": 23
+    }
+   ],
+   "routes": [
+    {
+     "id": "r1",
+     "from": "recepcion",
+     "to": "corte",
+     "frac": 1.0
+    },
+    {
+     "id": "r2",
+     "from": "corte",
+     "to": "nucleo",
+     "frac": 1.0
+    },
+    {
+     "id": "r3",
+     "from": "recepcion",
+     "to": "embobinado",
+     "frac": 1.0
+    },
+    {
+     "id": "r4",
+     "from": "nucleo",
+     "to": "ensamble",
+     "frac": 1.0
+    },
+    {
+     "id": "r5",
+     "from": "embobinado",
+     "to": "ensamble",
+     "frac": 1.0
+    },
+    {
+     "id": "r6",
+     "from": "ensamble",
+     "to": "horno",
+     "frac": 1.0
+    },
+    {
+     "id": "r7",
+     "from": "recepcion",
+     "to": "soldadura",
+     "frac": 1.0
+    },
+    {
+     "id": "r8",
+     "from": "soldadura",
+     "to": "pintura",
+     "frac": 1.0
+    },
+    {
+     "id": "r9",
+     "from": "horno",
+     "to": "config",
+     "frac": 1.0
+    },
+    {
+     "id": "r10",
+     "from": "pintura",
+     "to": "config",
+     "frac": 1.0
+    },
+    {
+     "id": "r11",
+     "from": "config",
+     "to": "pruebas",
+     "frac": 1.0
+    },
+    {
+     "id": "r12",
+     "from": "pruebas",
+     "to": "despacho",
+     "frac": 0.95
+    },
+    {
+     "id": "r13",
+     "from": "pruebas",
+     "to": "config",
+     "frac": 0.05
+    }
+   ],
+   "use_assumptions": true,
+   "params": {
+    "demand": 8,
+    "shift_min": 480,
+    "efficiency": 0.8,
+    "batch": 1,
+    "speed": 25,
+    "load_min": 15,
+    "trucks": 2,
+    "truck_setup": 20,
+    "cv2": 1.0
+   }
+  },
+  "analysis": {
+   "current": {
+    "piece_m": 163.0,
+    "daily_m": 1304.0,
+    "capacity": 9.3,
+    "lead_h": 17.51,
+    "loading_min": 163.0,
+    "bottleneck": "pintura",
+    "bottleneck_util": 0.8583,
+    "avoid_hits": [],
+    "lead_parts": {
+     "proceso": 469.5,
+     "cola": 574.7,
+     "lote": 0.0,
+     "transporte": 6.5
+    }
+   },
+   "alternatives": [
+    {
+     "id": "u",
+     "name": "Flujo en U",
+     "metrics": {
+      "piece_m": 199.5
+     }
+    },
+    {
+     "id": "i",
+     "name": "Línea recta",
+     "metrics": {
+      "piece_m": 232.4
+     }
+    },
+    {
+     "id": "keep",
+     "name": "Reordenar en su lugar",
+     "metrics": {
+      "piece_m": 141.0
+     }
+    }
+   ]
+  },
+  "redesign": {
+   "name": "Línea recta",
+   "metrics": {
+    "piece_m": 232.4,
+    "daily_m": 1860.0,
+    "capacity": 11.8,
+    "lead_h": 12.57,
+    "loading_min": 162.0,
+    "bottleneck": "horno",
+    "bottleneck_util": 0.6808,
+    "avoid_hits": [
+     {
+      "a": "horno",
+      "b": "oficina",
+      "text": "Horno de secado queda junto a Oficina"
+     }
+    ],
+    "lead_parts": {
+     "proceso": 469.5,
+     "cola": 275.6,
+     "lote": 0.0,
+     "transporte": 9.3
+    }
+   }
+  }
+ }
+}
