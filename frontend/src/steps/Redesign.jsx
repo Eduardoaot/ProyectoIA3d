@@ -134,7 +134,7 @@ function worksDiff(base, other) {
 	return n
 }
 
-export default function Redesign({ plant, analysis, weights, prioritiesEnabled = true, onOpenContext, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, onNext }) {
+export default function Redesign({ analysisContext, canOptimize = true, plant, analysis, weights, prioritiesEnabled = true, onOpenContext, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, onNext }) {
 	const [picking, setPicking] = useState(false)
 	const cur = analysis.current
 	const alts = analysis.alternatives
@@ -191,10 +191,11 @@ export default function Redesign({ plant, analysis, weights, prioritiesEnabled =
 
 	// La opción con IA se pide solo cuando el usuario la quiere (tarda uno o dos minutos).
 	const askCompact = async () => {
+		if (!canOptimize) { setCompact({ loading: false, error: 'Revisa y confirma el plano y el contexto antes de optimizar.' }); return }
 		setCompact({ loading: true, error: null })
 		try {
 			const done = startWait('compact')
-			const alt = await api.compact(plant)
+			const alt = await api.compact(plant, analysisContext, canOptimize)
 			done()
 			onAddAlternative(alt)
 			setCompact({ loading: false, error: null })
@@ -307,7 +308,7 @@ export default function Redesign({ plant, analysis, weights, prioritiesEnabled =
 								Aplicar
 							</Btn>
 						) : (
-							<Btn size="small" onClick={askCompact} disabled={compact.loading}>
+							<Btn size="small" onClick={askCompact} disabled={compact.loading || !canOptimize}>
 								{compact.loading ? 'Calculando…' : 'Calcular con IA'}
 							</Btn>
 						)

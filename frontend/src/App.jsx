@@ -142,15 +142,30 @@ export default function App() {
         }, [update],
     )
 
+    const verifyDraft = async () => {
+        try {
+            const verification = await api.verifyMaster(project.draft, acceptedContext(project))
+            update({ info: { ...project.info, verification, verificationDraftKey: JSON.stringify(project.draft) } })
+        } catch (error) { setError(error.message) }
+    }
+
     const read = async () => {
+        const available = await api.getCapabilities()
+        const accepted = acceptedContext(project).master
+        if (has(available, 'context_master') && (accepted?.status !== 'accepted' || accepted.pending_manual_ids?.length || accepted.pending_source_policy)) {
+            openContext('inicio')
+            notify('Organiza y confirma el contexto antes de construir el plano.')
+            return false
+        }
         setReading(true)
         setError(null)
 
         try {
             const done = startWait('story')
-            const r = await api.story(project.text, has(caps, 'context_workspace') ? acceptedContext(project) : undefined)
+            const r = await api.story(project.text, has(available, 'context_workspace') ? acceptedContext(project) : undefined)
             done()
-            update({ draft: upgradePlant(r.plant), info: { source: r.source, notes: r.notes, error: r.error, spatial: r.spatial } })
+            const built = upgradePlant(r.plant)
+            update({ draft: built, info: { source: r.source, notes: r.notes, error: r.error, spatial: r.spatial, verification: r.verification, verificationDraftKey: JSON.stringify(built) } })
             setReading(false)
 
             return true
@@ -169,7 +184,7 @@ export default function App() {
         setError(null)
 
         try {
-            const out = await api.analyze(draft, { context: has(caps, 'context_workspace') ? acceptedContext(project) : contextPayload(project.context, project.text, segmented), ...(has(caps, 'weights') && project.weights && project.prioritiesEnabled !== false ? { weights: project.weights } : {}) })
+            const out = await api.analyze(draft, { reviewed: true, context: has(caps, 'context_workspace') ? acceptedContext(project) : contextPayload(project.context, project.text, segmented), ...(has(caps, 'weights') && project.weights && project.prioritiesEnabled !== false ? { weights: project.weights } : {}) })
             update((p) => ({
                 plant: draft,
                 analysis: out,
@@ -245,6 +260,8 @@ export default function App() {
             reading={reading}
             error={error}
             onRead={read}
+            needsContext={has(caps, 'context_master') && acceptedContext(project).master?.status !== 'accepted'}
+            onVerify={has(caps, 'context_master') && acceptedContext(project).master?.status === 'accepted' ? verifyDraft : undefined}
             onBlank={blank}
             onOpenContext={openContext}
             pending={(project.contextWorkspace?.proposals || []).filter((proposal) => proposal.status === 'pending').length}
@@ -255,7 +272,7 @@ export default function App() {
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
         if (step === 2) return <Diagnosis plant={plant} analysis={analysis} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} weights={project.prioritiesEnabled === false ? undefined : project.weights} prioritiesEnabled={project.prioritiesEnabled !== false} onOpenContext={openContext} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} onNext={() => go(4)} />
+        if (step === 3) return <Redesign canOptimize={!stale && confirmed} analysisContext={workspaceEnabled ? context.context : null} plant={plant} analysis={analysis} weights={project.prioritiesEnabled === false ? undefined : project.weights} prioritiesEnabled={project.prioritiesEnabled !== false} onOpenContext={openContext} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} onNext={() => go(4)} />
         if (step === 4) return <Report studyContext={workspaceEnabled ? context.context : null} plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
         return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onSave={() => openContext('guardar')} onRestart={restart} />
     })()

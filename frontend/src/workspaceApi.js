@@ -34,5 +34,12 @@ export function acceptedMaster(project) {
         const changed = String(entry.value) !== String(fact.value)
         return { ...fact, value: entry.value, topic: entry.segment || fact.topic, status: 'confirmed', ...(changed ? { scope: 'uncertain', needs_reinterpretation: true } : {}) }
     })
-    return { ...draft, facts, status: facts.length ? 'accepted' : 'unaccepted', draft_revision: draft.revision }
+    const covered = new Set(draft.sources.map((source) => source.entry_id))
+    const linked = new Set(draft.facts.map((fact) => fact.id))
+    const pending_manual_ids = current(project.context).filter((entry) => (entry.segment !== 'referencias' || entry.interpreted) && !linked.has(entry.evidence?.proposal_id) && !covered.has(entry.id)).map((entry) => entry.id)
+    const states = new Map(project.contextWorkspace.proposals.map((proposal) => [proposal.id, proposal.status]))
+    const questions = draft.questions.map((question) => question.fact_ids?.some((id) => accepted.has(id)) && question.fact_ids.every((id) => accepted.has(id) || ['discarded', 'confirmed'].includes(states.get(id))) ? { ...question, status: 'resolved_by_user' } : question)
+    const policy = project.contextWorkspace.source_policy
+    const pending_source_policy = !!policy && (policy.default !== draft.source_policy?.default || policy.images !== draft.source_policy?.images || !!policy.manual_image_review !== !!draft.source_policy?.manual_image_review)
+    return { ...draft, facts, questions, pending_manual_ids, pending_source_policy, status: facts.length ? 'accepted' : 'unaccepted', draft_revision: draft.revision }
 }

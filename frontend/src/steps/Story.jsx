@@ -1,3 +1,4 @@
+import ConstructionReview from '../components/context/ConstructionReview'
 import { useRef, useState } from 'react'
 import { fmt } from '../api'
 import WaitPanel from '../components/WaitPanel'
@@ -152,7 +153,7 @@ function SpatialNote({ spatial }) {
     )
 }
 
-export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
+export default function Story({ needsContext, onVerify, text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
     const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
@@ -189,7 +190,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                                 }}
                                 disabled={reading || empty}
                             >
-                                {reading ? 'Analizando…' : 'Crear plano desde mi descripción'}
+                                {reading ? 'Analizando…' : needsContext ? 'Organizar el contexto primero' : 'Construir el plano desde mi contexto'}
                             </Btn>
                         </div>
                     </div>
@@ -256,6 +257,8 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                 </div>
             </div>
 
+            {info?.verification && <ConstructionReview report={info.verification} stale={info.verificationDraftKey !== JSON.stringify(draft)} />}
+            {draft && onVerify && <button className="btn btn--ghost btn--small" type="button" onClick={onVerify}>Comprobar el plano contra el contexto</button>}
             {draft && (
                 <div ref={editorRef} style={{ marginTop: 48, scrollMarginTop: 24 }}>
                     <div className="chart-head" style={{ marginBottom: 16 }}>

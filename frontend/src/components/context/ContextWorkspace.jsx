@@ -7,20 +7,17 @@ import useCaps from '../../useCaps'
 import { CRITERIA, DEFAULT_WEIGHTS, normalizeWeights, validWeights } from '../../weights'
 import { ask } from '../Dialog'
 import References from '../References'
-import WaitPanel from '../WaitPanel'
-import { startWait } from '../wait'
 import FlowMark from '../../brand/FlowMark'
 import WorkStudies from './WorkStudies'
 import useWorkspaceBackend from './useWorkspaceBackend'
 import { BackendTools, WorkInput, OperatorPanel, ReviewAssistance } from './BackendPanels'
-import MasterReview from './MasterReview'
+import MasterReview, { JobStatus } from './MasterReview'
 import './context-workspace.css'
 
 const EMPTY_WORKSPACE = { proposals: [], attachments: [], activities: [] }
 const SOURCE_LABELS = { usuario: 'Proporcionado por una persona', medido: 'Medición', estimado: 'Estimación', supuesto: 'Supuesto' }
 const emptyForm = () => ({ label: '', value: '', unit: '', source: 'usuario', confidence: 'media', owner: '', supersedes: null })
 const rawValue = (value) => Array.isArray(value) ? value.join(' a ') : String(value ?? '')
-const topicLabel = (id) => TOPICS.find((topic) => topic.id === id)?.label || id
 const ready = (proposal) => !!proposal.label?.trim() && !!rawValue(proposal.value).trim()
 const sizeLabel = (bytes) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 
@@ -48,38 +45,11 @@ function Proposal({ proposal, onChange, onConfirm, onDiscard }) {
                     <label className="cw-field cw-field--value">Lo que entendimos<textarea rows="1" value={rawValue(proposal.value)} onChange={(event) => onChange({ value: event.target.value })} /></label>
                 </div>
                 <div className="cw-proposal-actions">
-                    <button type="button" className="cw-button cw-button--small" onClick={onConfirm} disabled={!ready(proposal)}><Check />Confirmar</button>
+                    <button type="button" className="cw-button cw-button--small" onClick={onConfirm} disabled={!ready(proposal)}><Check />Confirmar dato</button>
                     <button type="button" className="cw-button cw-button--small cw-button--outline" onClick={onDiscard}><Cross />Descartar</button>
                 </div>
             </div>
         </article>
-    )
-}
-
-function ProposalList({ proposals, kicker, title, onChange, onConfirm, onDiscard, onConfirmAll, onDiscardAll }) {
-    const valid = proposals.filter(ready).length
-    return (
-        <section className="cw-section cw-proposal-section">
-            <div className="cw-section-line cw-proposal-head">
-                <div><span className="cw-kicker">{kicker}</span><h2>{title} <span className="cw-count">{proposals.length}</span></h2><p className="cw-muted">Corrige el tema, el nombre o el valor si hace falta. Solo lo que confirmes pasa a tus datos.</p></div>
-                {proposals.length > 1 && <div className="cw-proposal-bulk"><button type="button" className="cw-text-button" onClick={onDiscardAll}>Descartar todos</button><button type="button" className="cw-button" disabled={!valid} onClick={onConfirmAll}><Check />Confirmar todos ({valid})</button></div>}
-            </div>
-            <div className="cw-proposals">{proposals.map((proposal) => <Proposal key={proposal.id} proposal={proposal} onChange={(updates) => onChange(proposal.id, updates)} onConfirm={() => onConfirm(proposal)} onDiscard={() => onDiscard(proposal)} />)}</div>
-        </section>
-    )
-}
-
-function Reviewed({ proposals, onRestore }) {
-    const confirmedCount = proposals.filter((proposal) => proposal.status === 'confirmed').length
-    return (
-        <details className="cw-processed">
-            <summary><span className="cw-processed-title">Propuestas revisadas</span><span className="cw-processed-counts"><span>{confirmedCount} confirmadas</span><span>{proposals.length - confirmedCount} descartadas</span></span><span className="cw-processed-toggle" aria-hidden="true" /></summary>
-            <ul className="cw-processed-list">{proposals.map((proposal) => <li key={proposal.id} className={proposal.status === 'confirmed' ? '' : 'is-discarded'}>
-                <span className={`cw-status ${proposal.status === 'confirmed' ? '' : 'cw-status--off'}`}>{proposal.status === 'confirmed' ? <><Check />Confirmada</> : <><Cross />Descartada</>}</span>
-                <div><strong>{proposal.label}</strong><span className="cw-processed-topic">{topicLabel(proposal.topic)}</span><p title={proposal.excerpt}>«{proposal.excerpt}»</p></div>
-                {proposal.status !== 'confirmed' ? <button type="button" className="cw-text-button" onClick={() => onRestore(proposal.id)}>Recuperar</button> : <span />}
-            </li>)}</ul>
-        </details>
     )
 }
 
@@ -105,7 +75,7 @@ function ManualTopic({ topic, context, onContextChange, hasFiles, onAttach }) {
     }
     return (
         <section className="cw-section">
-            <div className="cw-section-line"><div><span className="cw-kicker">INFORMACIÓN VIGENTE</span><h2>Lo que sabemos <span className="cw-count">{data.length}</span></h2></div>{data.length > 0 && !editing && <button type="button" className="cw-button cw-button--outline" onClick={() => start()}>+ Agregar dato</button>}</div>
+            <div className="cw-section-line"><div><span className="cw-kicker">INFORMACIÓN VIGENTE</span><h2>Lo que sabemos <span className="cw-count">{data.length}</span></h2></div>{!editing && <button type="button" className="cw-button cw-button--outline" onClick={() => start()}>+ Agregar dato</button>}</div>
             {!data.length && !editing && <><button type="button" className="cw-empty cw-empty--action" onClick={() => start()}><span className="cw-empty-mark" aria-hidden="true">+</span><span className="cw-empty-title">Este tema empieza contigo.</span><span className="cw-empty-text">{topic.hint}</span><span className="cw-empty-text cw-example">Por ejemplo: {topic.example}</span><span className="cw-empty-cta">Agregar el primer dato <Arrow /></span></button>{!hasFiles && <p className="cw-empty-alt">¿Ya lo tienes en un documento o una hoja de cálculo? <button type="button" className="cw-text-button" onClick={onAttach}>Adjuntar archivo</button><span aria-hidden="true">·</span><button type="button" className="cw-text-button" onClick={() => downloadTemplate(topic)}>Descargar formato <Arrow /></button></p>}</>}
             {data.length > 0 && <div className="cw-data-list">{data.map((entry) => {
                 const past = history(context, entry.id).slice(1)
@@ -188,8 +158,6 @@ export default function ContextWorkspace({ project, onProjectChange, onPrioritie
     const activeTopic = TOPICS.find((topic) => topic.id === active)
     const countTopic = (id) => (id === 'estudios' ? workspace.activities.length : 0) + data.filter((entry) => entry.segment === id).length
     const filled = TOPICS.filter((topic) => countTopic(topic.id) > 0).length
-    const topicFiles = workspace.attachments.filter((file) => file.topic === active)
-    const topicPending = pending.filter((proposal) => proposal.topic === active)
 
     useEffect(() => {
         const previous = document.activeElement
@@ -279,11 +247,12 @@ export default function ContextWorkspace({ project, onProjectChange, onPrioritie
         } else results = await Promise.allSettled(files.map((file) => readAttachment(file, topic)))
         const attachments = results.filter((result) => result.status === 'fulfilled').map((result) => result.value)
         const failures = results.filter((result) => result.status === 'rejected')
+        const templateRows = attachments.flatMap((file) => (file.text && parseTemplate(file.text) || []).map((row) => ({ ...row, id: `propuesta-${crypto.randomUUID()}`, topic, origin: file.name, status: 'pending' })))
         if (attachments.length) {
             const allFiles = [...workspace.attachments, ...attachments]
-            onWorkspaceChange({ attachments: allFiles })
+            onWorkspaceChange({ attachments: allFiles, proposals: [...workspace.proposals, ...templateRows] })
             if (connected) {
-                try { await remote.save({ ...project, printed: false, contextWorkspace: { ...workspace, attachments: allFiles } }) }
+                try { await remote.save({ ...project, printed: false, contextWorkspace: { ...workspace, attachments: allFiles, proposals: [...workspace.proposals, ...templateRows] } }) }
                 catch (reason) { failures.push({ status: 'rejected', reason }) }
             }
         }
@@ -298,9 +267,9 @@ export default function ContextWorkspace({ project, onProjectChange, onPrioritie
             <div className="cw-layout">
                 <aside className="cw-sidebar"><div className="cw-project"><span className="cw-kicker">ESPACIO DE TRABAJO</span><strong>{project.name || plant?.name || 'Mi planta'}</strong><span className="cw-muted">La información detrás del plano.</span></div><nav aria-label="Temas del contexto"><button className={`cw-nav-item ${active === 'inicio' ? 'is-active' : ''}`} type="button" aria-current={active === 'inicio' ? 'page' : undefined} onClick={() => go('inicio')}><span className="cw-nav-symbol" aria-hidden="true">⌂</span><span>Cuéntanos tu planta</span>{pending.length > 0 && <span className="cw-nav-count">{pending.length}</span>}</button><span className="cw-nav-label">INFORMACIÓN POR TEMA</span>{TOPICS.map((topic, index) => <button type="button" className={`cw-nav-item ${active === topic.id ? 'is-active' : ''}`} aria-current={active === topic.id ? 'page' : undefined} key={topic.id} onClick={() => go(topic.id)}><span className="cw-nav-number">{String(index + 1).padStart(2, '0')}</span><span>{topic.label}</span><span className={`cw-nav-dot ${countTopic(topic.id) ? 'is-filled' : ''}`} aria-label={countTopic(topic.id) ? `${countTopic(topic.id)} datos` : 'Sin datos'} /></button>)}<div className="cw-nav-bottom"><button type="button" className={`cw-nav-item ${active === 'proyectos' ? 'is-active' : ''}`} aria-current={active === 'proyectos' ? 'page' : undefined} onClick={() => go('proyectos')}><span className="cw-nav-symbol" aria-hidden="true">▦</span><span>Mis proyectos</span></button><button type="button" className={`cw-nav-item ${active === 'prioridades' ? 'is-active' : ''}`} aria-current={active === 'prioridades' ? 'page' : undefined} onClick={() => go('prioridades')}><span className="cw-nav-symbol" aria-hidden="true">≡</span><span>Prioridades de decisión</span></button><button type="button" className={`cw-nav-item ${active === 'revision' ? 'is-active' : ''}`} aria-current={active === 'revision' ? 'page' : undefined} onClick={() => go('revision')}><span className="cw-nav-symbol" aria-hidden="true">✓</span><span>Así entendimos tu planta</span></button></div></nav><div className="cw-progress"><div><strong>{filled} de {TOPICS.length}</strong><span>temas con información</span></div><div className="cw-progress-track"><span style={{ width: `${filled / TOPICS.length * 100}%` }} /></div><p>No necesitas completarlo todo para empezar.</p></div></aside>
                 <main className="cw-content" ref={contentRef} tabIndex="-1">
-                    <div className="cw-job-status" role="status">{remote.notice && <p className="cw-notice">{remote.notice}</p>}{remote.job && <><p>{remote.busy ? "Interpretando" : "Lectura"}: {remote.job.processed} de {remote.job.total} caracteres · {{queued:'En espera',running:'En proceso',done:'Lista para revisar',partial:'Lectura parcial',error:'No completada',conflict:'Requiere revisar cambios',cancelled:'Cancelada',interrupted:'Interrumpida'}[remote.job.status] || remote.job.status}</p>{remote.busy && <button type="button" className="cw-button cw-button--outline" onClick={remote.cancel}>Cancelar interpretación</button>}{!remote.busy && ["partial", "interrupted", "error", "conflict"].includes(remote.job.status) && <button type="button" className="cw-button cw-button--outline" onClick={remote.retry}>Reintentar bloques pendientes</button>}{remote.job.errors?.length > 0 && <details><summary>Ver incidencias de lectura</summary><pre>{JSON.stringify(remote.job.errors, null, 2)}</pre></details>}</>}</div><div className="cw-content-inner" inert={remote.busy || uploading ? true : undefined}>
-                        {connected && <BackendTools remote={remote} />}
-                        <MasterReview master={workspace.masterDraft} busy={remote.busy} job={remote.job} />
+                    <JobStatus remote={remote} /><div className="cw-content-inner" inert={remote.busy || uploading ? true : undefined}>
+                        {connected && <><BackendTools remote={remote} /><label className="cw-field">Qué fuente describe mejor tu planta<select value={workspace.source_policy?.images || 'location_only'} onChange={(event) => onWorkspaceChange({ source_policy: { default: event.target.value === 'existing_equipment_and_positions' ? 'images' : 'text', images: event.target.value } })}><option value="location_only">Texto para los datos; imágenes para la ubicación</option><option value="existing_equipment_and_positions">Las imágenes son más fieles a lo que hay y dónde está</option></select><span className="cw-muted">Las imágenes requieren interpretación con visión o datos aportados por ti. Las diferencias sin resolver seguirán visibles.</span></label>{workspace.source_policy?.default === 'images' && <label className="cw-priority-toggle"><input type="checkbox" checked={!!workspace.source_policy.manual_image_review} onChange={(event) => onWorkspaceChange({ source_policy: { ...workspace.source_policy, manual_image_review: event.target.checked } })} />Revisé las imágenes y los datos que capturé coinciden con ellas.</label>}</>}
+                        {!remote.busy && <MasterReview master={workspace.masterDraft} busy={false} job={remote.job} />}
                         {message && <div className={`cw-notice${organizing ? ' cw-notice--organizing' : ''}`} role="status"><span>{message}</span>{organizing && <div className="cw-organize-progress" role="progressbar" aria-label="Organizando información" aria-valuetext="En curso"><span /></div>}<button type="button" aria-label="Cerrar aviso" disabled={organizing} onClick={() => setMessage('')}>×</button></div>}
                         {active === 'proyectos' && <ProjectsPanel projects={projects} activeId={activeProjectId} project={project} finishing={initialTopic === 'guardar'} onSave={(name) => { onSaveProject(name); onNotify?.('Proyecto guardado.') }} onCreate={onCreateProject} onSelect={onSelectProject} onClear={onClearContext} />}
                         {active === 'inicio' && <><div className="cw-page-head"><span className="cw-kicker">PRIMERO, EL CONTEXTO.</span><h1>Cuéntanos<br />sobre tu planta<span className="cw-title-period">.</span></h1><p>El plano cuenta una parte. Completa la historia con lo que produces, cómo trabajas y lo que quieres mejorar.</p></div><div className="cw-intro-grid"><section className="cw-story"><label htmlFor="cw-story" className="cw-story-label">Todo empieza con tus palabras.<span>Una descripción, tus notas o el resumen de una visita.</span></label><textarea id="cw-story" value={project.text || ''} onChange={(event) => onTextChange(event.target.value)} placeholder="Fabricamos… Nuestro proceso comienza en… Trabajamos con… Lo que más nos preocupa es…" rows="8" /><div className="cw-story-footer"><span>{(project.text || '').length.toLocaleString('es-MX')} caracteres · texto original conservado</span><button type="button" className="cw-button" disabled={!project.text?.trim() || organizing} onClick={() => organize(project.text)}>{organizing ? 'Organizando…' : 'Organizar información'} <Arrow /></button></div><p className="cw-method">{has(caps, 'context_master') ? 'Un intérprete coordina especialistas y dudas; un consolidador prepara el contexto maestro.' : has(caps, 'context_agents') ? 'Especialistas preparan propuestas para tu revisión.' : 'Organización local por palabras clave. Tú revisas y confirmas cada dato.'}</p></section><aside className="cw-side-card cw-guide"><span className="cw-kicker">PARA ORIENTARTE</span><h2>No hace falta<br />tenerlo todo.</h2><ol><li><strong>Cuenta lo que sabes.</strong><span>Productos, personas, tiempos y dificultades del día a día.</span></li><li><strong>Agrega lo que lo respalda.</strong><span>Documentos, estudios y fotos, en el tema que corresponda.</span></li><li><strong>Revisa antes de analizar.</strong><span>Corrige lo que entendimos y confirma tu planta.</span></li></ol><button type="button" className="cw-text-button" onClick={() => go('revision')}>Ver el resumen <Arrow /></button></aside></div>{pending.length > 0 && !remote.busy && <section className="cw-section"><div className="cw-section-line"><div><span className="cw-kicker">TU REVISIÓN HACE LA DIFERENCIA</span><h2>Datos propuestos <span className="cw-count">{pending.length}</span></h2></div><span className="cw-muted">Aún no forman parte de los datos confirmados.</span></div><button type="button" className="cw-button cw-confirm-all" disabled={remote.busy || pending.some((p) => !p.label?.trim() || !rawValue(p.value).trim())} onClick={confirmAll}>Confirmar todos los datos ({pending.length})</button><div className="cw-proposals">{pending.map((proposal) => <Proposal key={proposal.id} proposal={proposal} onChange={(updates) => updateProposal(proposal.id, updates)} onConfirm={() => confirmProposal(proposal)} onDiscard={() => { updateProposal(proposal.id, { status: 'discarded' }); setMessage('Propuesta descartada. El texto original se conserva.') }} />)}</div></section>}<section className="cw-section"><div className="cw-section-line"><div><span className="cw-kicker">TAMBIÉN PUEDES IR DIRECTO</span><h2>Una planta, diez temas.</h2></div><span className="cw-muted">{data.length} datos · {workspace.attachments.length} archivos</span></div><div className="cw-topic-grid">{TOPICS.map((topic, index) => <button type="button" className="cw-topic-card" key={topic.id} onClick={() => go(topic.id)}><span className="cw-topic-card-top"><span>{String(index + 1).padStart(2, '0')}</span><Arrow diagonal /></span><strong>{topic.label}</strong><span className="cw-topic-hint">{topic.hint}</span><span className="cw-topic-state">{countTopic(topic.id) ? `${countTopic(topic.id)} ${topic.id === 'estudios' ? 'actividades registradas' : 'datos confirmados'}` : 'Agregar información'}</span></button>)}</div></section>{workspace.proposals.some((proposal) => proposal.status !== 'pending') && <details className="cw-processed"><summary>Propuestas ya revisadas ({workspace.proposals.filter((proposal) => proposal.status !== 'pending').length})</summary>{workspace.proposals.filter((proposal) => proposal.status !== 'pending').map((proposal) => <p key={proposal.id}><strong>{proposal.label}</strong> · {proposal.status === 'confirmed' ? 'Confirmada' : 'Descartada'}<span>«{proposal.excerpt}»</span></p>)}</details>}</>}

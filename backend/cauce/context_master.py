@@ -42,12 +42,13 @@ def clean_fact(raw, source, topic=None):
     offset = source["text"].find(row["excerpt"])
     if offset < 0:
         raise ValueError("La evidencia no aparece en la fuente original")
-    extract_numbers = lambda text: {float(n.replace(",", ".")) for n in re.findall(r"(?<!\w)-?\d+(?:[.,]\d+)?", text)}
+    from .story import words_to_digits
+    extract_numbers = lambda text: {float(n.replace(",", ".")) for n in re.findall(r"(?<!\w)-?\d+(?:[.,]\d+)?", words_to_digits(normalize(text)))}
     if not extract_numbers(row["value"]).issubset(extract_numbers(row["excerpt"])):
         raise ValueError("La explicación añade cifras que su evidencia no contiene")
     if row["number"] is not None:
         number = row["number"]
-        numbers = [float(n.replace(",", ".")) for n in re.findall(r"(?<!\w)-?\d+(?:[.,]\d+)?", row["excerpt"])]
+        numbers = extract_numbers(row["excerpt"])
         if isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number) or float(number) not in numbers:
             raise ValueError("Magnitud sin respaldo literal; las conversiones se realizan en código")
         if row["field"] in ("count", "operators") and (number < 0 or number != int(number)):
@@ -58,7 +59,7 @@ def clean_fact(raw, source, topic=None):
         raise ValueError("Falta el destino de la relación")
     row.update(entity_id=entity_id(row["entity"]), source_id=source["id"], offset=source.get("offset", 0) + offset,
                source="usuario", confidence="baja", status="pending")
-    row["id"] = "hecho-" + digest([row["entity_id"], row["field"], row["target"], source["id"], row["offset"], row["value"]])[:24]
+    row["id"] = "hecho-" + digest([row["entity_id"], row["field"], row["target"], row["scope"], row["number"], row["unit"], source["id"], row["offset"], row["value"]])[:24]
     return row
 
 
@@ -80,7 +81,7 @@ def assemble(facts, sources, questions=None, summary="", trace=None, handovers=N
                 f.update(status="blocked", conflict=conflict["question"])
     revision = digest(sorted((f["id"], f["topic"], f["value"]) for f in unique.values()))
     return {"schema_version": 2, "revision": revision, "status": "draft", "summary": summary,
-            "sources": [{k: s[k] for k in ("id", "text", "offset", "kind", "name") if k in s} for s in sources],
+            "sources": [{k: s[k] for k in ("id", "document_id", "entry_id", "text", "offset", "kind", "name") if k in s} for s in sources],
             "entities": list(entities.values()), "facts": list(unique.values()),
             "questions": [*(questions or []), *conflicts], "handovers": handovers or [], "trace": trace or [],
             "sections": {t: [f["id"] for f in unique.values() if f["topic"] == t] for t in TOPICS}}
@@ -105,6 +106,19 @@ def accepted_master(project):
             row.update(scope="uncertain", needs_reinterpretation=True)
         row.pop("conflict", None)
         facts.append(row)
-    result = assemble(facts, draft.get("sources", []), draft.get("questions", []), draft.get("summary", ""))
+    questions = copy.deepcopy(draft.get("questions", []))
+    states = {p["id"]: p.get("status") for p in project.get("contextWorkspace", {}).get("proposals", [])}
+    for question in questions:
+        ids = question.get("fact_ids", [])
+        if ids and any(fid in accepted for fid in ids) and all(fid in accepted or states.get(fid) in ("discarded", "confirmed") for fid in ids):
+            question["status"] = "resolved_by_user"
+    result = assemble(facts, draft.get("sources", []), questions, draft.get("summary", ""))
+    covered = {s.get("entry_id") for s in draft.get("sources", [])}
+    linked = {f["id"] for f in draft.get("facts", [])}
+    result["pending_manual_ids"] = [e["id"] for e in ctx.current(project.get("context")) if (e.get("segment") != "referencias" or e.get("interpreted")) and e.get("evidence", {}).get("proposal_id") not in linked and e["id"] not in covered]
+    result["source_policy"] = draft.get("source_policy", {})
+    result["pending_visual_sources"] = draft.get("pending_visual_sources", False)
+    policy = project.get("contextWorkspace", {}).get("source_policy")
+    result["pending_source_policy"] = policy is not None and policy != draft.get("source_policy")
     result.update(status="accepted" if facts else "unaccepted", draft_revision=draft["revision"])
     return result

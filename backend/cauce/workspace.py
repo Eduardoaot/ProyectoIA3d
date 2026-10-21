@@ -23,6 +23,7 @@ def prepare(project):
     for key in ("proposals", "attachments", "activities", "operators", "questions", "study_inventory"):
         workspace.setdefault(key, [])
     p.setdefault("context", {"segments": {}})
+    detect_conflicts(p)
     return p
 
 
@@ -31,9 +32,13 @@ def merge_result(project, result):
     workspace = project.setdefault("contextWorkspace", {})
     for key in ("proposals", "activities"):
         existing = workspace.setdefault(key, [])
-        seen = {v.get("fingerprint") or digest([v.get("topic"), v.get("excerpt"), v.get("label") or v.get("description")]) for v in existing}
+        def fingerprint(value):
+            if value.get("entity_id"):
+                return digest([value["entity_id"], value.get("field"), value.get("target"), value.get("scope"), value.get("number"), value.get("unit"), value.get("excerpt"), value.get("source_id"), value.get("value")])
+            return digest([value.get("topic"), value.get("excerpt"), value.get("label") or value.get("description")])
+        seen = {v.get("fingerprint") or fingerprint(v) for v in existing}
         for value in result.get(key, []):
-            fp = value.get("fingerprint") or digest([value.get("topic"), value.get("excerpt"), value.get("label") or value.get("description")])
+            fp = value.get("fingerprint") or fingerprint(value)
             if fp not in seen:
                 existing.append({**value, "fingerprint": fp})
                 seen.add(fp)
@@ -51,12 +56,29 @@ def detect_conflicts(project):
     grouped = {}
     for item in proposals:
         if item.get("status") in ("pending", "blocked"):
-            key = (item.get("topic"), normalize(item.get("label")))
+            if item.get("entity_id") and item.get("field"):
+                key = (item["entity_id"], item["field"], item.get("target"), item.get("scope"))
+                if item["field"] not in ("count", "width", "depth", "x", "z", "operators", "location", "locked"):
+                    key = (*key, item["id"])
+            else:
+                key = (item.get("topic"), normalize(item.get("label")))
             grouped.setdefault(key, []).append(item)
     for items in grouped.values():
-        if len({digest([p.get("value"), p.get("unit")]) for p in items}) > 1:
+        def signature(p):
+            if p.get("entity_id") and p.get("number") is not None:
+                factor = {"cm": 0.01, "mm": 0.001}.get(normalize(p.get("unit", "")), 1)
+                return str(round(p["number"] * factor, 8))
+            return digest([normalize(p.get("value")), p.get("unit")])
+        conflict = len({signature(p) for p in items}) > 1
+        if conflict:
             for item in items:
-                item.update(status="blocked", conflict="Hay valores diferentes para este dato. Corrige o descarta antes de confirmar.")
+                item.update(status="blocked", conflict_kind="inconsistent_values", conflict="Hay valores diferentes para este dato. Corrige o descarta antes de confirmar.")
+        else:
+            for item in items:
+                if item.get("conflict_kind") == "inconsistent_values":
+                    item.update(status="pending")
+                    item.pop("conflict", None)
+                    item.pop("conflict_kind", None)
 
 
 def confirm(project, ids, target="proposals"):
@@ -81,13 +103,15 @@ def confirm(project, ids, target="proposals"):
                 blocked.append({"id": value["id"], "reason": "Falta tema, descripción o valor"})
                 continue
             context = project.setdefault("context", {"segments": {}})
-            key = value.get("key") or f"{topic}.{label}"
+            typed_key = f"{topic}.{value['entity_id']}.{value['field']}.{value.get('scope', 'current')}.{normalize(value.get('target', ''))}" if value.get("entity_id") and value.get("field") else None
+            key = value.get("key") or typed_key or f"{topic}.{label}"
             previous = next((v for v in ctx.current(context) if v.get("key") == key), None)
             segment = context.setdefault("segments", {}).setdefault(topic, [])
             entry = {
                 "id": f"{topic}-{uuid.uuid4().hex}", "segment": topic, "key": key,
                 "version": (previous.get("version", 1) + 1) if previous else 1,
                 "date": now()[:10], "value": value["value"], "source": value.get("source") or "usuario",
+                "label": f"{value['entity']} — {label}" if value.get("entity") else label,
                 "confidence": value.get("confidence") or "baja",
                 "evidence": {"excerpt": value.get("excerpt", ""), "source_id": value.get("source_id"), "proposal_id": value["id"]},
             }

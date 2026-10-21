@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 
@@ -39,7 +40,7 @@ def semantic_sources(text, source_id=None, limit=10000):
     return out
 
 
-def pages(rows, limit=14000):
+def pages(rows, limit=8000):
     batch, size = [], 0
     for row in rows:
         length = len(json.dumps(row, ensure_ascii=False))
@@ -52,10 +53,16 @@ def pages(rows, limit=14000):
         yield batch
 
 
-async def organize(text, provider, source_id=None, progress=None, previous=None):
+async def organize(text, provider, source_id=None, progress=None, previous=None, documents=None, source_policy=None, cache=None):
     from ..agents import check
     sources = semantic_sources(text, source_id)
+    for document in documents or []:
+        if document.get("id") == source_id or not document.get("text"):
+            continue
+        parts = semantic_sources(document["text"], document["id"])
+        sources.extend({**part, **{k: document[k] for k in ("kind", "name", "entry_id") if k in document}} for part in parts)
     accepted_facts = (previous or {}).get("facts", []) if isinstance(previous, dict) else previous or []
+    cache = {} if cache is None else cache
     trace, facts, questions, assignments, entities, handovers, errors = [], [], [], [], [], [], []
 
     async def phase(stage, **details):
@@ -64,14 +71,42 @@ async def organize(text, provider, source_id=None, progress=None, previous=None)
 
     async def ask(role, prompt, payload, schema):
         started = time.monotonic()
-        record = {"agent": role, "input": payload, "status": "running"}
+        record = {"agent": role, "input": json.loads(json.dumps(payload, ensure_ascii=False)), "status": "running"}
         trace.append(record)
         try:
-            result = await provider.json(prompt, json.dumps(payload, ensure_ascii=False), schema)
+            serialized = json.dumps(payload, ensure_ascii=False)
+            context_limit = getattr(provider, "capabilities", {}).get("max_context", 8192)
+            if len(prompt) + len(serialized) > context_limit * 2:
+                raise ValueError("La entrega supera el presupuesto de contexto configurado. Divide las fuentes o aumenta CAUCE_OLLAMA_CONTEXT; no se omitirá texto silenciosamente.")
+            key = digest([role, prompt, payload, schema, getattr(provider, "model", ""), context_limit])
+            record["cache_hit"] = key in cache
+            result = cache[key] if key in cache else await provider.json(prompt, serialized, schema)
             problems = check(result, schema)
             if problems:
                 raise ValueError("Respuesta fuera de esquema: " + "; ".join(problems[:3]))
             record.update(status="done", output=result)
+            valid_delivery = True
+            if "facts" in schema.get("properties", {}):
+                for raw in result["facts"]:
+                    try:
+                        clean_fact(raw, next(s for s in sources if raw.get("excerpt") and raw["excerpt"] in s["text"]))
+                    except (ValueError, StopIteration):
+                        valid_delivery = False
+            if "decisions" in schema.get("properties", {}):
+                originals = {f["id"]: f for f in payload["facts"]}
+                for decision in result["decisions"]:
+                    if decision["id"] not in originals:
+                        valid_delivery = False
+                        continue
+                    original = originals[decision["id"]]
+                    try:
+                        clean_fact({**original, **{k: decision[k] for k in ("topic", "label", "value")}}, next(s for s in sources if s["id"] == original["source_id"]))
+                    except (ValueError, StopIteration):
+                        valid_delivery = False
+            if valid_delivery:
+                cache[key] = result
+            else:
+                cache.pop(key, None)
             return result
         except Exception as exc:
             record.update(status="error", error=str(exc)[:300])
@@ -84,7 +119,7 @@ async def organize(text, provider, source_id=None, progress=None, previous=None)
 
     await phase("interpreting", completed=0, total=len(sources))
     for index, source in enumerate(sources):
-        plan = await ask("interprete", PROMPTS.joinpath("interpreter.md").read_text(encoding="utf-8"), {"source": source, "known_entities": entities}, PLAN_SCHEMA)
+        plan = await ask("interprete", PROMPTS.joinpath("interpreter.md").read_text(encoding="utf-8"), {"source": source, "known_entities": entities, "source_policy": source_policy or {"default": "text", "images": "location_only"}}, PLAN_SCHEMA)
         entities = list(dict.fromkeys([*entities, *plan["entities"]]))
         assignments.extend({**task, "source": source} for task in plan["assignments"])
         questions.extend(doubt(q, "interprete", source) for q in plan["questions"])
@@ -92,7 +127,7 @@ async def organize(text, provider, source_id=None, progress=None, previous=None)
     if not assignments:
         raise ValueError("El intérprete no pudo delegar la lectura. No se generará un contexto vacío como si estuviera completo.")
     await phase("specialists", completed=0, total=len(assignments))
-    gate = asyncio.Semaphore(2)
+    gate = asyncio.Semaphore(max(1, min(4, int(os.getenv("CAUCE_CONTEXT_CONCURRENCY", "2")))))
     finished = 0
 
     async def work(task):
@@ -100,7 +135,7 @@ async def organize(text, provider, source_id=None, progress=None, previous=None)
         async with gate:
             topic, source = task["topic"], task["source"]
             try:
-                result = await ask("especialista:" + topic, PROMPTS.joinpath("context-specialist.md").read_text(encoding="utf-8"), {"assignment": task["instructions"], "topic": topic, "entities": entities, "source": source}, SPECIALIST_SCHEMA)
+                result = await ask("especialista:" + topic, PROMPTS.joinpath("context-specialist.md").read_text(encoding="utf-8"), {"assignment": task["instructions"], "topic": topic, "entities": entities, "source": source, "source_policy": source_policy or {"default": "text", "images": "location_only"}}, SPECIALIST_SCHEMA)
                 valid = []
                 for raw in result["facts"]:
                     try:
@@ -116,6 +151,7 @@ async def organize(text, provider, source_id=None, progress=None, previous=None)
             await phase("specialists", completed=finished, total=len(assignments))
 
     await asyncio.gather(*(work(task) for task in assignments))
+    handovers.sort(key=lambda handover: (TOPICS.index(handover["specialist"]), handover["source_id"]))
     if not facts:
         raise ValueError("Los especialistas no entregaron afirmaciones con evidencia válida. Revisa el proveedor y las incidencias.")
     await phase("clarifying", completed=0, total=len(questions))
@@ -152,7 +188,8 @@ async def organize(text, provider, source_id=None, progress=None, previous=None)
     for index, handover in enumerate(handovers):
         rows = [fact_map[k] for k in handover["fact_ids"]]
         for batch in pages(rows):
-            result = await ask("consolidador:" + handover["specialist"], PROMPTS.joinpath("master-consolidator.md").read_text(encoding="utf-8"), {"handover": {"specialist": handover["specialist"], "clarifications": handover["clarifications"]}, "entities": entities, "facts": batch, "previous_sections": summaries, "accepted_corrections": accepted_facts}, CONSOLIDATE_SCHEMA)
+            relevant = [{k: f.get(k) for k in ("id", "entity", "field", "target", "number", "unit", "value", "scope")} for f in accepted_facts if f["entity_id"] in {r["entity_id"] for r in batch}]
+            result = await ask("consolidador:" + handover["specialist"], PROMPTS.joinpath("master-consolidator.md").read_text(encoding="utf-8"), {"handover": {"specialist": handover["specialist"], "clarifications": handover["clarifications"]}, "entities": entities, "facts": batch, "previous_sections": summaries, "accepted_corrections": relevant, "source_policy": source_policy or {"default": "text", "images": "location_only"}}, CONSOLIDATE_SCHEMA)
             allowed = {f["id"]: f for f in batch}
             delivered = set()
             for decision in result["decisions"]:
@@ -161,12 +198,16 @@ async def organize(text, provider, source_id=None, progress=None, previous=None)
                 original = allowed[decision["id"]]
                 # Reformular no permite agregar cifras ni cambiar propiedades estructurales.
                 source = next(s for s in sources if s["id"] == original["source_id"])
-                revised = clean_fact({**original, **{k: decision[k] for k in ("topic", "label", "value")}}, source)
+                try:
+                    revised = clean_fact({**original, **{k: decision[k] for k in ("topic", "label", "value")}}, source)
+                except ValueError as exc:
+                    errors.append({"agent": "consolidador", "detail": str(exc)})
+                    continue
                 revised["id"] = original["id"]
                 fact_map[original["id"]] = revised
                 duplicate = fact_map.get(decision["duplicate_of"])
                 fields = ("entity_id", "field", "target", "number", "unit", "scope")
-                if duplicate and duplicate["id"] != original["id"] and all(revised.get(k) == duplicate.get(k) for k in fields) and (revised["field"] != "description" or revised["value"] == duplicate["value"]):
+                if duplicate and duplicate["id"] < original["id"] and all(revised.get(k) == duplicate.get(k) for k in fields) and (revised["number"] is not None or revised["value"] == duplicate["value"]):
                     revised["duplicate_of"] = duplicate["id"]
                 delivered.add(original["id"])
             if delivered != set(allowed):
@@ -182,5 +223,9 @@ async def organize(text, provider, source_id=None, progress=None, previous=None)
     all_sources = list({s["id"]: s for s in [*old_sources, *sources]}.values())
     master = assemble([f for f in fact_map.values() if not f.get("duplicate_of")], all_sources, questions, "\n".join(f"{s['topic']}: {s['text']}" for s in summaries), trace, handovers)
     master["errors"] = errors
+    master["source_policy"] = source_policy or {"default": "text", "images": "location_only"}
+    master["pending_visual_sources"] = master["source_policy"].get("default") == "images" and not master["source_policy"].get("manual_image_review") and not any(s.get("kind") == "vision_reading" for s in sources)
+    if master["pending_visual_sources"]:
+        master["questions"].append({"id": "visual-source-required", "status": "unresolved", "question": "Elegiste las imágenes como referencia principal. Falta interpretarlas con visión o contrastar sus datos manualmente antes de construir."})
     await phase("review", completed=len(master["facts"]), total=len(master["facts"]))
     return {"proposals": master["facts"], "master": master, "warnings": errors, "source": "ia"}

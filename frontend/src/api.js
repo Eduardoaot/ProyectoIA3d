@@ -28,13 +28,14 @@ export const api = {
     getCapabilities: () => loadCapabilities(),
     catalog: () => get('/api/catalog'),
     studies: (body) => post('/api/studies/build', body),
+    verifyMaster: (plant, context) => post('/api/master/verify', { plant, context }),
     story: (text, context) => post('/api/story', { text, ...(context ? { context } : {}) }),
     organizeContext: (text) => post('/api/context/organize', { text }),
     routes: (plant, positions, signal) => post('/api/routes', { plant, positions }, signal),
     evaluate: (plant, positions, rebalance = true, signal) => post('/api/evaluate', { plant, positions, rebalance }, signal),
     // extra: campos nuevos del contrato v3 (context, weights); el backend viejo los ignora.
     analyze: (plant, extra = {}) => post('/api/analyze', { plant, ...extra }),
-    compact: (plant) => post('/api/compact', { plant }),
+    compact: (plant, context, reviewed = false) => post('/api/compact', { plant, ...(context ? { context, reviewed } : {}) }),
     // Asistente del editor (solo si capabilities anuncia plan_ops).
     planOps: (instruction, plant) => post('/api/plan/ops', { instruction, plant }),
     // Imágenes de referencia: el backend responde 422 si su proveedor no tiene visión.

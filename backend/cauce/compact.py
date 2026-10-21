@@ -174,12 +174,20 @@ def _resolve(names, stations):
     return out
 
 
-async def compact_alternative(plant, provider):
+async def compact_alternative(plant, provider, master=None):
     """Devuelve la alternativa compacta. 'source' dice si usó la IA o solo el empacador."""
     order = flow_order(plant)
     groups, corner, reasons, source, error = [], None, [], "reglas", None
     try:
-        out = await provider.json(COMPACT_SYSTEM, facts(plant), COMPACT_SCHEMA)
+        inputs = facts(plant)
+        if master:
+            from .master_builder import current_facts
+            claims = current_facts(master)
+            inputs += "\nContexto aceptado de la distribución actual y restricciones (el plano entregado por el usuario prevalece para las posiciones actuales):\n"
+            inputs += "\n".join(f"- {f['entity']}: {f['value']}" for f in claims)
+            inputs += "\nObjetivos aceptados (no son mediciones de la planta actual):\n"
+            inputs += "\n".join(f"- {f['value']}" for f in master.get("facts", []) if f.get("status") == "confirmed" and f.get("scope") == "goal")
+        out = await provider.json(COMPACT_SYSTEM, inputs, COMPACT_SCHEMA)
         ai_order = _resolve(out.get("orden"), plant["stations"])
         if len(ai_order) >= max(2, len(order) // 2):
             order = ai_order + [s for s in order if s not in ai_order]

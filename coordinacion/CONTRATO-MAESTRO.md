@@ -18,3 +18,13 @@ Las fuentes originales permanecen completas y vinculadas por identificador y off
 Prioridad general: texto; imágenes para ubicación. Excepción acordada para `Contexto_transformadores.txt`: las imágenes son más fieles a lo existente y a su distribución. La revisión visual de referencia en `pruebas/contexto-transformadores.expected.json` es una anotación humana para evaluar, no una ejecución de visión ni un conjunto de coordenadas medidas. Las diferencias de cantidades se conservan con ambas procedencias. Los modelos sin visión no certifican imágenes.
 
 Se conserva la captura manual, la confirmación masiva, SQLite, exportaciones, los especialistas de estudios y las rutas anteriores. El motor y el formato v3 no se cambian sin pruebas/migración correspondientes.
+
+## Rutas y condiciones de entrega
+
+- Los trabajos `kind=context` de `/api/workspaces/{id}/jobs` conservan `stage`, `stage_progress`, el maestro y entregas recuperables. Las etapas son `interpreting`, `specialists`, `clarifying`, `consolidating` y `review`. El estado `partial` conserva incidencias; `done` significa disponible para revisión, no comprensión certificada.
+- `/api/story` recibe `context.master` de esquema 2 aceptado y lo construye directamente. Sin datos aceptados o sin dimensiones del recinto devuelve 422. Los clientes anteriores conservan su ruta de texto.
+- `/api/master/verify` recibe `{plant, context}` y devuelve requisitos `met`, `unmet`, `unverifiable` o `not_geometric`, más supuestos y dudas. No cambia el plano. El estado `verified` solo indica cumplimiento de los requisitos comprobables recibidos; no certifica una medición ni la completitud semántica del relato.
+- `/api/analyze` con un maestro requiere `reviewed: true`; conserva la comprobación contra el plano efectivamente entregado. La confirmación de versión de la interfaz sigue siendo necesaria. `/api/compact` admite contexto/maestro y objetivos, manteniendo compatibilidad con `{plant}`.
+- Las entradas manuales nuevas y los cambios de prioridad de fuentes deben integrarse antes de reconstruir. Una corrección de redacción que cambia el valor aceptado no reutiliza en silencio sus magnitudes estructurales anteriores.
+- Las entregas válidas se reutilizan en reintentos solo si coinciden entrada, esquema, modelo y contexto configurado. Las respuestas sin respaldo no se almacenan como entregas reutilizables.
+- Los archivos originales y las lecturas de visión ya realizadas se incorporan como fuentes; una imagen adjunta sin lectura permanece pendiente. `source_policy` registra prioridad y, cuando corresponda, la revisión visual manual explícita.

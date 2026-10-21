@@ -142,8 +142,15 @@ async def run(workspace_id, job_id, provider):
                 value.update(stage=stage, stage_progress=details)
                 store.save_job(workspace_id, value)
             previous = accepted_master(store.read(workspace_id)["project"])
-            result = await organize(value["text"], provider, value.get("source_id"), progress, previous)
+            project = store.read(workspace_id)["project"]
+            from .context import current
+            documents = [{"id": d["id"], "kind": "document", "name": d["name"], "text": d["text"]} for d in store.documents(workspace_id) if d.get("status") == "text_extracted" and not d.get("truncated")]
+            documents.extend({"id": "entrada-" + e["id"], "entry_id": e["id"], "kind": "vision_reading" if e.get("interpreted") else "manual", "text": str(e.get("key", "")) + ": " + str(e.get("value", ""))} for e in current(project.get("context")) if e.get("segment") != "referencias" or e.get("interpreted"))
+            if sum(len(d["text"]) for d in documents) + len(value["text"]) > 500000:
+                raise ValueError("El conjunto de fuentes supera 500 000 caracteres; divide el expediente para conservar una lectura completa.")
+            result = await organize(value["text"], provider, value.get("source_id"), progress, previous, documents, project.get("contextWorkspace", {}).get("source_policy"), value.setdefault("agent_cache", {}))
             value.update(result={**result, "activities": []}, processed=len(value["text"]))
+            value["errors"] = result["warnings"]
             saved = store.mutate(workspace_id, value["base_revision"], lambda project: merge_result(project, value["result"]))
             value.update(status="partial" if result["warnings"] else "done", stage="review", applied_revision=saved["revision"])
             return
@@ -211,6 +218,8 @@ def launch(workspace_id, body, provider):
         previous = store.job(workspace_id, body.retry_job_id)
         if previous["text"] != text or previous["kind"] != body.kind:
             raise ValueError("El texto o el tipo cambió; inicia una interpretación nueva")
+        if body.kind == "context":
+            value["agent_cache"] = previous.get("agent_cache", {})
         failed = {error["block"] for error in previous["errors"] if "block" in error}
         complete = [b for b in previous["completed_blocks"] if b not in failed]
         ranges = [(b["offset"], b["offset"] + len(b["text"])) for b in blocks(text) if b["index"] in complete]

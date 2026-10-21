@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import AsyncIterator
 
 import httpx
@@ -23,7 +24,7 @@ class OllamaProvider:
             "json_schema": True,  # Ollama acepta un esquema en `format`
             "stream": True,
             "vision": any(h in model.lower() for h in VISION_HINTS),
-            "max_context": 8192,
+            "max_context": max(2048, int(os.getenv("CAUCE_OLLAMA_CONTEXT", "8192"))),
         }
 
     async def status(self) -> dict:
@@ -44,7 +45,7 @@ class OllamaProvider:
             "model": self.model,
             "stream": False,
             "keep_alive": KEEP_ALIVE,
-            "options": {"temperature": self.temperature, "num_predict": 1},
+            "options": {"temperature": self.temperature, "num_predict": 1, "num_ctx": self.capabilities["max_context"]},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": "."}],
         }
         async with httpx.AsyncClient(timeout=self.timeout) as c:
@@ -57,7 +58,7 @@ class OllamaProvider:
             "stream": False,
             "format": schema or "json",
             "keep_alive": KEEP_ALIVE,
-            "options": {"temperature": self.temperature, "num_predict": getattr(self, "max_output_tokens", 900)},
+            "options": {"temperature": self.temperature, "num_predict": getattr(self, "max_output_tokens", 900), "num_ctx": self.capabilities["max_context"]},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
         }
         async with httpx.AsyncClient(timeout=self.timeout) as c:

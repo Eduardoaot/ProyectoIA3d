@@ -1,6 +1,17 @@
 import { TOPICS } from '../../contextWorkspace'
 
-export const STAGES = { queued: 'En espera', interpreting: 'El intérprete está comprendiendo y delegando el encargo', specialists: 'Los especialistas preparan sus entregas', clarifying: 'El intérprete y los especialistas resuelven dudas', consolidating: 'El consolidador integra las entregas en el maestro', review: 'Interpretación disponible para revisar' }
+const STAGES = { queued: 'En espera', interpreting: 'El intérprete está comprendiendo y delegando el encargo', specialists: 'Los especialistas preparan sus entregas', clarifying: 'El intérprete y los especialistas resuelven dudas', consolidating: 'El consolidador integra las entregas en el maestro', review: 'Interpretación disponible para revisar' }
+
+export function JobStatus({ remote }) {
+    const final = { error: 'La interpretación no se completó', conflict: 'El expediente cambió; el resultado necesita revisión', cancelled: 'Interpretación cancelada', interrupted: 'Interpretación interrumpida', partial: 'Interpretación parcial: revisa las incidencias', done: 'Interpretación disponible para revisar' }
+    return <div className="cw-job-status" role="status">
+        {remote.notice && <p className="cw-notice">{remote.notice}</p>}
+        {remote.job && <><p>{remote.busy ? STAGES[remote.job.stage] || remote.job.status : final[remote.job.status] || remote.job.status}</p>{remote.busy && <p>Los datos que ya estaban visibles pertenecen a la revisión anterior. El resultado nuevo aparecerá al terminar la consolidación.</p>}{remote.busy && remote.job.stage_progress && <p>{remote.job.stage_progress.completed} de {remote.job.stage_progress.total} entregas de esta etapa.</p>}
+            {remote.busy && <button className="cw-button cw-button--outline" type="button" onClick={remote.cancel}>Cancelar interpretación</button>}
+            {!remote.busy && ['partial', 'interrupted', 'error', 'conflict'].includes(remote.job.status) && <button type="button" className="cw-button cw-button--outline" onClick={remote.retry}>Reintentar interpretación</button>}
+            {remote.job.errors?.length > 0 && <details><summary>Ver incidencias de lectura</summary><pre>{JSON.stringify(remote.job.errors, null, 2)}</pre></details>}</>}
+    </div>
+}
 
 export default function MasterReview({ master, busy, job }) {
     if (busy) return <section className="cw-section cw-master-review" role="status"><h2>{STAGES[job?.stage] || 'Preparando la lectura'}</h2><p>Los datos de la revisión anterior permanecen conservados. El resultado nuevo se publicará cuando termine la consolidación.</p>{job?.stage_progress && <p>{job.stage_progress.completed} de {job.stage_progress.total} entregas de esta etapa.</p>}</section>

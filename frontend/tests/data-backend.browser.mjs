@@ -35,7 +35,7 @@ try {
     })
     const call = (method, params = {}) => new Promise((resolve, reject) => { const key = ++id; const timer = setTimeout(() => { pending.delete(key); reject(Error(`Timeout: ${method}`)) }, 20000); pending.set(key, { resolve, reject, timer }); socket.send(JSON.stringify({ id: key, method, params })) })
     const evaluate = async (expression) => { const result = await call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text); return result.result.value }
-    const until = async (expression) => { for (let i = 0; i < 150; i++) { if (await evaluate(expression)) return; await pause(100) } throw Error(`Condition not met: ${expression}`) }
+    const until = async (expression) => { for (let i = 0; i < 150; i++) { if (await evaluate(expression)) return; await pause(100) } console.error({ exceptions, page: await evaluate('document.body.innerText.slice(0,2500)') }); throw Error(`Condition not met: ${expression}`) }
     const click = async (label, scope = 'document') => {
         const selector = `[...${scope}.querySelectorAll('button')].find(b => b.textContent.trim().startsWith(${JSON.stringify(label)}))`
         await until(`!!(${selector})`)
@@ -133,6 +133,26 @@ try {
         assert.ok(await evaluate("document.querySelector('.cw-content').scrollWidth <= document.querySelector('.cw-content').clientWidth+1"),`No mobile overflow: ${topic}`)
     }
     await screenshot('backend-mobile.png')
+    await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false})
+    await go('Mis proyectos')
+    await fill('.cw-project-create-form input','Plano desde maestro')
+    await click('Crear proyecto')
+    await go('Cuéntanos tu planta')
+    await fill('#cw-story','La bodega mide 32 x 16 m. Hay 1 horno. Horno de 2 x 2 m. El horno está al fondo a la derecha.')
+    await click('Organizar información')
+    await until("document.querySelectorAll('.cw-proposal').length === 6 && !document.querySelector('.cw-content-inner[inert]')")
+    await click('Confirmar todos los datos')
+    await until("!document.querySelector('.cw-proposal') && !document.querySelector('.cw-content-inner[inert]')")
+    await click('Volver al proyecto')
+    await click('Construir el plano desde mi contexto')
+    await until("!!document.querySelector('.cw-construction-review')")
+    const built=await stored('.draft')
+    assert.deepEqual(built.size,{w:32,d:16})
+    assert.equal(built.stations.length,1)
+    const point=built.layout[built.stations[0].id]
+    assert.ok(point[0]>32*2/3 && point[1]<16/3)
+    assert.equal(await stored('.info.verification.status'),'verified')
+    console.log('Passed: accepted master builds the requested layout and shows requirement verification without another model extraction.')
     assert.deepEqual(exceptions,[])
     console.log('Data backend browser integration passed.')
 } finally {

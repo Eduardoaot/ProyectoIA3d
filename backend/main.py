@@ -37,6 +37,8 @@ spatial = get_provider("espacial")  # agentes que leen el espacio
 seer = get_provider("vision")  # imágenes de referencia (solo si el modelo tiene visión)
 context_organizer = get_provider("contexto")  # especialistas por tema y consolidador
 context_organizer.max_output_tokens = 4096
+analyst = get_provider("analista")
+analyst.max_output_tokens = 2048
 
 
 async def warm_up():
@@ -81,6 +83,7 @@ class PlantInterface(BaseModel):
     plant: dict
     context: str | dict | None = None
     weights: dict | None = None
+    reviewed: bool | None = None
 
 
 class LayoutInterface(BaseModel):
@@ -108,6 +111,18 @@ class ChatInterface(BaseModel):
 def study_deliverables(body: ContextInterface):
     from cauce.workspace_deliverables import build
     return build(body.context, body.plant, body.analysis, body.redesign)
+
+
+@app.post("/api/master/verify")
+def verify_master_layout(body: PlantInterface):
+    from cauce.master_builder import verify
+    master = body.context.get("master") if isinstance(body.context, dict) else None
+    if not isinstance(master, dict):
+        raise HTTPException(422, "No hay un contexto maestro aceptado para comparar.")
+    try:
+        return verify(master, body.plant)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
@@ -176,6 +191,13 @@ async def context_organize(body: OrganizeContextInterface):
 
 @app.post("/api/story")
 async def story(body: StoryInterface):
+    master = body.context.get("master") if body.context else None
+    if isinstance(master, dict) and master.get("schema_version") == 2:
+        from cauce.master_builder import build
+        try:
+            return build(master)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     if body.context and (ctxmod.current(body.context) or body.context.get("activities")):
         # Esta vía usa únicamente la revisión aceptada; el relato sin revisar no sustituye correcciones.
         body = body.model_copy(update={"text": "\n".join(ctxmod.lines(body.context))})
@@ -229,6 +251,16 @@ def evaluate_route(body: LayoutInterface):
 
 @app.post("/api/analyze")
 def analyze_route(body: PlantInterface):
+    master = body.context.get("master") if isinstance(body.context, dict) else None
+    verification = None
+    if isinstance(master, dict) and master.get("schema_version") == 2:
+        if body.reviewed is not True:
+            raise HTTPException(409, "Revisa y confirma esta versión del plano antes de analizarla.")
+        from cauce.master_builder import verify
+        try:
+            verification = verify(master, body.plant)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     try:
         weights, weights_note = criteria.normalize(body.weights)
     except criteria.WeightsError as e:
@@ -265,6 +297,8 @@ def analyze_route(body: PlantInterface):
     }
     if weights_note:
         out["weights_note"] = weights_note
+    if verification is not None:
+        out["construction_verification"] = verification
     if isinstance(body.context, dict) and ("activities" in body.context or "operators" in body.context):
         from cauce.workspace_deliverables import build
         out["studies"] = build(body.context, plant, out)
@@ -274,13 +308,18 @@ def analyze_route(body: PlantInterface):
 @app.post("/api/compact")
 async def compact_route(body: PlantInterface):
     """Quinta alternativa, a pedido: la IA da el criterio y el empacador junta las máquinas en el menor espacio."""
+    accepted = body.context.get("master") if isinstance(body.context, dict) else None
+    if accepted and body.reviewed is not True:
+        raise HTTPException(409, "Confirma el plano actual antes de pedir una optimización con el contexto maestro.")
     plant = body.plant
     current = evaluate(plant, plant["layout"])
-    provider = await spatial_or_extractor()
-    alt = await compact_alternative(plant, provider)
+    provider = analyst if accepted else await spatial_or_extractor()
+    alt = await compact_alternative(plant, provider, accepted)
     alt["score"] = score(current, alt["metrics"], alt["works_cost"], plant.get("use_assumptions"))
     alt["ops_moves"] = ops_moves(plant, alt["metrics"].get("ops") if plant.get("use_assumptions") else None)
     alt["model"] = provider.model if alt["source"] == "ia" else None
+    alt["context_version"] = context_version(body.context)
+    alt["plant_version"] = plant_version(plant)
     return alt
 
 

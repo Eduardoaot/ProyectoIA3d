@@ -71,9 +71,25 @@ def test_empty_or_failed_interpretation_never_returns_a_completed_master():
         asyncio.run(organize(TEXT, Model(unavailable=True)))
 
 
+def test_retry_reuses_valid_agent_deliveries_without_reusing_changed_sources():
+    cache, model = {}, Model()
+    asyncio.run(organize(TEXT, model, cache=cache))
+    count = len(model.calls)
+    repeated = asyncio.run(organize(TEXT, model, cache=cache))
+    assert len(model.calls) == count
+    assert all(row["cache_hit"] for row in repeated["master"]["trace"])
+    asyncio.run(organize(TEXT + " Otra observación.", model, cache=cache))
+    assert len(model.calls) > count
+
+
 def test_explanation_cannot_introduce_an_unsupported_number():
     with pytest.raises(ValueError, match="añade cifras"):
         clean_fact(fact(value="Hay 99 embobinadoras"), {"id": "relato", "text": TEXT})
+
+
+def test_quantities_spelled_in_words_are_read_without_model_arithmetic():
+    row = clean_fact(fact(number=3, value="Hay 3 embobinadoras", excerpt="Hay tres embobinadoras."), {"id": "case", "text": "Hay tres embobinadoras."})
+    assert row["number"] == 3
 
 
 def test_nullable_schema_preserves_unknown_values_and_rejects_wrong_types():
@@ -81,6 +97,21 @@ def test_nullable_schema_preserves_unknown_values_and_rejects_wrong_types():
     schema = {"type": ["number", "null"]}
     assert check(None, schema) == [] and check(12, schema) == []
     assert check("desconocido", schema) and check(True, schema)
+
+
+def test_ollama_uses_the_context_window_it_advertises(monkeypatch):
+    import httpx
+    from cauce.providers.ollama import OllamaProvider
+    monkeypatch.setenv("CAUCE_OLLAMA_CONTEXT", "12288")
+    requests = []
+    def handle(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json={"message": {"content": '{"ok":true}'}})
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(handle), **kwargs))
+    provider = OllamaProvider("modelo-local")
+    assert asyncio.run(provider.json("Sistema", "Entrada")) == {"ok": True}
+    assert requests[0]["options"]["num_ctx"] == provider.capabilities["max_context"] == 12288
 
 
 def test_semantic_sources_cover_full_document_with_original_offsets():
@@ -109,6 +140,25 @@ def test_conflicting_counts_remain_blocked():
     master = assemble([a, b], [])
     assert all(f["status"] == "blocked" for f in master["facts"])
     assert master["questions"][0]["status"] == "unresolved"
+
+
+def test_identical_labels_on_different_entities_do_not_conflict_or_overwrite():
+    source = {"id": "case", "text": "Hay 12 embobinadoras y 4 soldadoras."}
+    rows = [clean_fact(fact(label="Cantidad", excerpt=source["text"]), source), clean_fact(fact(label="Cantidad", entity="Soldadoras", number=4, value="Hay 4 soldadoras", excerpt=source["text"]), source)]
+    project = service.prepare({})
+    service.merge_result(project, {"proposals": rows})
+    assert all(p["status"] == "pending" for p in project["contextWorkspace"]["proposals"])
+    result = service.confirm(project, [p["id"] for p in rows])
+    assert len(result["accepted"]) == 2
+    from cauce.context import current
+    assert len(current(project["context"])) == 2
+
+
+def test_discarding_conflicting_source_unblocks_remaining_candidate():
+    p = service.prepare({"contextWorkspace": {"proposals": [{"id": "a", "topic": "maquinas", "label": "Cantidad", "value": "12", "status": "pending"}, {"id": "b", "topic": "maquinas", "label": "Cantidad", "value": "10", "status": "pending"}]}})
+    p["contextWorkspace"]["proposals"][1]["status"] = "discarded"
+    p = service.prepare(p)
+    assert p["contextWorkspace"]["proposals"][0]["status"] == "pending"
 
 
 def test_job_persists_master_stages_and_does_not_confirm_it(tmp_path, monkeypatch):
