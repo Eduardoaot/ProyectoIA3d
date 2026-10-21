@@ -100,7 +100,8 @@ export default function useWorkspaceBackend(project, activeId, onProjectChange) 
     const cancel = async () => {
         if (job?.id) await request(`/${id}/jobs/${job.id}/cancel`, { method: 'POST' })
     }
+    const clearNotice = () => setNotice('')
     const retry = () => job && interpret(job.text, job.kind, job.source_id, job.topic, job.id)
     const saveCopy = () => run(async () => { await save(); setNotice('Copia del proyecto guardada.'); return true })
-    return { id, busy, notice, job, questions, deliverables, run, save, saveCopy, confirm, interpret, upload, review, restore, exportProject, importProject, importOperators, cancel, retry }
+    return { id, busy, notice, job, questions, deliverables, run, save, saveCopy, confirm, interpret, upload, review, restore, exportProject, importProject, importOperators, cancel, clearNotice, retry }
 }

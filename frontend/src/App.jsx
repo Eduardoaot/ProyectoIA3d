@@ -131,8 +131,8 @@ export default function App() {
             setReading(false)
 
             return true
-        } catch {
-            setError('Error al analizar el proceso.')
+        } catch (error) {
+            setError(`Error al analizar el proceso: ${error instanceof Error ? error.message : 'Error desconocido.'}`)
             setReading(false)
             return false
         }

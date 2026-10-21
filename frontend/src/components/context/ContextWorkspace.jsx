@@ -154,21 +154,46 @@ export default function ContextWorkspace({ project, onProjectChange, onPrioritie
     const go = (id) => { setActive(id); setMessage(''); contentRef.current?.scrollTo({ top: 0 }); requestAnimationFrame(() => contentRef.current?.focus()) }
     const updateProposal = (id, updates) => onWorkspaceChange((previous) => ({ proposals: (previous.proposals || []).map((proposal) => proposal.id === id ? { ...proposal, status: 'pending', conflict: null, ...updates } : proposal) }))
     const organize = async (text, origin) => {
-        const available = await api.getCapabilities()
-        if (has(available, 'context_workspace')) { await remote.interpret(text, 'context', workspace.attachments.find((file) => file.name === origin && file.storage === 'server')?.id); setActive('inicio'); return }
         setOrganizing(true)
-        let result = null
-        let fallback = false
-        if (has(caps, 'context_agents') && text.length <= 8000) {
-            try { result = await api.organizeContext(text) } catch { fallback = true }
-        } else fallback = true
-        const proposed = (result?.proposals || organizeText(text)).map((proposal) => ({ ...proposal, id: `propuesta-${crypto.randomUUID()}`, ...(origin ? { origin } : {}) }))
-        setOrganizing(false)
-        if (!proposed.length) { setMessage('No encontramos frases para organizar. Puedes agregar los datos directamente en cada tema.'); return }
-        onWorkspaceChange((previous) => ({ proposals: [...(previous.proposals || []), ...proposed.filter((item) => !(previous.proposals || []).some((old) => old.excerpt === item.excerpt && old.topic === item.topic && old.status !== 'discarded'))], ...(result?.master ? { masterDraft: result.master } : {}) }))
-        const partial = Object.keys(result?.errors || {}).length > 0
-        setMessage(result ? `Los especialistas organizaron el contexto en un borrador JSON. Revisa cada propuesta antes de confirmarla.${partial ? ' Algunas secciones no pudieron procesarse.' : ''}` : `Organización local por palabras clave${fallback ? '; la IA no estuvo disponible para este envío' : ''}. Revisa cada propuesta.`)
-        setActive('inicio')
+        setMessage('Organizando información…')
+        try {
+            const available = await api.getCapabilities()
+            if (has(available, 'context_workspace')) {
+                const result = await remote.interpret(text, 'context', workspace.attachments.find((file) => file.name === origin && file.storage === 'server')?.id)
+                if (!result) {
+                    const additions = organizeText(text)
+                        .map((proposal) => ({ ...proposal, id: `propuesta-${crypto.randomUUID()}`, ...(origin ? { origin } : {}) }))
+                        .filter((proposal) => !workspace.proposals.some((old) => old.excerpt === proposal.excerpt && old.topic === proposal.topic && old.status !== 'discarded'))
+                    const proposals = [...workspace.proposals, ...additions]
+                    onWorkspaceChange({ proposals })
+                    if (additions.length) {
+                        await remote.save({ ...project, printed: false, contextWorkspace: { ...workspace, proposals } })
+                        remote.clearNotice()
+                        setMessage(`La IA no está disponible. Se organizaron ${additions.length} fragmentos localmente; revisa y confirma cada propuesta.`)
+                    } else setMessage(remote.notice || 'No encontramos frases para organizar. Puedes agregar los datos directamente en cada tema.')
+                    setActive('inicio')
+                    return
+                }
+                setMessage('')
+                setActive('inicio')
+                return
+            }
+            let result = null
+            let fallback = false
+            if (has(caps, 'context_agents') && text.length <= 8000) {
+                try { result = await api.organizeContext(text) } catch { fallback = true }
+            } else fallback = true
+            const proposed = (result?.proposals || organizeText(text)).map((proposal) => ({ ...proposal, id: `propuesta-${crypto.randomUUID()}`, ...(origin ? { origin } : {}) }))
+            if (!proposed.length) { setMessage('No encontramos frases para organizar. Puedes agregar los datos directamente en cada tema.'); return }
+            onWorkspaceChange((previous) => ({ proposals: [...(previous.proposals || []), ...proposed.filter((item) => !(previous.proposals || []).some((old) => old.excerpt === item.excerpt && old.topic === item.topic && old.status !== 'discarded'))], ...(result?.master ? { masterDraft: result.master } : {}) }))
+            const partial = Object.keys(result?.errors || {}).length > 0
+            setMessage(result ? `Los especialistas organizaron el contexto en un borrador JSON. Revisa cada propuesta antes de confirmarla.${partial ? ' Algunas secciones no pudieron procesarse.' : ''}` : `Organización local por palabras clave${fallback ? '; la IA no estuvo disponible para este envío' : ''}. Revisa cada propuesta.`)
+            setActive('inicio')
+        } catch (error) {
+            setMessage(`No se pudo organizar la información${error instanceof Error ? `: ${error.message}` : '.'}`)
+        } finally {
+            setOrganizing(false)
+        }
     }
     const confirmAll = () => {
         if (connected) return remote.confirm(pending.map((p) => p.id))

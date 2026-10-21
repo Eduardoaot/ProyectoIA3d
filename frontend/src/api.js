@@ -8,7 +8,11 @@ async function post(path, body, signal) {
         signal,
     })
 
-    if (!r.ok) throw new Error(`${path} respondió ${r.status}`)
+    if (!r.ok) {
+        const body = await r.json().catch(() => null)
+        const detail = typeof body?.detail === 'string' ? `: ${body.detail}` : ''
+        throw new Error(`${path} respondió ${r.status}${detail}`)
+    }
     return r.json()
 }
 
