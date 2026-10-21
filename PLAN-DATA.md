@@ -349,3 +349,89 @@ Estas dudas no bloquean esta actualización documental. Deben aclararse cuando s
 ## Prompt para retomar en casa
 
 > Trabaja en `feature/data1` de ProyectoIA3d. Lee primero la integración y el estado operativo de `PLAN-DATA.md`, `coordinacion/CONTRATO-DATA.md`, `coordinacion/CONTRATO-v3.md` y `CRITERIOS-IMPLEMENTACION-1.1.md`. El backend D0–D8 y su conexión inicial ya están implementados; esta rama también integra las dos ramas Data1 de Eduardo indicadas arriba. No reinicies el prototipo ni sustituyas los avances de un lado por los del otro. El proveedor acordado es Ollama local y el usuario configurará el modelo después; el siguiente ensayo debe usar fuentes reales y distinguir la calidad del modelo de las pruebas con proveedor simulado. Mantén la confirmación del contexto/plano, las prioridades activables con pesos base al apagarlas, los proyectos y originales persistentes, las actividades aceptadas con evidencia, los valores desconocidos y las ramas/uniones. Revisa con el usuario los resultados combinados antes de ampliar alcance. Siguen pendientes las definiciones de eficiencia individual, más especialistas/formatos y el diagrama interactivo previo al plano; no inventes sus fórmulas ni presentes un borrador derivado del plano como estudio observado. Conserva commit y push por fase terminada y verificada.
+
+
+
+
+
+
+#### ULTIMO PLAN
+
+Lo resolvería alrededor de **un contexto maestro compartido, verificable y versionado**. Ese contexto debe alimentar tanto la explicación al usuario como la construcción del plano.
+
+Los diez temas seguirían como navegación. Los especialistas trabajarían sobre una misma interpretación de la planta y conservarían relaciones entre temas.
+
+```mermaid
+flowchart TD
+    A[Relato y documentos originales] --> B[Intérprete general]
+    B --> C[Especialistas necesarios]
+    C --> D[Consolidación global y validación]
+    D --> E[Revisión y confirmación del usuario]
+    E --> F[Constructor de la distribución actual]
+    F --> G[Verificación contra el contexto aceptado]
+    G --> H[Plano y pendientes explicados]
+    H --> I[Análisis y propuestas de mejora]
+```
+
+Lo desarrollaría en seis fases, cada una con un resultado comprobable y su commit correspondiente.
+
+1. **Establecer un caso real de referencia.**
+
+   Primero usaríamos el relato que te produjo resultados incorrectos. Anotaríamos qué debe entender: máquinas, cantidades, actividades, conexiones, ubicaciones, medidas y elementos fijos.
+
+   También señalaríamos qué información realmente falta. Así podremos distinguir una interpretación equivocada de una distribución que el texto no permite determinar.
+
+   **Criterio de cierre:** tener una lista concreta con la que evaluar contexto y plano.
+
+2. **Construir una representación común de la planta.**
+
+   El intérprete general identificaría entidades y relaciones. Por ejemplo:
+
+   > Horno H1 → está en Acabado → ocupa el fondo derecho → está junto a Pintura → no se puede mover.
+
+   Cada afirmación conservaría su fuente y fragmento original. La explicación podría reformularse de manera clara, mientras cantidades, unidades y relaciones permanecerían vinculadas a su evidencia.
+
+   El maestro distinguiría **situación actual, objetivos, información desconocida y supuestos propuestos**. Las correcciones aceptadas tendrían prioridad y conservarían historial.
+
+   **Criterio de cierre:** poder explicar cómo funciona y cómo está distribuida la planta sin perder información explícita.
+
+3. **Corregir la coordinación de especialistas y la consolidación.**
+
+   Usaría una primera lectura general para detectar qué especialidades necesitan intervenir. Los especialistas recibirían las entidades relevantes, sus fuentes y las dudas pendientes.
+
+   Después habría una **consolidación global obligatoria** que realmente pueda reclasificar, relacionar, eliminar duplicados y señalar contradicciones. Su resultado se guardaría y sería el mismo que ve el usuario.
+
+   Para documentos largos, dividiríamos por unidades comprensibles —apartados, actividades o tablas—, conservando referencias entre fragmentos y una revisión conjunta final.
+
+   **Criterio de cierre:** que una corrección del consolidador aparezca efectivamente en pantalla y en el maestro utilizado después.
+
+4. **Hacer que la interfaz represente correctamente el estado del trabajo.**
+
+   Mostraríamos etapas comprensibles: leyendo, interpretando, contrastando información y preparando la revisión. Las propuestas anteriores quedarían identificadas como una versión previa.
+
+   Un fallo de IA tendría un resultado explícito. La clasificación por palabras clave seguiría siendo una alternativa identificada como tal. “Terminado” indicaría también si el resultado está completo, parcial o requiere aclaraciones.
+
+   **Criterio de cierre:** que puedas saber qué terminó, qué falló y qué información estás revisando.
+
+5. **Reconstruir el plano desde el contexto aceptado.**
+
+   El constructor consumiría directamente entidades, medidas y relaciones del maestro. El relato original seguiría disponible como evidencia.
+
+   La IA interpretaría restricciones como “al fondo”, “junto a” o “separado por un muro”; el código convertiría esas restricciones en posiciones y comprobaría geometría.
+
+   Después, un verificador compararía el plano con los requisitos:
+
+   - ¿Están todas las máquinas y cantidades?
+   - ¿Se respetaron ubicaciones, cercanías y elementos fijos?
+   - ¿Coinciden medidas, accesos y conexiones del proceso?
+   - ¿Qué requisito quedó incumplido o no se pudo comprobar?
+
+   **Criterio de cierre:** cada requisito explícito debe estar cumplido o tener una explicación visible. La distribución actual y las mejoras propuestas permanecerían diferenciadas.
+
+6. **Validar con IA real y después optimizar tiempos.**
+
+   Probaríamos el caso original y variantes con otras palabras, procesos ramificados y datos incompletos. Conservaríamos entradas, respuestas y tiempos para localizar dónde aparece cada error.
+
+   Después ajustaríamos concurrencia, reutilización de resultados y consultas por especialista según el equipo disponible.
+
+**El primer entregable sería tu relato correctamente organizado y explicado en el contexto maestro.** El segundo sería reconstruir su distribución y demostrar, requisito por requisito, qué respetó el plano. Esa sería la base para dar por resuelto el flujo.
