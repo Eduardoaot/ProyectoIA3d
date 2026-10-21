@@ -152,7 +152,7 @@ function SpatialNote({ spatial }) {
     )
 }
 
-export default function Story({ text, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2 }) {
+export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
     const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
@@ -171,22 +171,19 @@ export default function Story({ text, info, draft, setDraft, catalog, reading, e
                     <b>Paso 1 de 6</b>
                     <span>Detalles y plano</span>
                 </span>
-                <RevealTitle text="Primero, entendamos tu planta." />
-                <p className="lede">Reúne lo que sabes de tu operación, revisa los datos y construye tu plano. Puedes empezar con una descripción o dibujarlo tú mismo.</p>
+                <RevealTitle text="Describe cómo es tu planta." />
+                <p className="lede">Escribe tu planta y tu proceso con tus palabras: la IA arma un primer plano y luego lo corriges tú. Si además tienes documentos, estudios o datos por tema, inicia un proyecto avanzado.</p>
             </header>
 
             <div className="split">
                 <Appear className="stack">
-                    <div className="context-start-card">
-                        <span className="context-eyebrow">01 / EL PUNTO DE PARTIDA</span>
-                        <h2>Cuéntanos sobre<br />tu planta.</h2>
-                        <p>Tu proceso, tus documentos y lo que quieres mejorar. Todo en un mismo lugar.</p>
-                        {text.trim() && <blockquote className="context-story-preview">{text}</blockquote>}
-                        <div className="story-bar">
-                            <Btn variant="ghost" onClick={() => onOpenContext('inicio')}>
-                                {empty ? 'Empezar con mi contexto' : 'Continuar con mi contexto'}
-                            </Btn>
+                    <div className="panel story-start">
+                        <div className="story-sheet" style={{ border: 0 }}>
+                            <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Tengo mi planta productora…" aria-label="Descripción de tu planta" style={{ minHeight: 260 }} />
+                        </div>
+                        <div className="story-bar story-bar--main">
                             <Btn
+                                wide
                                 onClick={async () => {
                                     if (await onRead()) scrollToEditor()
                                 }}
@@ -198,6 +195,22 @@ export default function Story({ text, info, draft, setDraft, catalog, reading, e
                     </div>
 
                     {error && <p className="small">{error}</p>}
+
+                    <div className="story-advanced">
+                        <div>
+                            <span className="context-eyebrow">OTRA FORMA DE EMPEZAR</span>
+                            <p className="small">¿Tienes documentos, estudios del trabajo o datos por tema? Organízalos en el contexto de la planta.</p>
+                        </div>
+                        {pending > 0 && (
+                            <p className="context-pending small">
+                                <b>{pending} {pending === 1 ? 'dato propuesto' : 'datos propuestos'}</b> por revisar.{' '}
+                                <button type="button" className="link-btn" onClick={() => onOpenContext('inicio')}>Revisarlos</button>
+                            </p>
+                        )}
+                        <Btn variant="ghost" size="small" onClick={() => onOpenContext('inicio')}>
+                            Iniciar proyecto avanzado
+                        </Btn>
+                    </div>
                 </Appear>
 
                 <div className="stack">

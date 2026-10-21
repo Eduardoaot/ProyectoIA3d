@@ -1,8 +1,10 @@
-# Arranca la app completa: Ollama (IA), backend (puerto 8000) en otra ventana y frontend (puerto 5173) en esta.
+﻿# Arranca la app completa: Ollama (IA), backend (puerto 8000) en otra ventana y frontend (puerto 5173) en esta.
 # Uso, desde la raíz del proyecto:  powershell -ExecutionPolicy Bypass -File .\iniciar.ps1
 $root = $PSScriptRoot
 $model = if ($env:CAUCE_MODEL) { $env:CAUCE_MODEL } else { 'llama3.1:8b' }
-$ollamaUrl = if ($env:OLLAMA_HOST) { $env:OLLAMA_HOST } else { 'http://localhost:11434' }
+# 127.0.0.1 y no localhost: en Windows, localhost prueba primero IPv6 (::1), donde Ollama no escucha,
+# y ese intento fallido tarda ~2 s, justo el tiempo de espera de cada prueba.
+$ollamaUrl = if ($env:OLLAMA_HOST) { $env:OLLAMA_HOST } else { 'http://127.0.0.1:11434' }
 
 function Test-Ollama {
     try { Invoke-WebRequest -UseBasicParsing "$ollamaUrl/api/tags" -TimeoutSec 2 | Out-Null; return $true } catch { return $false }
@@ -26,11 +28,11 @@ if (-not $ollama) {
         # El proceso existe pero aún no contesta (la app de la bandeja tarda en arrancar):
         # se espera en vez de lanzar un segundo servidor, que fallaría por el puerto ocupado.
         Write-Host "Ollama ya se está iniciando; esperando a que responda..."
-        Wait-Ollama 30 | Out-Null
+        Wait-Ollama 60 | Out-Null
     } else {
         Write-Host "Encendiendo Ollama..."
         Start-Process -FilePath $ollama -ArgumentList 'serve' -WindowStyle Hidden
-        Wait-Ollama 30 | Out-Null
+        Wait-Ollama 60 | Out-Null
     }
     if (Test-Ollama) {
         $tags = (Invoke-WebRequest -UseBasicParsing "$ollamaUrl/api/tags").Content | ConvertFrom-Json
@@ -61,6 +63,16 @@ if (-not (Test-Path $py)) {
     & $py -m pip install -r (Join-Path $root "backend\requirements.txt")
 }
 Start-Process powershell -WorkingDirectory (Join-Path $root "backend") -ArgumentList "-NoExit", "-Command", "& '$py' -m uvicorn main:app --reload --port 8000"
+
+# Se espera a que el backend conteste antes de abrir el navegador: si la página pide /api
+# antes de tiempo, Vite registra «http proxy error ... ECONNREFUSED» (la app reintenta sola).
+Write-Host "Esperando al backend en el puerto 8000..."
+$t = 0
+while ($t -lt 60) {
+    try { Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8000/api/health" -TimeoutSec 2 | Out-Null; break } catch { Start-Sleep -Seconds 1; $t++ }
+}
+if ($t -ge 60) { Write-Host "El backend no respondió en 60 s; revisa su ventana. La página reintentará conectarse." -ForegroundColor Yellow }
+else { Write-Host "Backend listo." -ForegroundColor Green }
 
 # --- Frontend ---
 if (-not (Test-Path (Join-Path $root "frontend\node_modules"))) {

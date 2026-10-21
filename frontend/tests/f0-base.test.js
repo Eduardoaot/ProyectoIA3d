@@ -21,6 +21,19 @@ test('error de red equivale a backend viejo', async () => {
     assert.equal(caps, NO_CAPS)
 })
 
+test('sin servidor no se guarda en caché: la siguiente consulta vuelve a preguntar', async () => {
+    resetCapabilities()
+    let calls = 0
+    const down = async () => {
+        calls += 1
+        return { ok: false, status: 500 }
+    }
+    assert.equal(await loadCapabilities(down), NO_CAPS)
+    const caps = await loadCapabilities(async () => ({ ok: true, json: async () => json('capabilities-full.json') }))
+    assert.equal(calls, 1)
+    assert.ok(has(caps, 'plan_ops'))
+})
+
 test('backend nuevo: se leen las funciones anunciadas y se guarda en caché', async () => {
     resetCapabilities()
     let calls = 0

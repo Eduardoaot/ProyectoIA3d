@@ -24,3 +24,12 @@
     .context-review-card { flex-direction: column; align-items: flex-start; }
 }
 @media print { .context-topbar, .context-review-card { display: none; } }
+.context-pending { margin: 0; padding: 10px 14px; border-left: 4px solid var(--black); background: var(--g100); }
+/* Paso 1: la descripción directa es el camino principal; el contexto completo, la alternativa. */
+.story-start .story-bar--main { justify-content: stretch; }
+.story-start .story-bar--main .btn { max-width: 100%; }
+.btn { max-width: 100%; }
+.story-advanced { display: grid; gap: 14px; padding: 20px 22px; border: 2px dashed var(--g300); background: var(--white); transition: border-color .3s var(--ease-out); }
+.story-advanced:hover { border-color: var(--black); }
+.story-advanced .context-eyebrow { display: block; margin-bottom: 6px; }
+.story-advanced .btn { justify-self: start; }
