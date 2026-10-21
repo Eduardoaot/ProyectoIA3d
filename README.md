@@ -18,6 +18,22 @@ Funciona para cualquier rubro (vidrio, carpintería, metalmecánica, costura, al
 
 ## Contexto, estudios y operadores conectados
 
+El recorrido maestro añade un intérprete general que delega a especialistas, una ronda de aclaraciones y un consolidador explícito. El maestro conserva entidades, afirmaciones, fuentes y dudas. La construcción usa sus datos aceptados y comprueba cada requisito del plano. Contrato: [CONTRATO-MAESTRO.md](coordinacion/CONTRATO-MAESTRO.md).
+
+Para probar: abre **Ver contexto de la planta**, pega el relato o adjunta documentos, organiza y revisa las propuestas. Confirma los datos y vuelve al paso inicial para construir. Después de editar el plano, usa **Comprobar el plano contra el contexto**; confirma la versión antes de analizar. Los requisitos incumplidos o desconocidos y las dimensiones ilustrativas quedan visibles.
+
+La prioridad general es texto para datos e imágenes para ubicación. Puedes indicar que las imágenes son la referencia principal de este proyecto. En ese caso se requiere interpretación de visión o revisión manual explícita; la aplicación no afirma haber leído una imagen con un modelo sin visión.
+
+El ensayo con el modelo real se ejecuta desde la raíz:
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 backend/evaluate_master.py
+```
+
+Registra el resultado y las trazas en `.cauce-data/master-evaluation.json`. Si Ollama no está listo, registra `not_run`; no utiliza un modelo simulado para sustituir esa prueba. Las anotaciones visuales de `pruebas/contexto-transformadores.expected.json` son referencias humanas de evaluación y no se envían al modelo como respuestas esperadas.
+
+`CAUCE_CONTEXT_CONCURRENCY` permite 1–4 consultas simultáneas de especialistas (2 por defecto). `CAUCE_OLLAMA_CONTEXT` fija la ventana solicitada al servidor (8192 por defecto), enviada como `options.num_ctx` según la [documentación de Ollama](https://github.com/ollama/ollama/blob/main/docs/faq.mdx). El ajuste de rendimiento y la fidelidad con el caso real quedan pendientes del ensayo con un proveedor activo.
+
 La rama de continuación `feature/data1` reúne el expediente local persistente en SQLite, con confirmación por lotes, documentos originales, trabajos de interpretación por bloques, estudios de más de cien actividades, base de operadores y entregables estructurados, junto con las mejoras de recinto, editor y presentación de Eduardo. Contrato, integración y próximos pasos: [CONTRATO-DATA.md](coordinacion/CONTRATO-DATA.md) y [PLAN-DATA.md](PLAN-DATA.md).
 
 Desde la raíz, con las dependencias de `backend/requirements-dev.txt` instaladas en `.venv`:
