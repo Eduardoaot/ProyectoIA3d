@@ -197,6 +197,11 @@
 .cw-confirm-bar p { font-size: 11px; color: #777; margin-top: 5px; }
 .cw-notice { display: flex; justify-content: space-between; gap: 20px; background: #f3f3f0; border-left: 2px solid #222; padding: 13px 16px; font-size: 12px; margin-bottom: 26px; }
 .cw-notice > button { border: 0; background: none; font-size: 20px; line-height: 1; }
+.cw-notice--organizing { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 20px; }
+.cw-organize-progress { grid-column: 1 / -1; height: 4px; overflow: hidden; background: var(--g200); }
+.cw-organize-progress > span { display: block; width: 35%; height: 100%; background: var(--black); animation: cw-organize-progress 1.4s ease-in-out infinite; }
+@keyframes cw-organize-progress { from { transform: translateX(-110%); } to { transform: translateX(310%); } }
+@media (prefers-reduced-motion: reduce) { .cw-organize-progress > span { width: 100%; animation: none; } }
 .cw-processed { font-size: 12px; border-top: 1px solid #ddd; margin-top: 32px; padding-top: 20px; }
 .cw-processed p { padding: 12px 0; border-bottom: 1px solid #eee; }
 .cw-processed p > span { display: block; color: #777; margin-top: 5px; }
