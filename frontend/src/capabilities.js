@@ -20,9 +20,17 @@ export function loadCapabilities(fetcher = (u) => fetch(u)) {
     if (!cached)
         cached = Promise.resolve()
             .then(() => fetcher('/api/capabilities'))
-            .then((r) => (r && r.ok ? r.json() : null))
+            .then((r) => {
+                // 5xx: el proxy de Vite aún no alcanza al backend (arrancando o reiniciándose).
+                if (r && r.status >= 500) throw new Error('backend no disponible')
+                return r && r.ok ? r.json() : null
+            })
             .then(normalizeCaps)
-            .catch(() => NO_CAPS)
+            .catch(() => {
+                // Sin servidor no se guarda la respuesta: la siguiente consulta vuelve a preguntar.
+                cached = null
+                return NO_CAPS
+            })
     return cached
 }
 

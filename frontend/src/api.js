@@ -8,7 +8,11 @@ async function post(path, body, signal) {
         signal,
     })
 
-    if (!r.ok) throw new Error(`${path} respondió ${r.status}`)
+    if (!r.ok) {
+        const body = await r.json().catch(() => null)
+        const detail = typeof body?.detail === 'string' ? `: ${body.detail}` : ''
+        throw new Error(`${path} respondió ${r.status}${detail}`)
+    }
     return r.json()
 }
 
@@ -23,14 +27,15 @@ export const api = {
     // Nunca falla: si el backend no la conoce, devuelve { features: [] }.
     getCapabilities: () => loadCapabilities(),
     catalog: () => get('/api/catalog'),
-    story: (text) => post('/api/story', { text }),
+    studies: (body) => post('/api/studies/build', body),
+    verifyMaster: (plant, context) => post('/api/master/verify', { plant, context }),
+    story: (text, context) => post('/api/story', { text, ...(context ? { context } : {}) }),
     organizeContext: (text) => post('/api/context/organize', { text }),
     routes: (plant, positions, signal) => post('/api/routes', { plant, positions }, signal),
     evaluate: (plant, positions, rebalance = true, signal) => post('/api/evaluate', { plant, positions, rebalance }, signal),
     // extra: campos nuevos del contrato v3 (context, weights); el backend viejo los ignora.
     analyze: (plant, extra = {}) => post('/api/analyze', { plant, ...extra }),
-    compact: (plant) => post('/api/compact', { plant }),
-    missions: (context) => post('/api/missions', context),
+    compact: (plant, context, reviewed = false) => post('/api/compact', { plant, ...(context ? { context, reviewed } : {}) }),
     // Asistente del editor (solo si capabilities anuncia plan_ops).
     planOps: (instruction, plant) => post('/api/plan/ops', { instruction, plant }),
     // Imágenes de referencia: el backend responde 422 si su proveedor no tiene visión.

@@ -29,7 +29,8 @@ export function reviewSignature(project) {
         text: project.text || '',
         context: project.context || { segments: {} },
         weights: project.weights || null,
-        workspace: project.contextWorkspace || {},
+        prioritiesEnabled: project.prioritiesEnabled !== false,
+        workspace: Object.fromEntries(['proposals', 'attachments', 'activities', 'operators', 'study_text', 'question_answers', 'source_policy'].filter((key) => project.contextWorkspace?.[key] !== undefined).map((key) => [key, project.contextWorkspace[key]])),
     }))
 }
 
@@ -54,6 +55,7 @@ export function organizeText(text) {
 
 const LABELS = { t_ciclo: 'Tiempo de ciclo', t_cycle_min: 'Tiempo de ciclo', demanda: 'Demanda', turnos: 'Turnos', operarios: 'Operarios', produccion: 'Producción', presupuesto: 'Presupuesto', count: 'Cantidad', t_setup: 'Tiempo de preparación', scrap: 'Rechazo', distancia: 'Distancia' }
 export function entryLabel(entry) {
+    if (entry.label) return entry.label
     const key = String(entry.key || 'Nota')
     const parts = key.split('.')
     if (TOPICS.some((topic) => topic.id === parts[0]) && parts.length > 1) return parts.slice(1).join('.')
@@ -112,6 +114,12 @@ export async function downloadAttachment(id) {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
+export async function attachmentFile(id) {
+    const record = await attachmentStore('readonly', (store) => store.get(id))
+    if (!record?.file) throw new Error('Falta un original en este navegador. Vuelve a adjuntarlo antes de exportar el paquete.')
+    return record.file
+}
+
 export async function deleteAttachments(ids) {
     if (!ids.length) return
     await attachmentStore('readwrite', (store) => {
@@ -119,4 +127,59 @@ export async function deleteAttachments(ids) {
         for (const id of ids) request = store.delete(id)
         return request
     })
+}
+
+// Formato por tema: una hoja con columnas fijas que se puede llenar en Excel y adjuntar.
+// Al adjuntarla, cada fila se vuelve un dato propuesto; nada se confirma solo.
+export const TEMPLATE_COLUMNS = ['dato', 'valor', 'unidad', 'fuente', 'confianza', 'responsable']
+const SOURCES = ['usuario', 'medido', 'estimado', 'supuesto']
+const CONFIDENCES = ['alta', 'media', 'baja']
+const csvCell = (value) => /[",;\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
+
+export function templateCsv(topic) {
+    const example = ['Ejemplo (borra esta fila)', topic.example, '', 'usuario', 'media', '']
+    return `﻿${[TEMPLATE_COLUMNS, example].map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`
+}
+
+function csvRows(text) {
+    const firstLine = text.split(/\r?\n/, 1)[0]
+    const separator = (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ';' : ','
+    const rows = [[]]
+    let cell = '', quoted = false
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i]
+        if (quoted) {
+            if (char === '"' && text[i + 1] === '"') { cell += '"'; i++ }
+            else if (char === '"') quoted = false
+            else cell += char
+        } else if (char === '"') quoted = true
+        else if (char === separator) { rows.at(-1).push(cell); cell = '' }
+        else if (char === '\n' || char === '\r') {
+            if (char === '\r' && text[i + 1] === '\n') i++
+            rows.at(-1).push(cell); cell = ''; rows.push([])
+        } else cell += char
+    }
+    rows.at(-1).push(cell)
+    return rows.map((row) => row.map((value) => value.trim())).filter((row) => row.some(Boolean))
+}
+
+// Devuelve las filas del formato, o null si el texto no sigue el formato.
+export function parseTemplate(text) {
+    const rows = csvRows(String(text || '').replace(/^﻿/, ''))
+    const header = rows[0]?.map((name) => name.toLowerCase())
+    if (!header || !['dato', 'valor'].every((name) => header.includes(name))) return null
+    const column = (row, name) => row[header.indexOf(name)] ?? ''
+    return rows.slice(1)
+        .map((row) => ({ label: column(row, 'dato'), value: column(row, 'valor'), unit: column(row, 'unidad'), source: column(row, 'fuente').toLowerCase(), confidence: column(row, 'confianza').toLowerCase(), owner: column(row, 'responsable'), excerpt: row.filter(Boolean).join(' · ') }))
+        .filter((row) => row.label && row.value && !/^ejemplo \(borra esta fila\)$/i.test(row.label))
+        .map((row) => ({ ...row, source: SOURCES.includes(row.source) ? row.source : 'usuario', confidence: CONFIDENCES.includes(row.confidence) ? row.confidence : 'media' }))
+}
+
+export function downloadTemplate(topic) {
+    const url = URL.createObjectURL(new Blob([templateCsv(topic)], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `formato-${topic.id}.csv`
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
 }

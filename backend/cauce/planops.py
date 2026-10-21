@@ -62,6 +62,44 @@ def protected_refs(text: str) -> list[str]:
     return out
 
 
+STOP_LOCK = r"(?=[.;]| pero | y (?:reorganiz|reacomod|muev|cambi|optimiz|redistribu)|$)"
+LOCK_PATTERNS = [
+    r"\bmant[ei]n\w*\s+fij[oa]s?\s+(.+?)" + STOP_LOCK,
+    r"(?<![a-z])fij[ae]s?\s+(?!a\b|en\b)(.+?)" + STOP_LOCK,
+    r"\bconserv\w*\s+(?:la |las )?(?:posicion(?:es)?|lugar(?:es)?|ubicacion(?:es)?)\s+(?:actual(?:es)?\s+)?de\s+(.+?)" + STOP_LOCK,
+    r"\bmant[ei]n\w*\s+(.+?)\s+en sus? (?:sitio|lugar|posicion)",
+    r"\bdej[ae]\w*\s+(.+?)\s+(?:donde esta|en su (?:sitio|lugar))",
+]
+ATTRS = {"dimensiones", "medidas", "tamano", "tamanos", "conexiones", "rutas", "posiciones", "portones", "giro", "orientacion"}
+ALL_MACHINES = re.compile(r"^(?:todas? )?(?:las |los )?(?:maquinas|estaciones|equipos)$")
+
+
+def lock_requests(text: str) -> list[str]:
+    """Lo que la instrucción pide dejar fijo: "mantén fija la M1", "conserva las posiciones de las máquinas 1, 3 y 5".
+    Una descripción de lugar ("la sierra está al fondo") no fija nada: solo los verbos de conservar."""
+    t = words_to_digits(normalize(text))
+    refs = []
+    for pat in LOCK_PATTERNS:
+        for m in re.finditer(pat, t):
+            noun = ""
+            for part in re.split(r"\s*,\s*|\s+(?:y|e|ni)\s+", m.group(1).strip()):
+                part = re.sub(r"^(?:(?:y|e|pero)\s+)?(?:fij[oa]s?\s+)?(?:a |al )?(?:la|el|los|las)\s+", "", part.strip())
+                part = re.sub(r"^(?:y|e|pero)\s+", "", part)
+                part = re.sub(r"\s+(?:en su (?:posicion|lugar|sitio)(?: actual)?|actual(?:es)?|donde esta)$", "", part)
+                # Otra cláusula ("no cambies las medidas") o un atributo no son elementos de la planta.
+                if not part or re.match(r"^(?:no|pero|reorganiz|reacomod|muev|cambi|optimiz)\w*\b", part) or part in ATTRS:
+                    continue
+                head = re.match(r"^([a-z]+?)s?\s+(\d+)$", part)
+                if head:
+                    noun = head.group(1)
+                elif re.fullmatch(r"\d+", part) and noun:
+                    # "las máquinas 1, 3 y 5": el número suelto hereda el sustantivo.
+                    part = f"{noun} {part}"
+                if part not in refs:
+                    refs.append(part)
+    return refs + [p for p in protected_refs(text) if p not in refs and p not in ATTRS]
+
+
 class Planner:
     def __init__(self, plant: dict, instruction: str):
         self.work = copy.deepcopy(plant)
@@ -103,11 +141,11 @@ class Planner:
 
     def guard(self, item: dict, verb: str = "mover"):
         name = normalize(item.get("name", ""))
-        if item.get("locked"):
-            raise Reject(f"«{item['name']}» está fijo" + (f": {item['lock_reason']}" if item.get("lock_reason") else ""))
         for p in self.protected:
             if p in name or name in p or p == item["id"]:
                 raise Reject(f"La instrucción pide no {verb} «{item['name']}»")
+        if item.get("locked"):
+            raise Reject(f"«{item['name']}» está fijo" + (f": {item['lock_reason']}" if item.get("lock_reason") else ""))
 
     def user_number(self, v, what: str):
         if v is None:
@@ -251,6 +289,44 @@ class Planner:
         it["locked"] = False
         return {"op": "unlock", "id": it["id"]}
 
+    def resolve(self, ref: str) -> tuple[list[str], str | None]:
+        """Ids que nombra una referencia de la instrucción, o un aviso si no se encuentra o es ambigua."""
+        if ALL_MACHINES.match(ref):
+            return [s["id"] for s in self.work["stations"]], None
+        num = re.match(r"^(?:[a-z]+\s+)?m?(\d+)$", ref)
+        if num:
+            n = num.group(1)
+            code = [s["id"] for s in self.work["stations"] if re.search(rf"(?<![a-z0-9])m{n}(?![0-9])", normalize(s["name"])) or s["id"].lower() == f"m{n}"]
+            hits = code or [s["id"] for s in self.work["stations"] if re.search(rf"(?<![a-z0-9.,]){n}(?![0-9])", normalize(s["name"]))]
+            if len(hits) == 1:
+                return hits, None
+            return [], f"«{ref}»: " + ("ninguna estación lleva ese número" if not hits else "varias estaciones llevan ese número")
+        _, it = self.element(ref)
+        if it:
+            return [it["id"]], None
+        # "el almacén principal": por tipo; si hay varias, la principal es la más grande.
+        base = re.sub(r"\s+(?:principal|grande|actual)$", "", ref)
+        k = _kind_from_name(base)
+        cands = [s for s in self.work["stations"] if k != "otro" and s["kind"] == k]
+        if len(cands) > 1 and "principal" in ref:
+            cands = [max(cands, key=lambda s: s["w"] * s["d"])]
+        if len(cands) == 1:
+            return [cands[0]["id"]], None
+        return [], f"«{ref}»: " + ("no se encontró en la planta" if not cands else "es ambiguo, hay varias")
+
+    def lock_ops(self, text: str) -> tuple[list, list]:
+        """Operaciones lock que la instrucción pide con palabras, sin depender del modelo."""
+        ops, missing, seen = [], [], set()
+        for ref in lock_requests(text):
+            ids, why = self.resolve(ref)
+            if why:
+                missing.append(why)
+            for i in ids:
+                if i not in seen and not self.element(i)[1].get("locked"):
+                    seen.add(i)
+                    ops.append({"op": "lock", "id": i, "reason": "La instrucción pide no moverlo"})
+        return ops, missing
+
     def run(self, raw_ops: list) -> tuple[list, list]:
         ops, rejected = [], []
         for raw in raw_ops:
@@ -274,17 +350,32 @@ class Planner:
 async def plan_ops(provider, plant: dict, instruction: str) -> dict:
     system = prompt("editor")
     text = editor_facts(plant) + "\n\nInstrucción del usuario: " + instruction
+    # Lo que se pide fijar se fija antes que nada: así ninguna operación del modelo lo puede mover.
+    planner = Planner(plant, instruction)
+    locks, missing = planner.lock_ops(instruction)
+    lock_note = ("No se pudo fijar: " + "; ".join(missing) + ".") if missing else ""
+
+    def fallback(note):
+        ops, rejected = Planner(plant, instruction).run(locks)
+        return {"ops": ops, "rejected": rejected, "notes": " ".join(x for x in ("Se fijó lo que la instrucción pide conservar." if ops else note, lock_note) if x)}
+
     try:
         raw = await provider.json(system, text, EDITOR_SCHEMA)
         if not isinstance(raw, dict) or check(raw, {"type": "object", "required": ["ops"], "properties": {"ops": {"type": "array"}}}):
             # Un reintento con el error a la vista; si vuelve a fallar no se inventa nada.
             raw = await provider.json(system, text + "\n\nTu respuesta anterior no cumplía el esquema: debe ser un objeto con la lista 'ops'.", EDITOR_SCHEMA)
     except Exception as e:  # noqa: BLE001
-        return {"ops": [], "rejected": [], "notes": f"El asistente no respondió ({e}). No se propuso ningún cambio."}
+        return fallback(f"El asistente no respondió: la IA (Ollama) no está encendida o no se alcanza ({e}). Revisa que Ollama esté corriendo y vuelve a intentar.")
     if not isinstance(raw, dict) or not isinstance(raw.get("ops"), list):
-        return {"ops": [], "rejected": [], "notes": "El asistente no devolvió operaciones válidas. No se propuso ningún cambio."}
-    ops, rejected = Planner(plant, instruction).run(raw["ops"])
-    return {"ops": ops, "rejected": rejected, "notes": str(raw.get("notes") or "")}
+        return fallback("El asistente no devolvió operaciones válidas. No se propuso ningún cambio.")
+    locked = {o["id"] for o in locks}
+
+    def dup_lock(o):
+        it = planner.element(o.get("id"))[1] if isinstance(o, dict) and o.get("op") == "lock" else None
+        return bool(it) and it["id"] in locked
+
+    ops, rejected = Planner(plant, instruction).run(locks + [o for o in raw["ops"] if not dup_lock(o)])
+    return {"ops": ops, "rejected": rejected, "notes": " ".join(x for x in (str(raw.get("notes") or ""), lock_note) if x)}
 
 
-__all__ = ["plan_ops", "Planner", "editor_facts", "protected_refs"]
+__all__ = ["plan_ops", "Planner", "editor_facts", "protected_refs", "lock_requests"]

@@ -43,7 +43,7 @@ ROLE_CONFIG = {
 
 def _make(kind: str, model: str, temperature: float, timeout: float = 180):
     if kind == "ollama":
-        return OllamaProvider(model=model, host=os.getenv("OLLAMA_HOST", "http://localhost:11434"), temperature=temperature, timeout=timeout)
+        return OllamaProvider(model=model, host=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"), temperature=temperature, timeout=timeout)
     raise ValueError(f"Proveedor de IA desconocido: {kind}")
 
 

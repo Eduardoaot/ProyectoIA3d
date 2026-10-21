@@ -36,3 +36,12 @@ export function splitValidation(text) {
     }
     return { text: text.slice(0, i).replace(/\n$/, ''), validation }
 }
+
+/* ¿Un rediseño a mano es de esta planta? Sí, si tiene las mismas estaciones (id y nombre).
+   La forma, las paredes o los portones pueden haber cambiado: eso es obra del rediseño.
+   Uno de otra planta (otra historia) no se puede mostrar sobre esta. */
+export function samePlant(a, b) {
+    if (!a || !b) return false
+    const key = (p) => (p.stations || []).map((s) => `${s.id}:${s.name}`).sort().join('|')
+    return key(a) === key(b)
+}

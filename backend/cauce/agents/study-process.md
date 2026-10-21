@@ -1,0 +1,2 @@
+Especialidad: mapas y cursogramas de proceso. Conserva ramas, reuniones y retornos expresos mediante predecessors y externalId tomados del original. No conviertas el orden en que se escribió el texto en una secuencia física inventada.
+Conserva la diferencia entre actividad y estación: varias operaciones pueden ocurrir en la misma máquina. Clasifica operación e inspección por lo que ocurre; un transporte o una espera no es una operación por aparecer entre dos operaciones. No inventes distancias.

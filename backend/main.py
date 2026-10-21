@@ -1,4 +1,8 @@
 import asyncio
+import json
+import os
+import pathlib
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,9 +25,8 @@ from cauce.simulate import simulate
 from cauce.compact import compact_alternative, footprint
 from cauce.providers import caps, get_provider
 from cauce.story import STORY_SCHEMA, STORY_SYSTEM, build_plant
+from cauce.workspace_routes import create_router
 
-app = FastAPI(title="Cauce")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 # Un proveedor por rol (criterios §7.3); cada uno se configura con CAUCE_<ROL>_PROVIDER/MODEL.
 extractor = get_provider("extractor")  # historia -> JSON
 engineer = get_provider("chat")  # chat del ingeniero
@@ -33,6 +36,32 @@ editor = get_provider("editor")  # asistente del editor: instrucción -> operaci
 spatial = get_provider("espacial")  # agentes que leen el espacio
 seer = get_provider("vision")  # imágenes de referencia (solo si el modelo tiene visión)
 context_organizer = get_provider("contexto")  # especialistas por tema y consolidador
+context_organizer.max_output_tokens = 4096
+analyst = get_provider("analista")
+analyst.max_output_tokens = 2048
+
+
+async def warm_up():
+    """Al arrancar, deja leídas las instrucciones del extractor y del revisor (las dos llamadas
+    que hace toda historia). La primera historia se ahorra ~1 min en CPU; sin Ollama no pasa nada."""
+    for system in (STORY_SYSTEM, REVIEW_SYSTEM):
+        try:
+            await extractor.warm(system)
+        except Exception:  # noqa: BLE001
+            return
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    task = asyncio.create_task(warm_up()) if hasattr(extractor, "warm") and os.getenv("CAUCE_WARM", "1") != "0" else None
+    yield
+    if task:
+        task.cancel()
+
+
+app = FastAPI(title="Cauce", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(create_router(lambda: context_organizer))
 
 
 async def spatial_or_extractor():
@@ -43,6 +72,7 @@ async def spatial_or_extractor():
 
 class StoryInterface(BaseModel):
     text: str
+    context: dict | None = None
 
 
 class OrganizeContextInterface(BaseModel):
@@ -53,6 +83,7 @@ class PlantInterface(BaseModel):
     plant: dict
     context: str | dict | None = None
     weights: dict | None = None
+    reviewed: bool | None = None
 
 
 class LayoutInterface(BaseModel):
@@ -76,9 +107,27 @@ class ChatInterface(BaseModel):
     with_validation: bool = False
 
 
+@app.post("/api/studies/build")
+def study_deliverables(body: ContextInterface):
+    from cauce.workspace_deliverables import build
+    return build(body.context, body.plant, body.analysis, body.redesign)
+
+
+@app.post("/api/master/verify")
+def verify_master_layout(body: PlantInterface):
+    from cauce.master_builder import verify
+    master = body.context.get("master") if isinstance(body.context, dict) else None
+    if not isinstance(master, dict):
+        raise HTTPException(422, "No hay un contexto maestro aceptado para comparar.")
+    try:
+        return verify(master, body.plant)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
-FEATURES: list[str] = ["report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors", "simulate", "context_agents"]
+FEATURES: list[str] = ["context_master", "report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors", "simulate", "context_agents", "context_workspace", "context_jobs", "context_documents", "work_studies", "operator_import"]
 
 
 def provider_caps(p) -> dict:
@@ -107,6 +156,29 @@ async def catalog_route():
     return catalog.public()
 
 
+FLOW_SCHEMA = {"type": "object", "properties": {"flujo": STORY_SCHEMA["properties"]["flujo"]}, "required": ["flujo"]}
+REVIEW_SYSTEM = (pathlib.Path(__file__).resolve().parent / "cauce" / "agents" / "revisor.md").read_text(encoding="utf-8").strip()
+
+
+async def review_flow(provider, text: str, extracted: dict) -> dict:
+    """El flujo corregido por el revisor si es válido (solo nombres de la lista); si falla, el original."""
+    names = [str(x.get("nombre")) for x in extracted.get("estaciones") or [] if isinstance(x, dict) and x.get("nombre")]
+    prompt_ = f"Historia:\n{text}\n\nEstaciones: {json.dumps(names, ensure_ascii=False)}\n\nFlujo propuesto: {json.dumps(extracted.get('flujo') or [], ensure_ascii=False)}"
+    try:
+        out = await provider.json(REVIEW_SYSTEM, prompt_, FLOW_SCHEMA)
+    except Exception:  # noqa: BLE001
+        return extracted
+    flujo = out.get("flujo") if isinstance(out, dict) else None
+    if not isinstance(flujo, list) or check({"flujo": flujo}, FLOW_SCHEMA):
+        return extracted
+    known = {n.strip().lower() for n in names}
+    flujo = [f for f in flujo if isinstance(f, dict) and str(f.get("de", "")).strip().lower() in known and str(f.get("a", "")).strip().lower() in known]
+    # Un revisor que deja menos de la mitad de las conexiones probablemente se equivocó: se queda el original.
+    if len(flujo) < max(1, len(extracted.get("flujo") or []) // 2):
+        return extracted
+    return {**extracted, "flujo": flujo, "flujo_revisado": True}
+
+
 @app.post("/api/context/organize")
 async def context_organize(body: OrganizeContextInterface):
     text = body.text.strip()
@@ -119,6 +191,16 @@ async def context_organize(body: OrganizeContextInterface):
 
 @app.post("/api/story")
 async def story(body: StoryInterface):
+    master = body.context.get("master") if body.context else None
+    if isinstance(master, dict) and master.get("schema_version") == 2:
+        from cauce.master_builder import build
+        try:
+            return build(master)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    if body.context and (ctxmod.current(body.context) or body.context.get("activities")):
+        # Esta vía usa únicamente la revisión aceptada; el relato sin revisar no sustituye correcciones.
+        body = body.model_copy(update={"text": "\n".join(ctxmod.lines(body.context))})
     extracted, error = None, None
     
     try:
@@ -132,6 +214,10 @@ async def story(body: StoryInterface):
     except Exception as e:
         error = str(e)
 
+    # Segunda lectura: un revisor compara el flujo con la historia (ramas, salidas que faltan, retornos).
+    if isinstance(extracted, dict) and len(extracted.get("estaciones") or []) >= 3:
+        extracted = await review_flow(extractor, body.text, extracted)
+
     # Si la historia describe el espacio, se consulta a un agente por cada tipo de interpretación.
     score, _ = detail(body.text)
     reading, model = None, None
@@ -143,7 +229,9 @@ async def story(body: StoryInterface):
 
     result = build_plant(body.text, extracted, reading)
     result["spatial"] = {**result["spatial"], "detail": score, "needed": MIN_CUES, "model": model, "errors": {k: v["error"] for k, v in (reading or {}).items() if v["error"]}}
-    return {**result, "error": error, "extracted": extracted, "agents_raw": {k: v["data"] for k, v in (reading or {}).items()}}
+    if body.context:
+        result["notes"].append("Boceto a partir del contexto aceptado. Verifica dimensiones y posiciones: los datos no observados siguen siendo supuestos del boceto.")
+    return {**result, "error": error, "extracted": extracted, "agents_raw": {k: v["data"] for k, v in (reading or {}).items()}, "context_version": context_version(body.context)}
 
 
 # Cálculo puro (sin IA): funciones normales, FastAPI las corre en otro hilo y el servidor sigue atendiendo.
@@ -163,6 +251,16 @@ def evaluate_route(body: LayoutInterface):
 
 @app.post("/api/analyze")
 def analyze_route(body: PlantInterface):
+    master = body.context.get("master") if isinstance(body.context, dict) else None
+    verification = None
+    if isinstance(master, dict) and master.get("schema_version") == 2:
+        if body.reviewed is not True:
+            raise HTTPException(409, "Revisa y confirma esta versión del plano antes de analizarla.")
+        from cauce.master_builder import verify
+        try:
+            verification = verify(master, body.plant)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     try:
         weights, weights_note = criteria.normalize(body.weights)
     except criteria.WeightsError as e:
@@ -199,19 +297,29 @@ def analyze_route(body: PlantInterface):
     }
     if weights_note:
         out["weights_note"] = weights_note
+    if verification is not None:
+        out["construction_verification"] = verification
+    if isinstance(body.context, dict) and ("activities" in body.context or "operators" in body.context):
+        from cauce.workspace_deliverables import build
+        out["studies"] = build(body.context, plant, out)
     return out
 
 
 @app.post("/api/compact")
 async def compact_route(body: PlantInterface):
     """Quinta alternativa, a pedido: la IA da el criterio y el empacador junta las máquinas en el menor espacio."""
+    accepted = body.context.get("master") if isinstance(body.context, dict) else None
+    if accepted and body.reviewed is not True:
+        raise HTTPException(409, "Confirma el plano actual antes de pedir una optimización con el contexto maestro.")
     plant = body.plant
     current = evaluate(plant, plant["layout"])
-    provider = await spatial_or_extractor()
-    alt = await compact_alternative(plant, provider)
+    provider = analyst if accepted else await spatial_or_extractor()
+    alt = await compact_alternative(plant, provider, accepted)
     alt["score"] = score(current, alt["metrics"], alt["works_cost"], plant.get("use_assumptions"))
     alt["ops_moves"] = ops_moves(plant, alt["metrics"].get("ops") if plant.get("use_assumptions") else None)
     alt["model"] = provider.model if alt["source"] == "ia" else None
+    alt["context_version"] = context_version(body.context)
+    alt["plant_version"] = plant_version(plant)
     return alt
 
 
@@ -250,6 +358,15 @@ def facts(ctx: ContextInterface) -> str:
         p = plant.get("params", {})
         lines.append(f"Supuestos: {p.get('demand')} piezas al día, lote de {p.get('batch')}, {p.get('trucks')} camiones al día.")
     lines += ctxmod.lines(ctx.context)
+    if isinstance(ctx.context, dict) and ctx.context.get("activities"):
+        from cauce.workspace_deliverables import build
+        study = build(ctx.context)
+        lines.append("Estudio de actividades aceptadas (no certifica cronometraje):")
+        for row in study["rows"][:30]:
+            lines.append(f"Actividad {row['id']}: {row['description']}; tipo {row['type']}; tiempo {row['time_min'] if row['time_min'] is not None else 'sin dato'} min; distancia {row['distance_m'] if row['distance_m'] is not None else 'sin dato'} m; fuente {row.get('source_id') or row['origin']}.")
+        lines.append(study["note"])
+        if len(study["rows"]) > 30:
+            lines.append(f"Se presentan 30 de {len(study['rows'])} actividades al redactor; la tabla estructurada del estudio conserva todas las filas.")
     if a:
         cur = a["current"]
         lines.append(f"Hoy una pieza recorre {cur['piece_m']} m dentro de la planta.")

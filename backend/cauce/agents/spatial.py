@@ -58,6 +58,7 @@ BUILDING_SCHEMA = {
                     "lado": {"type": "string", "enum": SIDES},
                     "posicion": {"type": "string", "enum": ["izquierda", "centro", "derecha", "desconocida"]},
                     "uso": {"type": "string", "enum": ["entrada", "salida", "ambos", "desconocido"]},
+                    "cantidad": {"type": "integer"},
                 },
                 "required": ["lado", "uso"],
             },
@@ -128,8 +129,9 @@ COMMON = (
 AGENTS = {
     "edificio": (
         COMMON + "Tu tarea: la forma del edificio (rectangulo, cuadrado, L, U, T, triangulo o circulo), su ancho y fondo en metros "
-        "si se dicen, y cada portón o acceso: en qué lado está, si queda a la izquierda, centro o derecha de ese lado, y si por ahí "
-        "entra el material, sale o ambos.",
+        "si se dicen, y cada grupo de portones industriales: en qué lado está, si queda a la izquierda, centro o derecha de ese lado, "
+        "cuántos portones tiene el grupo ('cantidad') y si por ahí entra el material (descarga), sale (carga) o ambos. "
+        "Las puertas peatonales no son portones. No cuentes dos veces un portón mencionado de dos maneras.",
         BUILDING_SCHEMA,
     ),
     "zonas": (
@@ -236,7 +238,9 @@ def _station_words(s):
     from ..catalog import KIND
     from ..story import _stems
 
-    return _stems(s["name"]) + (KIND[s["kind"]]["keywords"] if s["kind"] in KIND else [])
+    # Raíces de 5 letras o más: "cali" de calidad no debe coincidir con "caliente".
+    stems = [w[: max(5, len(w) - 2)] for w in re.findall(r"[a-z]+", normalize(s["name"])) if len(w) >= 4 and w not in ("de", "del", "con", "para")] or _stems(s["name"])
+    return stems + (KIND[s["kind"]]["keywords"] if s["kind"] in KIND else [])
 
 
 def _stems_of(name):
@@ -297,21 +301,24 @@ def _building(plant, t, data, notes):
     if not _mentioned(t, "porton", "cortina", "acceso", "puerta", "entrada", "salida"):
         return
     gates = []
-    for i, g in enumerate((data.get("portones") or [])[:4]):
+    for i, g in enumerate((data.get("portones") or [])[:8]):
         side = g.get("lado")
         if side not in SIDE_EDGE:
             continue
         # Lados distintos del frente solo si la historia los nombra.
-        side_words = ("fondo", "atras", "trasera") if side == "fondo" else (side,)
+        side_words = ("fondo", "atras", "trasera", "posterior") if side == "fondo" else (side,)
         if side != "frente" and not _together(t, GATE_WORDS, side_words):
             continue
-        gates.append((side, POS_T.get(g.get("posicion"), 0.25 + 0.5 * (i % 2)), g.get("uso")))
+        n = g.get("cantidad") if isinstance(g.get("cantidad"), int) and 1 < g["cantidad"] <= 12 and re.search(rf"\b{g['cantidad']}\b", t) else 1
+        for k in range(n):
+            f = POS_T.get(g.get("posicion"), 0.25 + 0.5 * (i % 2)) if n == 1 else (k + 1) / (n + 1)
+            gates.append((side, f, g.get("uso")))
     if not gates:
         return
     W, D = plant["size"]["w"], plant["size"]["d"]
     out = []
     for i, (side, f, use) in enumerate(gates):
-        gid = "ABCD"[i]
+        gid = chr(65 + i)
         # Puntos sobre el rectángulo envolvente; se proyectan a la forma real en el frontend y el motor.
         if side == "frente":
             x, z = W * f, D
@@ -321,8 +328,9 @@ def _building(plant, t, data, notes):
             x, z = 0.0, D * (1 - f)
         else:
             x, z = W, D * f
-        out.append({"id": gid, "x": round(x, 1), "z": round(z, 1), "label": f"Portón {gid}", "_use": use})
-    plant["gates"] = [{k: v for k, v in g.items() if k != "_use"} for g in out]
+        out.append({"id": gid, "x": round(x, 1), "z": round(z, 1), "label": f"Portón {gid}", "_use": use, "side": side})
+    uses = {"entrada": "descarga", "salida": "carga", "ambos": "mixto"}
+    plant["gates"] = [{**{k: v for k, v in g.items() if k != "_use"}, **({"use": uses[g["_use"]]} if g["_use"] in uses else {})} for g in out]
     recv = next((g["id"] for g in out if g["_use"] in ("entrada", "ambos")), out[0]["id"])
     disp = next((g["id"] for g in out if g["_use"] in ("salida", "ambos") and g["id"] != recv), None)
     disp = disp or next((g["id"] for g in out if g["_use"] in ("salida", "ambos")), out[-1]["id"])
@@ -361,6 +369,19 @@ def fit_zones(plant):
             taken.append(zone_rect(z))
 
 
+def _told_region(t, words):
+    """Región que dice la oración que nombra algo ("la oficina está al frente a la derecha")."""
+    for sentence in re.split(r"[.;:\n]+", t):
+        if not _mentioned(sentence, *words):
+            continue
+        row = "frente" if re.search(r"frente|frontal|delanter", sentence) else "fondo" if re.search(r"fondo|atras|traser|posterior", sentence) else "centro"
+        col = "izquierda" if re.search(r"izquierd", sentence) else "derecha" if re.search(r"derech", sentence) else "centro"
+        if row == "centro" and col == "centro":
+            continue
+        return "centro" if row == col == "centro" else f"{row}-{col}"
+    return None
+
+
 def apply_zones(plant, t, data, notes):
     if not data:
         return
@@ -381,6 +402,10 @@ def apply_zones(plant, t, data, notes):
         w, d = item.get("ancho_m"), item.get("fondo_m")
         if isinstance(w, (int, float)) and isinstance(d, (int, float)) and w in nums and d in nums and 1 <= w <= W and 1 <= d <= D:
             z["w"], z["d"] = float(w), float(d)
+        # Si la oración que nombra la zona dice el lugar, manda el texto sobre lo que leyó el agente.
+        told = _told_region(t, ZONE[kind]["keywords"])
+        if told and told != item.get("ubicacion"):
+            item = {**item, "ubicacion": told}
         pt = _region_point(item.get("ubicacion"), W, D, z["w"], z["d"])
         if pt:
             taken = [zone_rect(q) for q in plant["zones"] if q is not z and q.get("_placed")]

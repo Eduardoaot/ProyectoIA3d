@@ -1,6 +1,6 @@
 /* Cuánto suele tardar cada espera con la IA, en segundos. Se ajusta con lo que
    tardó de verdad en este navegador (promedio que pesa más lo reciente). */
-const DEFAULTS = { story: 110, compact: 90 }
+const DEFAULTS = { story: 110, compact: 90, organize: 60 }
 const key = (k) => `cauce-espera-${k}`
 
 export function expected(k) {

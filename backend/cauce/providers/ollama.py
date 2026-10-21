@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import AsyncIterator
 
 import httpx
@@ -14,7 +15,7 @@ VISION_HINTS = ("llava", "vision", "bakllava", "moondream", "minicpm-v", "qwen2.
 class OllamaProvider:
     name = "ollama"
 
-    def __init__(self, model: str, host: str = "http://localhost:11434", temperature: float = 0.3, timeout: float = 180):
+    def __init__(self, model: str, host: str = "http://127.0.0.1:11434", temperature: float = 0.3, timeout: float = 180):
         self.model = model
         self.timeout = timeout
         self.host = host.rstrip("/")
@@ -23,7 +24,7 @@ class OllamaProvider:
             "json_schema": True,  # Ollama acepta un esquema en `format`
             "stream": True,
             "vision": any(h in model.lower() for h in VISION_HINTS),
-            "max_context": 8192,
+            "max_context": max(2048, int(os.getenv("CAUCE_OLLAMA_CONTEXT", "8192"))),
         }
 
     async def status(self) -> dict:
@@ -36,13 +37,28 @@ class OllamaProvider:
         except Exception as e:  # noqa: BLE001
             return {"online": False, "models": [], "ready": False, "error": str(e)}
 
+    async def warm(self, system: str) -> None:
+        """Carga el modelo y deja leídas las instrucciones de un agente en la caché de Ollama.
+        Las llamadas de verdad empiezan con ese mismo texto y no lo vuelven a leer (en CPU, unos
+        20 tokens por segundo: 30-45 s por agente). Solo adelanta trabajo: la respuesta no cambia."""
+        body = {
+            "model": self.model,
+            "stream": False,
+            "keep_alive": KEEP_ALIVE,
+            "options": {"temperature": self.temperature, "num_predict": 1, "num_ctx": self.capabilities["max_context"]},
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": "."}],
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as c:
+            r = await c.post(f"{self.host}/api/chat", json=body)
+            r.raise_for_status()
+
     async def json(self, system: str, prompt: str, schema: dict | None = None) -> dict:
         body = {
             "model": self.model,
             "stream": False,
             "format": schema or "json",
             "keep_alive": KEEP_ALIVE,
-            "options": {"temperature": self.temperature, "num_predict": 900},
+            "options": {"temperature": self.temperature, "num_predict": getattr(self, "max_output_tokens", 900), "num_ctx": self.capabilities["max_context"]},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
         }
         async with httpx.AsyncClient(timeout=self.timeout) as c:

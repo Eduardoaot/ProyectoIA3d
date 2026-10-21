@@ -96,6 +96,7 @@ def test_capabilities_coherente(client):
     routes = {getattr(x, "path", None) for x in main.app.routes}
     # Cada función anunciada tiene con qué funcionar.
     needs = {
+        "context_master": lambda: __import__("cauce.agents.context_pipeline"),
         "report_validation": lambda: __import__("cauce.validate"),
         "segmented_context": lambda: __import__("cauce.context"),
         "count": lambda: __import__("cauce.units"),
@@ -105,6 +106,12 @@ def test_capabilities_coherente(client):
         "flows": lambda: __import__("cauce.flows"),
         "conveyors": lambda: __import__("cauce.flows"),
         "simulate": lambda: "/api/simulate" in routes or (_ for _ in ()).throw(AssertionError("falta /api/simulate")),
+        "context_agents": lambda: "/api/context/organize" in routes or (_ for _ in ()).throw(AssertionError("falta /api/context/organize")),
+        "context_workspace": lambda: __import__("cauce.workspace_routes"),
+        "context_jobs": lambda: __import__("cauce.workspace_jobs"),
+        "context_documents": lambda: __import__("cauce.workspace_documents"),
+        "work_studies": lambda: __import__("cauce.workspace_deliverables"),
+        "operator_import": lambda: __import__("cauce.workspace_documents"),
     }
     for f in body["features"]:
         assert f in needs, f"función desconocida en capabilities: {f}"

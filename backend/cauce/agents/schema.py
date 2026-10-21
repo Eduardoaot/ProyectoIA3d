@@ -4,6 +4,7 @@ type, properties, required, items, enum). Sin dependencias."""
 from __future__ import annotations
 
 _TYPES = {
+    "null": type(None),
     "object": dict,
     "array": list,
     "string": str,
@@ -17,6 +18,11 @@ def check(data, schema: dict, path: str = "$") -> list[str]:
     """Lista de errores en palabras; vacía si el JSON cumple el esquema."""
     errors = []
     t = schema.get("type")
+    if isinstance(t, list):
+        alternatives = [check(data, {**schema, "type": variant}, path) for variant in t]
+        if any(not errors for errors in alternatives):
+            return []
+        return [f"{path}: no cumple ninguno de los tipos permitidos {t}"]
     if t:
         py = _TYPES.get(t)
         ok = isinstance(data, py) and not (t in ("integer", "number") and isinstance(data, bool))

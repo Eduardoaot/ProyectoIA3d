@@ -1,10 +1,65 @@
-# Plan de `feature/data`: contexto inicial y reporte de ingeniería
+# Plan de `feature/data1`: contexto inicial y reporte de ingeniería
+
+## Continuación del flujo maestro (21 de octubre de 2026)
+
+- Los archivos aportados por el usuario se respaldaron primero en `1341c82`. La integración pendiente de Eduardo y el caso de referencia se publicaron después en `e720563`.
+- El flujo aprobado y las responsabilidades están en [CONTRATO-MAESTRO.md](coordinacion/CONTRATO-MAESTRO.md). Incluye comunicación intérprete/especialistas, dudas inciertas, consolidador explícito, construcción verificable y análisis desde el plano aprobado.
+- Se implementa el maestro de esquema 2 con entidades, afirmaciones atómicas, evidencia y fuentes completas; la reclasificación del consolidador se aplica al resultado y se persiste. Los trabajos de contexto coordinan etapas y ya no descartan el maestro ni publican un resultado vacío como lectura correcta.
+- Referencia de evaluación: [contexto-transformadores.expected.json](pruebas/contexto-transformadores.expected.json). Prioridad general al texto; para este caso, el usuario indicó que las imágenes son más fieles a lo existente y a su ubicación. Sus anotaciones visuales se identifican como revisión humana, no como interpretación de un modelo de visión.
+- Las pruebas con proveedor simulado verifican el recorrido y las invariantes. La calidad real de interpretación continúa pendiente de configurar Ollama local; no hay proveedor activo en esta PC durante esta implementación.
+- Commits publicados por paso: `4affadb` (intérprete, especialistas y consolidador persistente) y `b523744` (construcción, verificación del plano e interfaz de revisión). La preparación del ensayo real se registra por separado; no cierra la evaluación de fidelidad.
+- El constructor ya consume el maestro aceptado sin otra extracción del relato. Requiere ancho/fondo explícitos, conserva cantidades, relaciones y retornos, y devuelve una comprobación por requisito. Las huellas o ubicaciones ilustrativas se declaran como supuestos y no obtienen estado «verificado».
+- La interfaz separa las etapas y los datos de la revisión anterior. «Organizar el contexto primero» conduce a la interpretación/revisión; después se construye y se puede volver a comprobar el plano editado. Cambiar datos manuales o prioridad de fuentes exige integrar de nuevo esas entradas. El análisis requiere confirmación del plano y la opción compacta recibe también el contexto aceptado y sus objetivos.
+- Si las imágenes son la referencia principal, se requiere una lectura de visión o que el usuario indique explícitamente que contrastó sus datos con ellas. Los modelos sin visión no pasan a considerarse capaces de leer imágenes.
+- Los reintentos reutilizan entregas válidas con la misma entrada, modelo y ventana de contexto; un cambio de fuente invalida esa reutilización. `CAUCE_CONTEXT_CONCURRENCY` controla la concurrencia (1–4) y `CAUCE_OLLAMA_CONTEXT` la ventana solicitada a Ollama (8192 por defecto). Las entregas que exceden el presupuesto se señalan, sin recortar su texto silenciosamente.
+- Fase 6: herramienta de ensayo real en `backend/evaluate_master.py`, con registros de fuentes, respuestas, tiempos y discrepancias en `.cauce-data/master-evaluation.json`. La ejecución de esta PC quedó como **`not_run`**, por proveedor no disponible; no demuestra calidad de interpretación. El ensayo real y la revisión de fidelidad del caso completo siguen abiertos.
+- Validación del código: 130 pruebas de backend y 59 de frontend aprobadas, compilación de producción correcta y recorrido de navegador conectado/compatible comprobado con proveedor de pruebas. Estos resultados verifican el funcionamiento del flujo, no la interpretación del caso real por Ollama.
+
 
 ## Objetivo
 
 Dar al usuario un solo lugar, al inicio del proyecto, para contar cómo funciona su planta, adjuntar evidencia y comprobar qué entendió el sistema antes de analizar. Reunir allí las opciones que hoy están dispersas entre «Datos de la planta», «Referencias con imagen» y «Qué pesa más para ti». Ampliar el reporte con entregables de estudio del trabajo, especialmente cuando el usuario no subió uno.
 
+## Integración de GitHub y punto de continuación (20 de octubre de 2026)
+
+La rama de continuación es **`feature/data1`**, creada en el repositorio de `bdiazsofttek-oss` desde `feature/data` (`d2da671`). Se revisaron y actualizaron los remotos `origin` y `eduardo` antes de integrar:
+
+- **`eduardo/feature/experimentoData1` (`925bfcf`):** su contenido coincide exactamente con el commit `696e841` ya incorporado. Se integra su historial y se resuelven los 14 conflictos conservando los avances DATA posteriores, incluidos expedientes, documentos, operadores y estudios.
+- **`eduardo/feature/experimentoMergeData1Zona2_1` (`4f88bad`):** incluida por autorización adicional del usuario. Aporta lectura de recinto, portones y especificaciones, revisión del flujo con un segundo agente, mejoras de áreas/pasillos y elementos fijos, editor y presentación del rediseño, diálogos, cursograma gráfico y arranque local. Sus siete archivos en conflicto se combinan con el backend DATA conectado.
+- **Criterios de la combinación:** conservar las rutas y capacidades DATA, los límites de salida del organizador, la entrada de contexto aceptado y los entregables del reporte. Mantener «Sí, confirmar esta versión» antes de analizar y la edición de prioridades en el contexto, con interruptor y pesos base al desactivarlas. El ranking de Eduardo conserva sus detalles; cambiar prioridades requiere revisar y recalcular por el mismo recorrido.
+- **Estudios en el reporte:** las actividades aceptadas conservan los entregables estructurados y su procedencia. Cuando todavía no hay actividades aceptadas, el cursograma gráfico derivado del plano se presenta como borrador inferido, sin atribuirle observaciones ni una secuencia única de un proceso ramificado.
+- **Proveedor acordado:** Ollama local; el usuario configurará el modelo después. `iniciar.ps1` reutiliza el entorno `.venv` existente y no descarga modelos automáticamente; la descarga queda disponible mediante `-DescargarModelo`.
+
+Verificación de esta integración: **102 pruebas del backend y 57 del frontend aprobadas**, compilación de producción y comprobaciones en Chrome del panel compatible y del flujo HTTP conectado con proveedor simulado (120 actividades, operadores, revisión, confirmaciones, proyectos y vistas móviles). La reducción del número de pruebas del frontend corresponde a funciones retiradas en la rama de Eduardo, como el importador anterior. La interpretación con Ollama real sigue pendiente de configurar el modelo; estas pruebas no la sustituyen.
+
+### Próximo trabajo en esta rama
+
+1. Configurar Ollama local y ensayar textos y documentos reales, registrando calidad, duración y errores de interpretación; verificar también la revisión de flujo añadida por Eduardo.
+2. Revisar juntos la experiencia combinada: contexto, construcción del plano, edición, rediseño y reporte. Corregir discrepancias observadas sin perder datos aceptados ni propuestas manuales.
+3. Continuar con las extensiones todavía pendientes: definición de eficiencia individual, otros tipos de estudios y formatos, y el diagrama interactivo previo al plano. Requieren cerrar las decisiones de cada apartado antes de implementar sus cálculos o navegación.
+
+El estado operativo de la conexión se describe a continuación. Las secciones del prototipo y de acuerdos anteriores se conservan como historial; no significan que haya que reiniciar D0–D8.
+
 ## Primera entrega: validar el frontend
+
+**Actualización de implementación del 20 de octubre:** el usuario autorizó continuar con el backend. Se implementó la extensión [CONTRATO-DATA.md](coordinacion/CONTRATO-DATA.md): expedientes persistentes con revisiones, confirmación masiva, trabajos por bloques con cancelación/reintento, originales y lectores de documentos, importación de operadores, cobertura y entregables estructurados. Las descripciones del prototipo y de las ideas pendientes que siguen son el registro histórico; consultar el estado operativo siguiente para distinguir lo que ya funciona.
+
+### Estado operativo de la conexión DATA
+
+- SQLite conserva cada expediente, sus revisiones y originales en `CAUCE_DATA_DIR` (por defecto `.cauce-data`). La pantalla ofrece guardar/recuperar una copia y exportar/restaurar un paquete con archivos. No hay sincronización automática entre computadoras; se puede trasladar el paquete.
+- La ruta compatible `/api/context/organize` se conserva. La interfaz nueva usa trabajos `/api/workspaces/{id}/jobs` para texto largo, muestra progreso y errores, permite cancelar y reintentar bloques. Un resultado no se aplica sobre una revisión cambiada. Si un documento excede el límite de lectura, no se utiliza su vista parcial como si fuera completo.
+- Los especialistas de contexto existentes alimentan un consolidador; el servicio acepta únicamente propuestas con respaldo y aplica la confirmación en código. «Confirmar todos los datos» no incorpora conflictos bloqueados; estos permanecen corregibles.
+- Estudios tiene entrada de texto completo y filas editables, confirmación masiva y coordinación por tipos: cursograma analítico, hoja de tiempos y mapa de proceso. Los tipos desconocidos se declaran sin determinar. Los promedios de observaciones aportadas se calculan en código; no se generan tiempos normales/estándar sin definición y datos suficientes.
+- Documentos de hasta 10 MB: TXT/MD/CSV, XLSX y PDF con texto. Los escaneados y formatos sin lector quedan pendientes. Las referencias visuales conservan el proveedor de visión existente. La exportación puede trasladar originales anteriores de IndexedDB si todavía existen en el navegador.
+- Personal permite importar CSV/XLSX y revisar operadores/asignaciones. Eficiencia reportada y valoración de ritmo conservan valor, escala y fuente por separado. Eficiencia individual calculada sigue como «sin datos» mientras no se definan sus observaciones y fórmula; no modifica el factor global del motor.
+- Preguntas útiles se integran dentro de revisión, sin añadir otra sección. Las respuestas son información proporcionada por el usuario. Prioridades apagadas usa los pesos base del motor; la respuesta conserva los pesos efectivos.
+- El constructor acepta contexto revisado de forma aditiva a `/api/story`; el boceto resultante requiere verificación de dimensiones/posiciones. El análisis y el reporte reciben actividades/operadores aceptados. Los entregables conservan ramas, retornos y valores desconocidos.
+- El cursograma propuesto solo se habilita cuando existen actividades vinculadas a rutas del rediseño con distancias calculadas. Las operaciones conservan su fuente de origen y los tiempos de transporte propuestos requieren validación. Un plano sin estudio produce un borrador identificado como tal, no un estudio observado.
+- Se mantienen pendientes por diseño: otros tipos de estudios, la definición del desempeño individual y el diagrama interactivo previo al plano. La calidad de interpretación con un modelo real requiere configurar un proveedor activo; las pruebas automatizadas usan proveedores simulados, sin presentarlas como validación del modelo.
+
+Las fases D0–D8 que figuran más abajo sirven como desglose y criterios de extensión de esta conexión. Las decisiones de almacenamiento, prioridades apagadas, catálogo inicial y ubicación de preguntas se concretaron en `CONTRATO-DATA.md` al autorizar esta implementación.
+
+Verificación de la conexión: suite general del backend, pruebas específicas de expedientes/documentos/estudios, 62 pruebas del frontend y compilación. Chrome comprobó tanto la compatibilidad anterior como el flujo HTTP conectado con proveedor simulado, incluyendo 120 actividades, importación de operadores, confirmación masiva y vistas móviles. No hay proveedor Ollama activo en esta PC al cerrar esta entrega; la prueba de calidad con un modelo real queda pendiente de su configuración.
 
 Por indicación del usuario, primero se construye una interfaz navegable para revisar la experiencia. El contrato definitivo, la estructura del backend y los entregables del reporte se trabajarán después de esta revisión.
 
@@ -309,4 +364,102 @@ Estas dudas no bloquean esta actualización documental. Deben aclararse cuando s
 
 ## Prompt para retomar en casa
 
-> Trabaja en `feature/data` de ProyectoIA3d. Lee `PLAN-DATA.md`, especialmente los acuerdos del 20 de octubre y las decisiones pendientes, junto con `coordinacion/CONTRATO-v3.md`, `CRITERIOS-IMPLEMENTACION-1.1.md` y el código actual. El prototipo frontend ya está entregado; esta revisión solo documentó próximos pasos. Cuando el usuario autorice continuar la implementación, comienza por D0 y prepara una extensión compatible del contrato antes de programar D1. Distingue requisitos aceptados de propuestas pendientes: no fijes sin acuerdo la semántica de prioridades apagadas, fórmulas de operadores, catálogo de especialistas ni ubicación de preguntas. Desarrolla por fases D0–D8, conectando y verificando frontend/backend en cada una, con commit y push por fase terminada. Permite texto completo, captura breve, propuestas con evidencia y confirmación masiva; estudios de más de cien actividades en tabla editable; operadores importados con indicadores bien definidos; consolidación compartida y construcción de plano desde contexto aceptado. Conserva proyectos, historial, originales, elementos fijos, ramas/uniones y validación numérica. El diagrama interactivo previo al plano queda para después de completar esta parte.
+> Trabaja en `feature/data1` de ProyectoIA3d. Lee primero la integración y el estado operativo de `PLAN-DATA.md`, `coordinacion/CONTRATO-DATA.md`, `coordinacion/CONTRATO-v3.md` y `CRITERIOS-IMPLEMENTACION-1.1.md`. El backend D0–D8 y su conexión inicial ya están implementados; esta rama también integra las dos ramas Data1 de Eduardo indicadas arriba. No reinicies el prototipo ni sustituyas los avances de un lado por los del otro. El proveedor acordado es Ollama local y el usuario configurará el modelo después; el siguiente ensayo debe usar fuentes reales y distinguir la calidad del modelo de las pruebas con proveedor simulado. Mantén la confirmación del contexto/plano, las prioridades activables con pesos base al apagarlas, los proyectos y originales persistentes, las actividades aceptadas con evidencia, los valores desconocidos y las ramas/uniones. Revisa con el usuario los resultados combinados antes de ampliar alcance. Siguen pendientes las definiciones de eficiencia individual, más especialistas/formatos y el diagrama interactivo previo al plano; no inventes sus fórmulas ni presentes un borrador derivado del plano como estudio observado. Conserva commit y push por fase terminada y verificada.
+
+
+
+
+
+
+#### ULTIMO PLAN
+
+Lo resolvería alrededor de **un contexto maestro compartido, verificable y versionado**. Ese contexto debe alimentar tanto la explicación al usuario como la construcción del plano.
+
+Los diez temas seguirían como navegación. Los especialistas trabajarían sobre una misma interpretación de la planta y conservarían relaciones entre temas.
+
+```mermaid
+flowchart TD
+    A[Relato y documentos originales] --> B[Intérprete general]
+    B --> C[Especialistas necesarios]
+    C --> D[Consolidación global y validación]
+    D --> E[Revisión y confirmación del usuario]
+    E --> F[Constructor de la distribución actual]
+    F --> G[Verificación contra el contexto aceptado]
+    G --> H[Plano y pendientes explicados]
+    H --> I[Análisis y propuestas de mejora]
+```
+
+Lo desarrollaría en seis fases, cada una con un resultado comprobable y su commit correspondiente.
+
+1. **Establecer un caso real de referencia.**
+
+   Primero usaríamos el relato que te produjo resultados incorrectos. Anotaríamos qué debe entender: máquinas, cantidades, actividades, conexiones, ubicaciones, medidas y elementos fijos.
+
+   También señalaríamos qué información realmente falta. Así podremos distinguir una interpretación equivocada de una distribución que el texto no permite determinar.
+
+   **Criterio de cierre:** tener una lista concreta con la que evaluar contexto y plano.
+
+2. **Construir una representación común de la planta.**
+
+   El intérprete general identificaría entidades y relaciones. Por ejemplo:
+
+   > Horno H1 → está en Acabado → ocupa el fondo derecho → está junto a Pintura → no se puede mover.
+
+   Cada afirmación conservaría su fuente y fragmento original. La explicación podría reformularse de manera clara, mientras cantidades, unidades y relaciones permanecerían vinculadas a su evidencia.
+
+   El maestro distinguiría **situación actual, objetivos, información desconocida y supuestos propuestos**. Las correcciones aceptadas tendrían prioridad y conservarían historial.
+
+   **Criterio de cierre:** poder explicar cómo funciona y cómo está distribuida la planta sin perder información explícita.
+
+3. **Corregir la coordinación de especialistas y la consolidación.**
+
+   Usaría una primera lectura general para detectar qué especialidades necesitan intervenir. Los especialistas recibirían las entidades relevantes, sus fuentes y las dudas pendientes.
+
+   Después habría una **consolidación global obligatoria** que realmente pueda reclasificar, relacionar, eliminar duplicados y señalar contradicciones. Su resultado se guardaría y sería el mismo que ve el usuario.
+
+   Para documentos largos, dividiríamos por unidades comprensibles —apartados, actividades o tablas—, conservando referencias entre fragmentos y una revisión conjunta final.
+
+   **Criterio de cierre:** que una corrección del consolidador aparezca efectivamente en pantalla y en el maestro utilizado después.
+
+4. **Hacer que la interfaz represente correctamente el estado del trabajo.**
+
+   Mostraríamos etapas comprensibles: leyendo, interpretando, contrastando información y preparando la revisión. Las propuestas anteriores quedarían identificadas como una versión previa.
+
+   Un fallo de IA tendría un resultado explícito. La clasificación por palabras clave seguiría siendo una alternativa identificada como tal. “Terminado” indicaría también si el resultado está completo, parcial o requiere aclaraciones.
+
+   **Criterio de cierre:** que puedas saber qué terminó, qué falló y qué información estás revisando.
+
+5. **Reconstruir el plano desde el contexto aceptado.**
+
+   El constructor consumiría directamente entidades, medidas y relaciones del maestro. El relato original seguiría disponible como evidencia.
+
+   La IA interpretaría restricciones como “al fondo”, “junto a” o “separado por un muro”; el código convertiría esas restricciones en posiciones y comprobaría geometría.
+
+   Después, un verificador compararía el plano con los requisitos:
+
+   - ¿Están todas las máquinas y cantidades?
+   - ¿Se respetaron ubicaciones, cercanías y elementos fijos?
+   - ¿Coinciden medidas, accesos y conexiones del proceso?
+   - ¿Qué requisito quedó incumplido o no se pudo comprobar?
+
+   **Criterio de cierre:** cada requisito explícito debe estar cumplido o tener una explicación visible. La distribución actual y las mejoras propuestas permanecerían diferenciadas.
+
+6. **Validar con IA real y después optimizar tiempos.**
+
+   Probaríamos el caso original y variantes con otras palabras, procesos ramificados y datos incompletos. Conservaríamos entradas, respuestas y tiempos para localizar dónde aparece cada error.
+
+   Después ajustaríamos concurrencia, reutilización de resultados y consultas por especialista según el equipo disponible.
+
+**El primer entregable sería tu relato correctamente organizado y explicado en el contexto maestro.** El segundo sería reconstruir su distribución y demostrar, requisito por requisito, qué respetó el plano. Esa sería la base para dar por resuelto el flujo.
+
+EJEMPLO COTIDIANO:
+Entre el Interprete general y los especialistas necesarios deberian de poder comunicarse bien
+Al consolidar deberia de haber un consolidador
+Supongamos en un ejemplo seria como si
+Un cliente pide un proyecto al vendedor
+El vendedor (interprete general) le dice a los especialistas que deben de hacer y si los especialistas tienen dudas el Interprete deberia intentar resolverlas o mantener la duda como incierta
+Despues de ello todos trbajan en hacer su parte
+Y cuando todos acaban un consolidador va preguntando de uno por uno que es lo que tienen y lo va colocando en una plantilla en orden para que cuando lo entregue al que fabricara el proyecto o pieza lo haga lo mas rapido y correctamente posible, asimismo el que se encarga de mejorar la pieza también sabra que hacer
+Luego el Consolidador se lo pasa al constructor o fabricador y el se encarga de crearlo, lo cual es tal cual lo que el cliente pidio
+Y despues de entregarselo al cliente seeria como si el cliente lo revisa y aprueba para que despues le hagan unas mejoras, lo cual vuelve a pasar el pdoructo o proyecto pero ahora solo lo manda a la compañia del proyecto, la cual lo redirige directamente con el especialista en Analisis y optimisación, el cual realiza pruebas con la pieza actual y con el Consolidado maestro y con la pieza entregada por el cliente vuelve a intentar optimizarlo
+Despues de ello con la ayuda de su asistente lo construyten juntos para que el resultado sea el mejor
