@@ -96,6 +96,7 @@ def test_capabilities_coherente(client):
     routes = {getattr(x, "path", None) for x in main.app.routes}
     # Cada función anunciada tiene con qué funcionar.
     needs = {
+        "context_master": lambda: __import__("cauce.agents.context_pipeline"),
         "report_validation": lambda: __import__("cauce.validate"),
         "segmented_context": lambda: __import__("cauce.context"),
         "count": lambda: __import__("cauce.units"),

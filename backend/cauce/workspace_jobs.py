@@ -133,6 +133,20 @@ async def run(workspace_id, job_id, provider):
     value.update(status="running")
     store.save_job(workspace_id, value)
     try:
+        if value["kind"] == "context":
+            from .agents.context_pipeline import organize
+            from .context_master import accepted_master
+            async def progress(stage, details):
+                if store.job(workspace_id, job_id)["status"] == "cancelled":
+                    raise asyncio.CancelledError()
+                value.update(stage=stage, stage_progress=details)
+                store.save_job(workspace_id, value)
+            previous = accepted_master(store.read(workspace_id)["project"])
+            result = await organize(value["text"], provider, value.get("source_id"), progress, previous)
+            value.update(result={**result, "activities": []}, processed=len(value["text"]))
+            saved = store.mutate(workspace_id, value["base_revision"], lambda project: merge_result(project, value["result"]))
+            value.update(status="partial" if result["warnings"] else "done", stage="review", applied_revision=saved["revision"])
+            return
         for block in blocks(value["text"]):
             if block["index"] in value["completed_blocks"]:
                 continue
@@ -165,6 +179,8 @@ async def run(workspace_id, job_id, provider):
                 value.update(status="partial" if value["errors"] else "done", applied_revision=saved["revision"])
             except store.Conflict:
                 value.update(status="conflict", error="El expediente cambió mientras se interpretaba. El resultado está conservado; repite con la versión actual.")
+    except store.Conflict:
+        value.update(status="conflict", error="El expediente cambió durante la interpretación. El maestro se conserva para revisión; no se aplicó sobre tus cambios.")
     except asyncio.CancelledError:
         value.update(status="cancelled")
     except Exception as exc:
@@ -195,10 +211,10 @@ def launch(workspace_id, body, provider):
         previous = store.job(workspace_id, body.retry_job_id)
         if previous["text"] != text or previous["kind"] != body.kind:
             raise ValueError("El texto o el tipo cambió; inicia una interpretación nueva")
-        failed = {error["block"] for error in previous["errors"]}
+        failed = {error["block"] for error in previous["errors"] if "block" in error}
         complete = [b for b in previous["completed_blocks"] if b not in failed]
         ranges = [(b["offset"], b["offset"] + len(b["text"])) for b in blocks(text) if b["index"] in complete]
-        value["completed_blocks"] = complete
+        value["completed_blocks"] = complete if body.kind == "studies" else []
         for key in ("proposals", "activities"):
             value["result"][key] = [row for row in previous["result"][key] if any(start <= row.get("offset", -1) < end for start, end in ranges)]
     store.save_job(workspace_id, value)

@@ -39,6 +39,9 @@ def merge_result(project, result):
                 seen.add(fp)
     if result.get("inventory"):
         workspace["study_inventory"] = result["inventory"]
+    if result.get("master"):
+        workspace["masterDraft"] = result["master"]
+        workspace["questions"] = result["master"].get("questions", [])
     workspace["last_interpretation"] = {k: result.get(k) for k in ("source", "warnings", "coverage", "blocks")}
     detect_conflicts(project)
 
@@ -111,6 +114,8 @@ def accepted_context(project):
     workspace = project.get("contextWorkspace", {})
     context["activities"] = [a for a in workspace.get("activities", []) if a.get("status") == "confirmed"]
     context["operators"] = [o for o in workspace.get("operators", []) if o.get("status") == "confirmed"]
+    from .context_master import accepted_master
+    context["master"] = accepted_master(project)
     return context
 
 
@@ -136,5 +141,9 @@ def coverage(project):
     for value in project.get("contextWorkspace", {}).get("proposals", []):
         if value.get("status") == "blocked":
             ask(f"conflict-{value['id']}", value.get("topic"), f"¿Cuál es el valor correcto de «{value.get('label')}»?", value.get("conflict", "Hay datos incompatibles."))
+    master = project.get("contextWorkspace", {}).get("masterDraft") or {}
+    for item in master.get("questions", []):
+        if item.get("status") == "unresolved":
+            ask(item["id"], "maquinas", item["question"], "El intérprete y los especialistas no pudieron resolverlo con las fuentes disponibles.")
     answers = project.get("contextWorkspace", {}).get("question_answers", {})
     return {"questions": [q for q in questions if not answers.get(q["id"])], "topics_with_data": sorted(topics), "accepted_entries": len(entries)}

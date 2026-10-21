@@ -1,5 +1,14 @@
 # Plan de `feature/data1`: contexto inicial y reporte de ingeniería
 
+## Continuación del flujo maestro (21 de octubre de 2026)
+
+- Los archivos aportados por el usuario se respaldaron primero en `1341c82`. La integración pendiente de Eduardo y el caso de referencia se publicaron después en `e720563`.
+- El flujo aprobado y las responsabilidades están en [CONTRATO-MAESTRO.md](coordinacion/CONTRATO-MAESTRO.md). Incluye comunicación intérprete/especialistas, dudas inciertas, consolidador explícito, construcción verificable y análisis desde el plano aprobado.
+- Se implementa el maestro de esquema 2 con entidades, afirmaciones atómicas, evidencia y fuentes completas; la reclasificación del consolidador se aplica al resultado y se persiste. Los trabajos de contexto coordinan etapas y ya no descartan el maestro ni publican un resultado vacío como lectura correcta.
+- Referencia de evaluación: [contexto-transformadores.expected.json](pruebas/contexto-transformadores.expected.json). Prioridad general al texto; para este caso, el usuario indicó que las imágenes son más fieles a lo existente y a su ubicación. Sus anotaciones visuales se identifican como revisión humana, no como interpretación de un modelo de visión.
+- Las pruebas con proveedor simulado verifican el recorrido y las invariantes. La calidad real de interpretación continúa pendiente de configurar Ollama local; no hay proveedor activo en esta PC durante esta implementación.
+
+
 ## Objetivo
 
 Dar al usuario un solo lugar, al inicio del proyecto, para contar cómo funciona su planta, adjuntar evidencia y comprobar qué entendió el sistema antes de analizar. Reunir allí las opciones que hoy están dispersas entre «Datos de la planta», «Referencias con imagen» y «Qué pesa más para ti». Ampliar el reporte con entregables de estudio del trabajo, especialmente cuando el usuario no subió uno.
@@ -435,3 +444,15 @@ Lo desarrollaría en seis fases, cada una con un resultado comprobable y su comm
    Después ajustaríamos concurrencia, reutilización de resultados y consultas por especialista según el equipo disponible.
 
 **El primer entregable sería tu relato correctamente organizado y explicado en el contexto maestro.** El segundo sería reconstruir su distribución y demostrar, requisito por requisito, qué respetó el plano. Esa sería la base para dar por resuelto el flujo.
+
+EJEMPLO COTIDIANO:
+Entre el Interprete general y los especialistas necesarios deberian de poder comunicarse bien
+Al consolidar deberia de haber un consolidador
+Supongamos en un ejemplo seria como si
+Un cliente pide un proyecto al vendedor
+El vendedor (interprete general) le dice a los especialistas que deben de hacer y si los especialistas tienen dudas el Interprete deberia intentar resolverlas o mantener la duda como incierta
+Despues de ello todos trbajan en hacer su parte
+Y cuando todos acaban un consolidador va preguntando de uno por uno que es lo que tienen y lo va colocando en una plantilla en orden para que cuando lo entregue al que fabricara el proyecto o pieza lo haga lo mas rapido y correctamente posible, asimismo el que se encarga de mejorar la pieza también sabra que hacer
+Luego el Consolidador se lo pasa al constructor o fabricador y el se encarga de crearlo, lo cual es tal cual lo que el cliente pidio
+Y despues de entregarselo al cliente seeria como si el cliente lo revisa y aprueba para que despues le hagan unas mejoras, lo cual vuelve a pasar el pdoructo o proyecto pero ahora solo lo manda a la compañia del proyecto, la cual lo redirige directamente con el especialista en Analisis y optimisación, el cual realiza pruebas con la pieza actual y con el Consolidado maestro y con la pieza entregada por el cliente vuelve a intentar optimizarlo
+Despues de ello con la ayuda de su asistente lo construyten juntos para que el resultado sea el mejor
