@@ -2,6 +2,7 @@
 
 ## Continuación del flujo maestro (21 de octubre de 2026)
 
+- Actualización de GitHub: se incorporaron `eduardo/feature/experimentoData1` (`c935be0`) y el cambio compartido por `feature/experimentoData2-IA`/`feature/experimentoMergeData1Zona2_1` (`f9c4e55`, nuevo juego de espera). Los merges `c190e04` y `2714132` conservaron el commit local `1e3ec19` sin conflictos. Se revisó el recorrido de agentes en código y se precisaron sus responsabilidades reales en [CONTRATO-MAESTRO.md](coordinacion/CONTRATO-MAESTRO.md). Tras integrar: 28 pruebas del maestro/constructor y 59 de frontend aprobadas, compilación correcta; Ollama continuó desconectado.
 - Los archivos aportados por el usuario se respaldaron primero en `1341c82`. La integración pendiente de Eduardo y el caso de referencia se publicaron después en `e720563`.
 - El flujo aprobado y las responsabilidades están en [CONTRATO-MAESTRO.md](coordinacion/CONTRATO-MAESTRO.md). Incluye comunicación intérprete/especialistas, dudas inciertas, consolidador explícito, construcción verificable y análisis desde el plano aprobado.
 - Se implementa el maestro de esquema 2 con entidades, afirmaciones atómicas, evidencia y fuentes completas; la reclasificación del consolidador se aplica al resultado y se persiste. Los trabajos de contexto coordinan etapas y ya no descartan el maestro ni publican un resultado vacío como lectura correcta.

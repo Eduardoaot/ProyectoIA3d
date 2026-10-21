@@ -9,6 +9,21 @@ Acuerdo del 21 de octubre de 2026. Extensión compatible de CONTRATO-DATA y plan
 5. El cliente revisa y confirma el plano antes del análisis. El analista/optimizador recibe maestro aceptado, plano realmente aprobado (incluidas correcciones manuales), prioridades y resultados del motor. El asistente de construcción aplica propuestas revisables sobre una copia; conserva fijos y no reemplaza silenciosamente el plano actual.
 6. La calidad con un modelo real se evalúa aparte de las pruebas de integración. Se conservan trazas, errores y tiempos por agente; ninguna alternativa local se presenta como interpretación de IA.
 
+## Recorrido implementado y responsabilidades
+
+La interfaz conectada inicia trabajos `kind=context` mediante `/api/workspaces/{id}/jobs`. `workspace_jobs.run` reúne relato, documentos legibles y datos actuales, y llama a [context_pipeline.py](../backend/cauce/agents/context_pipeline.py). `/api/context/organize` conserva el organizador anterior por compatibilidad; no es la entrada del recorrido maestro.
+
+| Paso | Comportamiento actual |
+| --- | --- |
+| Intérprete general | Recorre las fuentes por bloques, comparte nombres de entidades y encarga instrucciones a los temas pertinentes. No fuerza diez consultas por cada bloque. |
+| Especialistas | Entregan afirmaciones estructuradas, fragmentos literales y dudas. La concurrencia predeterminada es 2, configurable entre 1 y 4. |
+| Aclaraciones | El intérprete busca respaldo en las fuentes. Hay una ronda de revisión de los especialistas que recibieron respuesta; las dudas restantes permanecen inciertas. No hay conversación libre ni rondas ilimitadas. |
+| Consolidador | Recibe cada entrega en orden, revisa clasificación y redacción, conserva evidencias y registra duplicados/dudas. No cambia entidades, magnitudes ni relaciones estructurales. El resultado queda como borrador persistente para revisión. |
+| Constructor y verificador | [master_builder.py](../backend/cauce/master_builder.py) consume solo hechos actuales aceptados. La geometría y la comprobación se ejecutan en código; no hay otra extracción del relato por un modelo. |
+| Análisis y optimización | `/api/analyze` calcula métricas y alternativas con el motor sobre el plano confirmado. La alternativa compacta opcional consulta al rol `analista` con maestro, objetivos y plano actual; su propuesta se calcula y revisa antes de aplicarse. |
+
+Intérprete, especialistas y consolidador son roles lógicos con instrucciones y esquemas distintos; reciben la misma instancia del proveedor `contexto`. Por defecto utilizan el mismo modelo local, no diez modelos independientes. Los estudios del trabajo conservan su coordinación por tipos de estudio, separada de esta organización del contexto.
+
 ## Datos y revisión
 
 El maestro vive en `contextWorkspace.masterDraft`: versión de esquema, revisión/huella, fuentes, entidades, afirmaciones con ids estables, relaciones, dudas, resumen, entregas y trazas. Sus afirmaciones se enlazan a las propuestas revisables existentes. Una afirmación pendiente no alimenta el constructor; las correcciones aceptadas prevalecen. El estado de aceptación se deriva de las propuestas/entradas vigentes, no de una firma vieja.
