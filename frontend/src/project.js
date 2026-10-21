@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { addProject, clearProjectContext, listProjects, loadLibrary, saveLibrary, selectProject, updateProject } from './projectLibrary'
+import { addProject, clearProjectContext, listProjects, loadLibrary, saveLibrary, saveProject, selectProject, updateProject } from './projectLibrary'
 
 export const EMPTY = {
     text: '',
@@ -50,8 +50,9 @@ export function useProject() {
     const create = (name) => setLibrary((prev) => addProject(prev, name, EMPTY))
     const select = (id) => setLibrary((prev) => selectProject(prev, id))
     const clearContext = () => setLibrary((prev) => clearProjectContext(prev, activeId))
+    const save = (name) => setLibrary((prev) => saveProject(prev, activeId, name))
 
-    return [p, update, reset, { activeId, projects: listProjects(library), create, select, clearContext }]
+    return [p, update, reset, { activeId, projects: listProjects(library), create, select, clearContext, save }]
 }
 
 export function customOf(project) {

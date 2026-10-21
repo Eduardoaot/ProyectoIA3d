@@ -31,6 +31,8 @@ const Summary = lazy(() => import('./steps/Summary'))
 // En cuanto la página queda libre se baja el paso 2, así «Guardar y ver en 3D» no espera la descarga.
 const preload = () => import('./steps/Plant')
 
+const OFFLINE = 'Conectando con el servidor… Si no se conecta, revisa que el backend esté encendido (puerto 8000).'
+
 const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen']
 
 /* Lo mínimo que necesita el ingeniero para hablar de la planta (sin trazos). */
@@ -59,7 +61,8 @@ function slim(project, ch, segmented = false, workspace = false) {
 export default function App() {
     const [intro, setIntro] = useState(true)
     const [project, update, reset, library] = useProject()
-    const [step, setStep] = useState(() => (project.plant ? 1 : 0))
+    // Al recargar siempre se abre el paso 1; los pasos ya hechos siguen disponibles en la barra.
+    const [step, setStep] = useState(0)
     const [catalog, setCatalog] = useState(null)
     const [reading, setReading] = useState(false)
     const [saving, setSaving] = useState(false)
@@ -99,8 +102,28 @@ export default function App() {
     useEffect(() => {
         if (window.requestIdleCallback) window.requestIdleCallback(preload)
         else setTimeout(preload, 2500)
-        api.health().then(setAi).catch(() => setAi(null))
-        api.catalog().then(setCatalog).catch(() => setError('Error conectando con el servidor.'))
+        // El backend arranca en otra ventana y tarda unos segundos (o se reinicia con --reload):
+        // se reintenta con espera creciente en vez de quedarse sin catálogo ni IA.
+        let alive = true
+        let timer
+        const connect = async (attempt = 0) => {
+            try {
+                const [health, cat] = await Promise.all([api.health(), api.catalog()])
+                if (!alive) return
+                setAi(health)
+                setCatalog(cat)
+                setError((e) => (e === OFFLINE ? null : e))
+            } catch {
+                if (!alive) return
+                if (attempt >= 2) setError(OFFLINE)
+                timer = setTimeout(() => connect(attempt + 1), Math.min(10000, 1000 * 2 ** attempt))
+            }
+        }
+        connect()
+        return () => {
+            alive = false
+            clearTimeout(timer)
+        }
     }, [])
 
     const notify = useCallback((msg) => setToast({ msg, id: Date.now() }), [])
@@ -214,6 +237,7 @@ export default function App() {
         return (
             <Story
             text={project.text}
+            setText={(text) => update({ text, printed: false })}
             info={info}
             draft={draft}
             setDraft={(d) => update((p) => ({ draft: d, draftRev: (p.draftRev || 0) + 1 }))}
@@ -223,6 +247,7 @@ export default function App() {
             onRead={read}
             onBlank={blank}
             onOpenContext={openContext}
+            pending={(project.contextWorkspace?.proposals || []).filter((proposal) => proposal.status === 'pending').length}
             context2={{ confirmed }}
             onSave={save}
             saving={saving}
@@ -232,7 +257,7 @@ export default function App() {
         if (step === 2) return <Diagnosis plant={plant} analysis={analysis} onNext={() => go(3)} />
         if (step === 3) return <Redesign plant={plant} analysis={analysis} weights={project.prioritiesEnabled === false ? undefined : project.weights} prioritiesEnabled={project.prioritiesEnabled !== false} onOpenContext={openContext} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} onNext={() => go(4)} />
         if (step === 4) return <Report studyContext={workspaceEnabled ? context.context : null} plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
-        return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onRestart={restart} />
+        return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onSave={() => openContext('guardar')} onRestart={restart} />
     })()
 
     const aiOk = ai?.extractor?.ready && ai?.engineer?.ready
@@ -315,6 +340,8 @@ export default function App() {
                     activeProjectId={library.activeId}
                     onCreateProject={createProject}
                     onSelectProject={selectProject}
+                    onSaveProject={library.save}
+                    onNotify={notify}
                     onClearContext={clearContext}
                     plant={draft || plant}
                     onTextChange={(text) => update({ text, printed: false })}

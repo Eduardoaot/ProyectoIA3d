@@ -60,3 +60,16 @@ test('proyectos anteriores y borrador de contexto sobreviven a migración y reca
     assert.equal(loadStored(storage).text, previous.text)
     assert.equal(previous.draft.schema_version, undefined)
 })
+
+test('el formato por tema se descarga y se vuelve a leer como filas', async () => {
+    const { TOPICS, templateCsv, parseTemplate } = await import('../src/contextWorkspace.js')
+    const csv = templateCsv(TOPICS[2])
+    assert.deepEqual(parseTemplate(csv), [], 'La fila de ejemplo no se importa')
+    const filled = `${csv}Tiempo de corte,12,"min/pieza",medido,alta,Laura\r\n"Turnos, por día",2,,inventado,,\r\n`
+    assert.deepEqual(parseTemplate(filled).map(({ label, value, unit, source, confidence, owner }) => ({ label, value, unit, source, confidence, owner })), [
+        { label: 'Tiempo de corte', value: '12', unit: 'min/pieza', source: 'medido', confidence: 'alta', owner: 'Laura' },
+        { label: 'Turnos, por día', value: '2', unit: '', source: 'usuario', confidence: 'media', owner: '' },
+    ])
+    assert.equal(parseTemplate('dato;valor\nPersonas;6').length, 1, 'Acepta punto y coma, como lo guarda Excel en español')
+    assert.equal(parseTemplate('Solo una nota sin formato'), null)
+})

@@ -179,7 +179,7 @@ Variables generales:
 |---|---|---|
 | `CAUCE_MODEL` | `llama3.1:8b` | Cambia el modelo de los tres papeles a la vez |
 | `CAUCE_PROVIDER` | `ollama` | Cambia el proveedor de los tres papeles a la vez |
-| `OLLAMA_HOST` | `http://localhost:11434` | Dirección del servidor de Ollama |
+| `OLLAMA_HOST` | `http://127.0.0.1:11434` | Dirección del servidor de Ollama |
 
 Además, cada agente del contrato v3 tiene su propio proveedor y modelo (`cauce/providers/__init__.py`), con su prompt en `backend/cauce/agents/<rol>.md`:
 

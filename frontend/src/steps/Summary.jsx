@@ -4,7 +4,7 @@ import EngineerChat from '../components/EngineerChat'
 import Btn from '../fx/Btn'
 import { Appear, CountUp, RevealTitle } from '../fx/Reveal'
 
-export default function Summary({ plant, analysis, chosen, context, onPrint, onRestart }) {
+export default function Summary({ plant, analysis, chosen, context, onPrint, onSave, onRestart }) {
     const cur = analysis.current
     const m = chosen?.metrics
     const saved = m ? -pct(cur.piece_m, m.piece_m) : 0
@@ -69,8 +69,10 @@ export default function Summary({ plant, analysis, chosen, context, onPrint, onR
             <p className="fin">FIN</p>
 
             <div className="fin-next">
+                <p className="small">Guarda este proyecto con su nombre para volver a abrirlo cuando quieras.</p>
+                <Btn onClick={onSave}>Guardar en mis proyectos</Btn>
                 <p className="small">¿Tienes otra planta en mente?</p>
-                <Btn onClick={onRestart}>Crear una nueva planta</Btn>
+                <Btn variant="ghost" onClick={onRestart}>Crear una nueva planta</Btn>
             </div>
         </section>
     )

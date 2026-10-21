@@ -14,7 +14,7 @@ VISION_HINTS = ("llava", "vision", "bakllava", "moondream", "minicpm-v", "qwen2.
 class OllamaProvider:
     name = "ollama"
 
-    def __init__(self, model: str, host: str = "http://localhost:11434", temperature: float = 0.3, timeout: float = 180):
+    def __init__(self, model: str, host: str = "http://127.0.0.1:11434", temperature: float = 0.3, timeout: float = 180):
         self.model = model
         self.timeout = timeout
         self.host = host.rstrip("/")

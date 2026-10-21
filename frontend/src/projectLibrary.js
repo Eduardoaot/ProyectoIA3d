@@ -36,7 +36,7 @@ export function saveLibrary(storage, library) {
 export function listProjects(library) {
     return Object.values(library.projects).map(({ id: projectId, name, data }) => ({
         id: projectId, name, hasPlant: !!(data.plant || data.draft),
-        contextItems: current(data.context).length,
+        contextItems: current(data.context).length, savedAt: data.savedAt || null,
     }))
 }
 
@@ -61,4 +61,12 @@ export function clearProjectContext(library, projectId) {
         text: '', info: null, context: { segments: {} }, contextWorkspace: { proposals: [], attachments: [], activities: [] },
         weights: null, prioritiesEnabled: true, context2Ok: null, analysisInputSignature: null, printed: false,
     })
+}
+
+// Guardar un proyecto terminado: le pone el nombre elegido y marca cuándo se guardó.
+export function saveProject(library, projectId, name, date = new Date().toISOString()) {
+    const title = String(name || '').trim().slice(0, 80)
+    const record = library.projects[projectId]
+    if (!record || !title) return library
+    return { ...library, projects: { ...library.projects, [projectId]: { ...record, name: title, data: { ...record.data, name: title, savedAt: date } } } }
 }

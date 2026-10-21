@@ -232,21 +232,32 @@ a {
   justify-content: space-between;
 }
 
+/* Las dos copias de la etiqueta ocupan la misma celda: la caja mide lo que mida el texto,
+   aunque ocupe dos líneas, y al pasar el cursor una sale por arriba y la otra entra por abajo. */
 .btn-label-swap {
   position: relative;
-  display: inline-block;
+  display: inline-grid;
+  text-align: left;
+  min-width: 0;
   overflow: hidden;
-  height: 1.3em;
   line-height: 1.3em;
 }
 
 .btn-label-swap > span {
-  display: block;
+  grid-area: 1 / 1;
   transition: transform 0.5s var(--ease-out);
 }
 
+.btn-label-swap > span + span {
+  transform: translateY(110%);
+}
+
 .btn:hover:not(:disabled) .btn-label-swap > span {
-  transform: translateY(-100%);
+  transform: translateY(-110%);
+}
+
+.btn:hover:not(:disabled) .btn-label-swap > span + span {
+  transform: translateY(0);
 }
 
 /* ---------- Estructura ---------- */

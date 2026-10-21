@@ -104,7 +104,7 @@ try {
         await pause(350)
         assert.equal(await stored('.text'), story, 'Original text is preserved')
         assert.equal(await stored('.context?.segments && Object.values(JSON.parse(localStorage.getItem(\'cauce-proyecto-v3\')).context.segments).flat().length || 0'), 0, 'Proposals are not automatically confirmed facts')
-        await click('Confirmar dato', "document.querySelector('.cw-proposal')")
+        await click('Confirmar', "document.querySelector('.cw-proposal')")
         await click('Descartar', "document.querySelector('.cw-proposal')")
         await pause(350)
         const discardedId = await stored(".contextWorkspace.proposals.find(p=>p.status==='discarded').id")
@@ -116,7 +116,7 @@ try {
         console.log('Passed: editable proposals require confirmation, preserve original text, and can be proposed again after discard.')
 
         await go('Tiempos')
-        await click('+ Agregar dato')
+        await evaluate("document.querySelector('.cw-empty--action').click()"); await pause(120)
         assert.equal(await evaluate("document.querySelectorAll('.cw-manual-form .cw-field').length"), 2, 'Manual entry asks only for title and description')
         await fill('.cw-manual-form input', 'Tiempo de corte observado')
         await fill('.cw-manual-form textarea', '12 min/pieza, medido por Laura durante la última semana')
