@@ -119,6 +119,66 @@ def test_semantic_sources_cover_full_document_with_original_offsets():
     pieces = semantic_sources(text)
     assert "".join(p["text"] for p in pieces) == text
     assert all(text[p["offset"]:p["offset"] + len(p["text"])] == p["text"] for p in pieces)
+    assert max(len(p["text"]) for p in pieces) <= 1000
+
+
+def test_long_context_cycles_bound_every_agent_and_preserve_first_and_last_evidence():
+    import re
+    from cauce.agent_input import InputBudget
+
+    text = "\n".join(f"Hay 1 equipo Máquina-{i:03d} al fondo a la derecha." for i in range(100))
+    class Cycles:
+        capabilities = {"max_context": 8192}
+        max_output_tokens = 4096
+        def __init__(self):
+            self.calls = []
+        async def json(self, system, prompt, schema):
+            data = json.loads(prompt)
+            self.calls.append((system, data, schema))
+            fields = schema["properties"]
+            if "assignments" in fields:
+                names = re.findall(r"Máquina-\d+", data["source"]["text"])
+                return {"entities": names, "assignments": [{"topic": "maquinas", "instructions": "Lee cantidades por equipo"}], "questions": [f"¿Está validada la ubicación de {name}?" for name in names[:2]]}
+            if "facts" in fields:
+                rows = []
+                for match in re.finditer(r"Hay 1 equipo (Máquina-\d+) al fondo a la derecha\.", data["source"]["text"]):
+                    rows.append(fact(entity=match[1], number=1, value="Hay 1 equipo", excerpt=match[0]))
+                return {"facts": rows, "questions": []}
+            if "answers" in fields:
+                return {"answers": [{"id": q["id"], "answer": "La fuente dice al fondo a la derecha", "excerpt": data["source"]["text"].splitlines()[0]} for q in data["questions"]]}
+            return {"decisions": [{"id": f["id"], "topic": f["topic"], "label": f["label"], "value": f["value"], "duplicate_of": ""} for f in data["facts"]], "summary": "Lectura conservada. " * 70, "questions": []}
+    model = Cycles()
+    result = asyncio.run(organize(text, model))
+    assert len(result["proposals"]) == 100
+    assert {f["entity"] for f in result["proposals"]} == {f"Máquina-{i:03d}" for i in range(100)}
+    assert "".join(s["text"] for s in result["master"]["sources"]) == text
+    assert result["master"]["processing"]["chunk_chars"] == 1000
+    assert any(len(data["questions"]) < len(result["master"]["questions"]) for _, data, schema in model.calls if "answers" in schema["properties"])
+    for system, data, schema in model.calls:
+        assert InputBudget(model).fits(system, data, schema)
+        if "source" in data:
+            assert len(data["source"]["text"]) <= 1000
+        if "decisions" in schema["properties"]:
+            assert len(data["facts"]) <= 2
+    assert any(row["input"].get("previous_sections_not_loaded", 0) > 0 for row in result["master"]["trace"])
+
+
+def test_input_budget_counts_schema_and_reserves_output_without_cutting_atomic_rows():
+    from cauce.agent_input import InputBudget, split_text
+    class Provider:
+        capabilities = {"max_context": 2048}
+        max_output_tokens = 1024
+    budget = InputBudget(Provider())
+    rows = ["ñ" * 400 for _ in range(9)]
+    payload = lambda batch: {"rows": batch}
+    pages = list(budget.pages(rows, payload, "Instrucción", {"type": "object"}))
+    assert [row for page in pages for row in page] == rows
+    assert len(pages) > 1
+    with pytest.raises(ValueError, match="indivisible"):
+        list(budget.pages(["x" * 10000], payload, "Instrucción", {}))
+    content = "á漢🙂" * 700
+    parts = list(split_text(content, 1000))
+    assert "".join(p["text"] for p in parts) == content
 
 
 def test_only_accepted_facts_feed_master_and_manual_edits_require_reinterpretation():

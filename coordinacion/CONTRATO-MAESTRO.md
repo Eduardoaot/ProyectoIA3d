@@ -24,6 +24,10 @@ La interfaz conectada inicia trabajos `kind=context` mediante `/api/workspaces/{
 
 Intérprete, especialistas y consolidador son roles lógicos con instrucciones y esquemas distintos; reciben la misma instancia del proveedor `contexto`. Por defecto utilizan el mismo modelo local, no diez modelos independientes. Los estudios del trabajo conservan su coordinación por tipos de estudio, separada de esta organización del contexto.
 
+La lectura de contexto y estudios usa ciclos de hasta **1000 caracteres** por defecto (`CAUCE_AGENT_CHUNK_CHARS`, entre 256 y 4000). Prefiere saltos de línea y finales de frase, conserva todos los caracteres y sus offsets. Las dudas y los hechos de revisión/consolidación se paginan también; las entregas del consolidador contienen hasta dos afirmaciones por consulta. El índice completo de entidades, los resúmenes y las correcciones permanecen en el servidor/maestro: cada consulta recibe una selección auxiliar limitada y declara cuántos elementos no cargó.
+
+Cada ciclo comprueba el tamaño de instrucciones, entrada y esquema JSON, con una reserva para la respuesta. El cálculo de tokens es una estimación (`bytes UTF-8 / 3 + 128`), no el tokenizador exacto del modelo; sus cifras y la reserva quedan en las trazas. Una fila indivisible que no cabe se rechaza explícitamente, no se trunca. Ollama limita la salida a la mitad de la ventana como máximo. Las entregas válidas siguen disponibles para reintentar; una revisión parcial no borra los hechos que no revisó.
+
 ## Datos y revisión
 
 El maestro vive en `contextWorkspace.masterDraft`: versión de esquema, revisión/huella, fuentes, entidades, afirmaciones con ids estables, relaciones, dudas, resumen, entregas y trazas. Sus afirmaciones se enlazan a las propuestas revisables existentes. Una afirmación pendiente no alimenta el constructor; las correcciones aceptadas prevalecen. El estado de aceptación se deriva de las propuestas/entradas vigentes, no de una firma vieja.

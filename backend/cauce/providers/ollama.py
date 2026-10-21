@@ -58,7 +58,7 @@ class OllamaProvider:
             "stream": False,
             "format": schema or "json",
             "keep_alive": KEEP_ALIVE,
-            "options": {"temperature": self.temperature, "num_predict": getattr(self, "max_output_tokens", 900), "num_ctx": self.capabilities["max_context"]},
+            "options": {"temperature": self.temperature, "num_predict": min(getattr(self, "max_output_tokens", 900), self.capabilities["max_context"] // 2), "num_ctx": self.capabilities["max_context"]},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
         }
         async with httpx.AsyncClient(timeout=self.timeout) as c:

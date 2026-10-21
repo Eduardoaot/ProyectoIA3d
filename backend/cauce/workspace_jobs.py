@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from .agents.context_workspace import TOPIC_GUIDANCE, organize_context
+from .agent_input import chunk_limit, split_text, InputBudget
 from .versions import digest
 from .workspace import merge_result, normalize
 from . import workspace_store as store
@@ -24,18 +25,9 @@ STUDY_SCHEMA = {"type": "object", "properties": {"activities": {"type": "array",
 }}}, "required": ["activities"], "additionalProperties": False}
 
 
-def blocks(text, limit=1800):
+def blocks(text, limit=None):
     """No trunca: cada carácter pertenece a un bloque con desplazamiento original."""
-    out, start = [], 0
-    while start < len(text):
-        end = min(len(text), start + limit)
-        if end < len(text):
-            boundary = text.rfind("\n", start, end)
-            if boundary > start + limit // 2:
-                end = boundary + 1
-        out.append({"index": len(out), "offset": start, "text": text[start:end]})
-        start = end
-    return out
+    return [{"index": index, **part} for index, part in enumerate(split_text(text, limit))]
 
 
 def selected_topics(text, topic=None):
@@ -81,7 +73,9 @@ async def interpret_block(kind, block, provider, source_id=None, topic=None):
     prompts = Path(__file__).with_name("agents")
     inventory = []
     try:
-        classification = await provider.json(prompts.joinpath("study-coordinator.md").read_text(encoding="utf-8"), text, COORDINATOR_SCHEMA)
+        coordinator = prompts.joinpath("study-coordinator.md").read_text(encoding="utf-8")
+        InputBudget(provider).require(coordinator, text, COORDINATOR_SCHEMA)
+        classification = await provider.json(coordinator, text, COORDINATOR_SCHEMA)
         inventory = [t for t in classification.get("types", []) if t in STUDY_TYPES]
     except Exception:
         pass  # La interpretación genérica sigue disponible; no se afirma haber identificado el formato.
@@ -89,6 +83,7 @@ async def interpret_block(kind, block, provider, source_id=None, topic=None):
     for kind_name in inventory:
         if STUDY_TYPES[kind_name]:
             prompt += "\n" + prompts.joinpath(STUDY_TYPES[kind_name]).read_text(encoding="utf-8")
+    InputBudget(provider).require(prompt, text, STUDY_SCHEMA)
     raw = await provider.json(prompt, text, STUDY_SCHEMA)
     if not isinstance(raw, dict) or not isinstance(raw.get("activities"), list):
         raise ValueError("El especialista no devolvió una lista de actividades")
@@ -213,11 +208,13 @@ def launch(workspace_id, body, provider):
         raise ValueError("Proporciona entre 1 y 500 000 caracteres. Divide documentos mayores sin omitir su contenido.")
     value = {"id": uuid.uuid4().hex, "kind": body.kind, "topic": body.topic, "source_id": body.source_id,
         "text": text, "base_revision": saved["revision"], "status": "queued", "created": store.now(),
-        "processed": 0, "total": len(text), "completed_blocks": [], "errors": [], "result": {"proposals": [], "activities": []}}
+        "processed": 0, "total": len(text), "chunk_chars": chunk_limit(), "completed_blocks": [], "errors": [], "result": {"proposals": [], "activities": []}}
     if body.retry_job_id:
         previous = store.job(workspace_id, body.retry_job_id)
         if previous["text"] != text or previous["kind"] != body.kind:
             raise ValueError("El texto o el tipo cambió; inicia una interpretación nueva")
+        if body.kind == "studies" and previous.get("chunk_chars", 1800) != chunk_limit():
+            raise ValueError("Cambió el tamaño de bloque; inicia una interpretación nueva para conservar offsets correctos")
         if body.kind == "context":
             value["agent_cache"] = previous.get("agent_cache", {})
         failed = {error["block"] for error in previous["errors"] if "block" in error}

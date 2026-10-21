@@ -32,6 +32,8 @@ El ensayo con el modelo real se ejecuta desde la raíz:
 
 Registra el resultado y las trazas en `.cauce-data/master-evaluation.json`. Si Ollama no está listo, registra `not_run`; no utiliza un modelo simulado para sustituir esa prueba. Las anotaciones visuales de `pruebas/contexto-transformadores.expected.json` son referencias humanas de evaluación y no se envían al modelo como respuestas esperadas.
 
+`CAUCE_AGENT_CHUNK_CHARS` limita cada bloque de lectura de contexto/estudios (1000 caracteres por defecto, entre 256 y 4000). Las dudas y entregas internas se dividen en ciclos, con memoria auxiliar limitada y reserva de respuesta; no se reenvía todo el expediente en cada consulta. La estimación de tokens y los ciclos quedan en las trazas.
+
 `CAUCE_CONTEXT_CONCURRENCY` permite 1–4 consultas simultáneas de especialistas (2 por defecto). `CAUCE_OLLAMA_CONTEXT` fija la ventana solicitada al servidor (8192 por defecto), enviada como `options.num_ctx` según la [documentación de Ollama](https://github.com/ollama/ollama/blob/main/docs/faq.mdx). El ajuste de rendimiento y la fidelidad con el caso real quedan pendientes del ensayo con un proveedor activo.
 
 La rama de continuación `feature/data1` reúne el expediente local persistente en SQLite, con confirmación por lotes, documentos originales, trabajos de interpretación por bloques, estudios de más de cien actividades, base de operadores y entregables estructurados, junto con las mejoras de recinto, editor y presentación de Eduardo. Contrato, integración y próximos pasos: [CONTRATO-DATA.md](coordinacion/CONTRATO-DATA.md) y [PLAN-DATA.md](PLAN-DATA.md).
