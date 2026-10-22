@@ -267,7 +267,9 @@ def analyze_route(body: PlantInterface):
         try:
             verification = verify(master, body.plant)
         except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
+            # El análisis sale del plano; comprobarlo contra el maestro es un extra. Si el maestro
+            # no está al día (p. ej. hay datos manuales sin integrar) se avisa, pero no se bloquea.
+            verification = {"status": "skipped", "reason": str(exc)}
     try:
         weights, weights_note = criteria.normalize(body.weights)
     except criteria.WeightsError as e:

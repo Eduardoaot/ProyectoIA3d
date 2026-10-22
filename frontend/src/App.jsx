@@ -67,6 +67,7 @@ export default function App() {
     const [reading, setReading] = useState(false)
     const [constructionProgress, setConstructionProgress] = useState(null)
     const [saving, setSaving] = useState(false)
+    const [saveError, setSaveError] = useState(null)
     const [error, setError] = useState(null)
     const [chat, setChat] = useState(false)
     const [contextTopic, setContextTopic] = useState(null)
@@ -188,6 +189,7 @@ export default function App() {
     const blank = () => update({ draft: blankPlant(), info: { source: 'Plano vacío', notes: [] } })
 
     const save = async () => {
+        setSaveError(null)
         setSaving(true)
         setError(null)
 
@@ -204,8 +206,10 @@ export default function App() {
                 printed: false,
             }))
             go(1)
-        } catch {
-            setError('Error al analizar el plano.')
+        } catch (e) {
+            // El detalle del backend dice qué falta; un mensaje genérico no ayuda a resolverlo.
+            const detail = String(e?.message || '').replace(/^\/api\/analyze respondió \d+:?\s*/, '')
+            setSaveError(`No se pudo analizar el plano${detail ? `: ${detail}` : '.'}`)
         }
         setSaving(false)
     }
@@ -276,6 +280,7 @@ export default function App() {
             pending={(project.contextWorkspace?.proposals || []).filter((proposal) => proposal.status === 'pending').length}
             context2={{ confirmed }}
             onSave={save}
+            saveError={saveError}
             saving={saving}
             />
         )

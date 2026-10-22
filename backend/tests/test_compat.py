@@ -122,3 +122,16 @@ def test_capabilities_coherente(client):
 
 def test_baseline_existe():
     assert (PRUEBAS / "baseline-transformadores.json").exists()
+
+
+
+def test_analyze_no_se_bloquea_si_el_maestro_no_esta_al_dia(monkeypatch, client, plant):
+    """Comprobar el plano contra el maestro es un extra: si falla, el análisis sigue y lo explica."""
+    import cauce.master_builder as builder
+
+    def stale(master, plant):
+        raise ValueError("Hay datos manuales nuevos que todavía no fueron integrados al maestro.")
+    monkeypatch.setattr(builder, "verify", stale)
+    r = client.post("/api/analyze", json={"plant": plant, "reviewed": True, "context": {"segments": {}, "master": {"schema_version": 2}}})
+    assert r.status_code == 200, r.text
+    assert r.json()["construction_verification"]["status"] == "skipped"

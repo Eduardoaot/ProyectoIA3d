@@ -153,7 +153,7 @@ function SpatialNote({ spatial }) {
     )
 }
 
-export default function Story({ onReadContext, onVerify, constructionProgress, text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
+export default function Story({ saveError, onReadContext, onVerify, constructionProgress, text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
     const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
@@ -305,6 +305,7 @@ export default function Story({ onReadContext, onVerify, constructionProgress, t
                         
                         {draft.stations.length === 0 && <span className="small">Agrega al menos una máquina.</span>}
                     </div>
+                    {saveError && <p className="context-pending small" role="alert" style={{ marginTop: 16 }}>{saveError}</p>}
                 </div>
             )}
         </section>
