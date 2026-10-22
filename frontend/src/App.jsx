@@ -364,7 +364,11 @@ export default function App() {
                 </main>
             </div>
 
+            {/* Abrir y cerrar el panel se anima; cambiar de proyecto lo reemplaza al instante
+                (dos paneles a la vez dejarían botones del proyecto anterior a la vista). */}
+            <AnimatePresence>
             {contextTopic !== null && (
+                <div key="context-panel" style={{ display: 'contents' }}>
                 <ContextWorkspace
                     key={library.activeId}
                     project={project}
@@ -389,7 +393,9 @@ export default function App() {
                     onGoToPlan={() => { closeContext(); go(0) }}
                     initialTopic={contextTopic}
                 />
+                </div>
             )}
+            </AnimatePresence>
 
             <EngineerChat open={chat && contextTopic === null} onClose={() => setChat(false)} context={stale ? null : context} />
             <DialogHost />

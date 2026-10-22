@@ -2,14 +2,28 @@ import { TOPICS } from '../../contextWorkspace'
 
 const STAGES = { queued: 'En espera', interpreting: 'El intérprete está comprendiendo y delegando el encargo', specialists: 'Los especialistas preparan sus entregas', clarifying: 'El intérprete y los especialistas resuelven dudas', consolidating: 'El consolidador integra las entregas en el maestro', review: 'Interpretación disponible para revisar' }
 
+const STEPS = [['interpreting', 'Leer y repartir'], ['specialists', 'Especialistas'], ['clarifying', 'Aclarar dudas'], ['consolidating', 'Consolidar']]
+const AGENTS = { interprete: 'Intérprete', consolidador: 'Consolidador' }
+const agentName = (agent = '') => AGENTS[agent] || agent.replace(/^especialista:(revision:)?/, 'Especialista de ').replace('interprete:aclaracion', 'Aclaraciones')
+
 export function JobStatus({ remote }) {
-    const final = { error: 'La interpretación no se completó', conflict: 'El expediente cambió; el resultado necesita revisión', cancelled: 'Interpretación cancelada', interrupted: 'Interpretación interrumpida', partial: 'Organizada con incidencias en algunas partes', done: 'Interpretación disponible para revisar' }
-    return <div className="cw-job-status" role="status">
-        {remote.notice && <p className="cw-notice">{remote.notice}</p>}
-        {remote.job && <>{(remote.busy || !remote.notice) && <p>{remote.busy ? STAGES[remote.job.stage] || remote.job.status : final[remote.job.status] || remote.job.status}</p>}{remote.busy && <p>Los datos que ya estaban visibles pertenecen a la revisión anterior. El resultado nuevo aparecerá al terminar la consolidación.</p>}{remote.busy && remote.job.stage_progress && <p>{remote.job.stage_progress.completed} de {remote.job.stage_progress.total} entregas de esta etapa.</p>}
-            {remote.busy && <button className="cw-button cw-button--outline" type="button" onClick={remote.cancel}>Cancelar interpretación</button>}
-            {!remote.busy && ['partial', 'interrupted', 'error', 'conflict'].includes(remote.job.status) && <button type="button" className="cw-button cw-button--outline" onClick={remote.retry}>Reintentar interpretación</button>}
-            {remote.job.errors?.length > 0 && <details><summary>Ver incidencias de lectura ({remote.job.errors.length})</summary><pre>{JSON.stringify(remote.job.errors, null, 2)}</pre></details>}</>}
+    const final = { error: 'La interpretación no se completó', conflict: 'El expediente cambió; el resultado necesita revisión', cancelled: 'Interpretación cancelada', interrupted: 'Interpretación interrumpida', partial: 'Organizada con incidencias en algunas partes', done: 'Interpretación lista para revisar' }
+    const job = remote.job
+    if (remote.busy && job) {
+        const current = Math.max(0, STEPS.findIndex(([id]) => id === job.stage))
+        const progress = job.stage_progress?.total ? job.stage_progress.completed / job.stage_progress.total : 0
+        return <div className="cw-job cw-job--running" role="status">
+            <ol className="cw-job-steps">{STEPS.map(([id, label], index) => <li key={id} className={index < current ? 'is-done' : index === current ? 'is-current' : ''}><span aria-hidden="true">{index < current ? '✓' : index + 1}</span>{label}</li>)}</ol>
+            <div className="cw-job-row"><strong>{STAGES[job.stage] || 'Preparando la lectura'}</strong>{job.stage_progress?.total > 0 && <span className="num">{job.stage_progress.completed} de {job.stage_progress.total}</span>}<button className="cw-text-button" type="button" onClick={remote.cancel}>Cancelar</button></div>
+            <div className="cw-job-bar" aria-hidden="true"><span style={{ transform: `scaleX(${progress})` }} /></div>
+            <p className="cw-muted">Lo que ya tenías sigue guardado. El resultado nuevo aparece al terminar.</p>
+        </div>
+    }
+    if (!remote.notice && !job) return null
+    const problems = job?.errors || []
+    return <div className="cw-job" role="status">
+        <div className="cw-job-row"><strong>{remote.notice || final[job.status] || job.status}</strong>{!remote.busy && job && ['partial', 'interrupted', 'error', 'conflict'].includes(job.status) && <button type="button" className="cw-button cw-button--outline cw-button--small" onClick={remote.retry}>Reintentar</button>}</div>
+        {problems.length > 0 && <details className="cw-job-problems"><summary>Ver {problems.length} {problems.length === 1 ? 'parte que no se pudo leer' : 'partes que no se pudieron leer'}</summary><ul>{problems.map((problem, index) => <li key={index}><strong>{agentName(problem.agent) || `Bloque ${(problem.block ?? index) + 1}`}:</strong> {typeof problem.detail === 'string' ? problem.detail : JSON.stringify(problem.detail)}</li>)}</ul></details>}
     </div>
 }
 

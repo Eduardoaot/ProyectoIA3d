@@ -112,7 +112,7 @@ function newTray(board) {
 
 function newGame() {
     const board = emptyBoard()
-    return { playing: true, paused: false, over: false, score: 0, time: START_TIME, combo: 0, miss: 0, board, tray: newTray(board), drag: null, kb: null, clearing: [], fx: [], flash: 0 }
+    return { playing: true, paused: false, over: false, score: 0, time: START_TIME, combo: 0, miss: 0, board, tray: newTray(board), drag: null, kb: null, clearing: [], fx: [], flash: 0, check: 0 }
 }
 
 export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
@@ -196,6 +196,10 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
             })
         }
 
+        const checkStuck = (g) => {
+            if (!g.tray.some((t) => t && fitsAnywhere(g.board, t))) end(g, 'Ninguna pieza cabe en la tarima.')
+        }
+
         const place = (g, i, c, r) => {
             const p = g.tray[i]
             if (!p || !fits(g.board, p, c, r)) return false
@@ -225,7 +229,10 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
             g.tray[i] = null
             if (g.tray.every((t) => !t)) g.tray = newTray(g.board)
             sync()
-            if (!g.tray.some((t) => t && fitsAnywhere(g.board, t))) end(g, 'Ninguna pieza cabe en la tarima.')
+            // Si la jugada despejó líneas, se revisa al terminar de desaparecer los bloques: así el
+            // cierre nunca se muestra con las líneas todavía dibujadas.
+            if (n) g.check = 0.4
+            else checkStuck(g)
             return true
         }
 
@@ -246,6 +253,11 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
             g.fx = g.fx.filter((f) => f.t < 1.1)
             for (const b of g.clearing) b.t += dt
             g.clearing = g.clearing.filter((b) => b.t < 0.35)
+            if (g.check > 0 && (g.check -= dt) <= 0) {
+                g.check = 0
+                checkStuck(g)
+                if (!g.playing) return
+            }
             g.time -= dt
             const sec = Math.ceil(Math.max(0, g.time))
             if (sec !== lastSec) {
@@ -498,7 +510,7 @@ export default function LoadingGame({ label = 'Juega mientras la IA lee' }) {
                     {hud.combo > 1 && <span className="wgame-combo">Combo ×{hud.combo}</span>}
                 </span>
                 {hud.playing && (
-                    <button type="button" className="wgame-pause" onClick={() => (hud.paused ? resume() : game.current.togglePause?.(true))} aria-label={hud.paused ? 'Seguir' : 'Pausa'}>
+                    <button type="button" className="wgame-pause" onPointerDown={(e) => e.preventDefault()} onClick={() => (hud.paused ? resume() : game.current.togglePause?.(true))} aria-label={hud.paused ? 'Seguir' : 'Pausa'}>
                         {hud.paused ? '▶ Seguir' : 'Ⅱ Pausa'}
                     </button>
                 )}
