@@ -50,6 +50,10 @@ En otra terminal: `cd frontend` y `npm run dev -- --host 127.0.0.1`. Abrir **Ver
 
 La interpretación utiliza el proveedor existente del rol contexto: `OLLAMA_HOST`, `CAUCE_CONTEXT_PROVIDER` y `CAUCE_CONTEXT_MODEL`. Si el modelo no está disponible, el servicio lo explica y conserva captura manual y documentos. Las pruebas no necesitan Ollama: usan proveedores simulados. No se ha equiparado esa prueba con la calidad de un modelo real.
 
+### Gemini: texto e imágenes
+
+El backend admite Gemini sin cambiar el código de los agentes. Copia `.env.example` a `.env`, define `GEMINI_API_KEY` y carga esas variables en la terminal que inicia el backend. Para habilitar la lectura de imágenes basta con `CAUCE_VISION_PROVIDER=gemini` y `CAUCE_VISION_MODEL=gemini-2.5-flash`; para roles de texto configura el mismo par `CAUCE_CONTEXT_*`, `CAUCE_CHAT_*` o `CAUCE_EXTRACT_*`. La clave se manda solo al endpoint de Gemini y `.env` permanece ignorado por Git.
+
 En Windows también se puede usar `powershell -ExecutionPolicy Bypass -File .\iniciar.ps1`. Reutiliza `.venv` de la raíz o `backend/.venv`, inicia el backend oculto y deja el frontend en la terminal. El modelo se configura después; solo se descarga desde este script si se añade `-DescargarModelo`.
 
 Los porcentajes de operadores importados conservan su escala y procedencia; la eficiencia calculada requiere definir sus observaciones. Las duraciones desconocidas quedan sin dato. Un promedio de muestras se calcula en código y no se llama tiempo estándar. Los formatos sin extracción real y los PDFs escaneados siguen pendientes de lectura.

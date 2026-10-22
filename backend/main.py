@@ -540,7 +540,8 @@ async def read_reference(body: ReferenceInterface):
     """Lee una imagen de referencia solo si el proveedor tiene visión; si no, lo dice (no finge)."""
     if not provider_caps(seer)["vision"] or not hasattr(seer, "vision"):
         raise HTTPException(status_code=422, detail=f"El proveedor actual ({seer.model}) no tiene visión: la imagen se guarda como nota, sin interpretar.")
-    data = body.image.split(",", 1)[1] if body.image.startswith("data:") else body.image
+    # Ollama recibe base64 plano; Gemini conserva el data URL para respetar JPG/PNG/WebP.
+    data = body.image if getattr(seer, "name", "") == "gemini" else (body.image.split(",", 1)[1] if body.image.startswith("data:") else body.image)
     try:
         text = await seer.vision(REFERENCE_SYSTEM, body.note or "Describe la distribución.", [data])
     except Exception as e:  # noqa: BLE001
