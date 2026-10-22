@@ -120,6 +120,13 @@ def test_capabilities_coherente(client):
     assert len(set(body["features"])) == len(body["features"])
 
 
+def test_health_exposes_context_provider_without_secrets(client):
+    body = client.get("/api/health").json()
+    assert body["context"]["provider"] == "falso"
+    assert body["context"]["model"] == "falso-1"
+    assert body["context"]["ready"] is True
+
+
 def test_baseline_existe():
     assert (PRUEBAS / "baseline-transformadores.json").exists()
 

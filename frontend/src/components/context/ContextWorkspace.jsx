@@ -173,6 +173,16 @@ export default function ContextWorkspace({ project, onProjectChange, onPrioritie
     const fileTopicRef = useRef('negocio')
     const closeCallbackRef = useRef(onClose)
     useEffect(() => { closeCallbackRef.current = onClose }, [onClose])
+    useEffect(() => {
+        let active = true
+        api.health().then((health) => {
+            if (!active) return
+            const context = health.context
+            if (!context?.ready) setMessage('El proveedor de contexto no está disponible.')
+            else setMessage(`Contexto: usando ${context.provider === 'gemini' ? 'Gemini API' : 'modelo local'} · ${context.model}`)
+        }).catch(() => { if (active) setMessage('No se pudo comprobar el proveedor de contexto.') })
+        return () => { active = false }
+    }, [])
     const workspace = { ...EMPTY_WORKSPACE, ...(project.contextWorkspace || {}) }
     const context = project.context || { segments: {} }
     const data = current(context)

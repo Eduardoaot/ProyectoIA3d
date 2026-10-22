@@ -152,11 +152,12 @@ async def capabilities():
 
 @app.get("/api/health")
 async def health():
-    ex, en, sp = await extractor.status(), await engineer.status(), await spatial.status()
+    ex, en, sp, co = await extractor.status(), await engineer.status(), await spatial.status(), await context_organizer.status()
     return {
         "extractor": {"provider": extractor.name, "model": extractor.model, **ex},
         "engineer": {"provider": engineer.name, "model": engineer.model, **en},
         "spatial": {"provider": spatial.name, "model": spatial.model, **sp},
+        "context": {"provider": context_organizer.name, "model": context_organizer.model, "online": co.get("online", False), "ready": co.get("ready", False)},
         "roles": {k: {"provider": v.name, "model": v.model, "capabilities": caps(v)} for k, v in (("informe", reporter), ("misiones", missioner), ("editor", editor))},
     }
 
