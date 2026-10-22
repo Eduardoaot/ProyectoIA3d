@@ -7,6 +7,7 @@ import { isStale, samePlant } from './proposals'
 import { contextPayload } from './context'
 import { summarize } from './context2'
 import { deleteAttachments, reviewSignature } from './contextWorkspace'
+import { acceptedContext, constructWorkspace, workspaceRequest } from './workspaceApi'
 import ContextWorkspace from './components/context/ContextWorkspace'
 import './components/context/context-entry.css'
 import FlowMark from './brand/FlowMark'
@@ -35,7 +36,7 @@ const OFFLINE = 'Conectando con el servidor… Si no se conecta, revisa que el b
 const STEPS = ['Proceso y plano', 'Tu planta en 3D', 'Diagnóstico', 'Rediseño', 'Reporte', 'Resumen']
 
 /* Lo mínimo que necesita el ingeniero para hablar de la planta (sin trazos). */
-function slim(project, ch, segmented = false) {
+function slim(project, ch, segmented = false, workspace = false) {
     const { plant, analysis } = project
     if (!plant) return null
 
@@ -53,7 +54,7 @@ function slim(project, ch, segmented = false) {
         },
         redesign: ch && ch.metrics ? { name: ch.name, metrics: pick(ch.metrics) } : null,
         // Texto si el backend no conoce el contexto segmentado; objeto si lo anuncia.
-        context: contextPayload(project.context, project.text, segmented),
+        context: workspace ? acceptedContext(project) : contextPayload(project.context, project.text, segmented),
     }
 }
 
@@ -64,6 +65,7 @@ export default function App() {
     const [step, setStep] = useState(0)
     const [catalog, setCatalog] = useState(null)
     const [reading, setReading] = useState(false)
+    const [constructionProgress, setConstructionProgress] = useState(null)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState(null)
     const [chat, setChat] = useState(false)
@@ -77,7 +79,8 @@ export default function App() {
     const { plant, analysis, draft, info } = project
     const ch = useMemo(() => chosenOf(project), [project])
     const segmented = has(caps, 'segmented_context')
-    const context = useMemo(() => slim(project, ch, segmented), [project, ch, segmented])
+    const workspaceEnabled = has(caps, 'context_workspace')
+    const context = useMemo(() => slim(project, ch, segmented, workspaceEnabled), [project, ch, segmented, workspaceEnabled])
     const summary = useMemo(() => summarize(project.draft, project.plant), [project.draft, project.plant])
     const signature = useMemo(() => reviewSignature(project), [project])
     const confirmed = !!signature && project.context2Ok === signature
@@ -140,20 +143,45 @@ export default function App() {
         }, [update],
     )
 
+    const verifyDraft = async () => {
+        try {
+            const verification = await api.verifyMaster(project.draft, acceptedContext(project))
+            update({ info: { ...project.info, verification, verificationDraftKey: JSON.stringify(project.draft) } })
+        } catch (error) { setError(error.message) }
+    }
+
     const read = async () => {
+        const available = await api.getCapabilities()
+        const accepted = acceptedContext(project).master
+        if (has(available, 'context_master') && (accepted?.status !== 'accepted' || accepted.pending_manual_ids?.length || accepted.pending_source_policy)) {
+            openContext('inicio')
+            notify('Organiza y confirma el contexto antes de construir el plano.')
+            return false
+        }
         setReading(true)
+        setConstructionProgress(null)
         setError(null)
 
         try {
             const done = startWait('story')
-            const r = await api.story(project.text)
+            const r = has(available, 'construction_jobs') && accepted?.status === 'accepted'
+                ? await constructWorkspace(project, library.activeId, {
+                    onProgress: (work) => {
+                        setConstructionProgress({ stage: work.stage, ...work.stage_progress })
+                        update({ constructionJob: { id: work.id, status: work.status } })
+                    },
+                    onSaved: (saved) => update({ serverWorkspaceId: saved.id, serverRevision: saved.revision }),
+                })
+                : await api.story(project.text, has(available, 'context_workspace') ? acceptedContext(project) : undefined)
             done()
-            update({ draft: upgradePlant(r.plant), info: { source: r.source, notes: r.notes, error: r.error, spatial: r.spatial } })
+            const built = upgradePlant(r.plant)
+            update({ draft: built, info: { source: r.source, notes: r.notes, error: r.error, spatial: r.spatial, verification: r.verification, verificationDraftKey: JSON.stringify(built) } })
             setReading(false)
 
             return true
-        } catch {
-            setError('Error al analizar el proceso.')
+        } catch (error) {
+            if (error.job?.verification) setConstructionProgress({ stage: 'blocked', verification: error.job.verification })
+            setError(`Error al analizar el proceso: ${error instanceof Error ? error.message : 'Error desconocido.'}`)
             setReading(false)
             return false
         }
@@ -162,11 +190,12 @@ export default function App() {
     const blank = () => update({ draft: blankPlant(), info: { source: 'Plano vacío', notes: [] } })
 
     const save = async () => {
+        if (!confirmed) return
         setSaving(true)
         setError(null)
 
         try {
-            const out = await api.analyze(draft, { context: contextPayload(project.context, project.text, segmented), ...(has(caps, 'weights') && project.weights ? { weights: project.weights } : {}) })
+            const out = await api.analyze(draft, { reviewed: true, context: has(caps, 'context_workspace') ? acceptedContext(project) : contextPayload(project.context, project.text, segmented), ...(has(caps, 'weights') && project.weights && project.prioritiesEnabled !== false ? { weights: project.weights } : {}) })
             update((p) => ({
                 plant: draft,
                 analysis: out,
@@ -182,17 +211,6 @@ export default function App() {
             setError('Error al analizar el plano.')
         }
         setSaving(false)
-    }
-
-    // Recalcular con otros pesos: mismo plano, solo cambia la decisión. No toca «Tu rediseño».
-    const reweigh = async (weights) => {
-        try {
-            const out = await api.analyze(plant, { context: context?.context, weights })
-            update((p) => ({ analysis: out, weights, analysisInputSignature: reviewSignature({ ...p, weights }) }))
-            notify('Se recalculó la recomendación con tus pesos.')
-        } catch {
-            notify('No se pudo recalcular con esos pesos.')
-        }
     }
 
     const setRedesign = useCallback((patch) => update((p) => ({ redesign: { ...p.redesign, ...patch } })), [update])
@@ -229,9 +247,12 @@ export default function App() {
     }
 
     const clearContext = async () => {
+        let saved
+        if (project.serverWorkspaceId && project.serverRevision) saved = await workspaceRequest(`/${project.serverWorkspaceId}/clear-context`, { method: 'POST', body: { expected_revision: project.serverRevision } })
         const files = project.contextWorkspace?.attachments || []
         await deleteAttachments(files.map((file) => file.id))
         library.clearContext()
+        if (saved) update({ serverRevision: saved.revision })
     }
 
     const ready = !!(plant && analysis)
@@ -250,6 +271,9 @@ export default function App() {
             reading={reading}
             error={error}
             onRead={read}
+            needsContext={has(caps, 'context_master') && acceptedContext(project).master?.status !== 'accepted'}
+            constructionProgress={constructionProgress}
+            onVerify={has(caps, 'context_master') && acceptedContext(project).master?.status === 'accepted' ? verifyDraft : undefined}
             onBlank={blank}
             onOpenContext={openContext}
             pending={(project.contextWorkspace?.proposals || []).filter((proposal) => proposal.status === 'pending').length}
@@ -260,8 +284,8 @@ export default function App() {
         )
         if (step === 1) return <Plant plant={plant} analysis={analysis} notes={info?.notes || []} onNext={() => go(2)} onEdit={() => go(0)} />
         if (step === 2) return <Diagnosis plant={plant} analysis={analysis} onNext={() => go(3)} />
-        if (step === 3) return <Redesign plant={plant} analysis={analysis} weights={project.weights} onReweigh={reweigh} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} onNext={() => go(4)} />
-        if (step === 4) return <Report plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
+        if (step === 3) return <Redesign canOptimize={!stale && confirmed} analysisContext={workspaceEnabled ? context.context : null} plant={plant} analysis={analysis} weights={project.prioritiesEnabled === false ? undefined : project.weights} prioritiesEnabled={project.prioritiesEnabled !== false} onOpenContext={openContext} redesign={project.redesign} setRedesign={setRedesign} onAddAlternative={addAlternative} catalog={catalog} analysisRev={project.analysisRev || 0} notify={notify} onNext={() => go(4)} />
+        if (step === 4) return <Report studyContext={workspaceEnabled ? context.context : null} plant={plant} analysis={analysis} chosen={ch} notes={info?.notes || []} report={report} catalog={catalog} onPrinted={onPrinted} onNext={() => go(5)} />
         return <Summary plant={plant} analysis={analysis} chosen={ch} context={context} onPrint={() => go(4)} onSave={() => openContext('guardar')} onRestart={restart} />
     })()
 
@@ -328,7 +352,7 @@ export default function App() {
                         <motion.div key={`${library.activeId}-${ready ? step : 0}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
                           {ready && step > 0 && stale && (
                               <p className="stale-note small" role="status">
-                                  <strong>Resultados pendientes de actualizar.</strong> Cambió el plano, el contexto o tus prioridades. Vuelve al paso 1 y pulsa «Guardar y ver en 3D» para recalcular.
+                                  <strong>Resultados pendientes de actualizar.</strong> Revisa el plano, el contexto y tus prioridades. Confirma «Así entendimos tu planta» y vuelve al paso 1 para recalcular.
                               </p>
                           )}
                           <Suspense fallback={<p className="small" style={{ padding: 48 }}>Cargando…</p>}>{view}</Suspense>
@@ -352,6 +376,8 @@ export default function App() {
                     onTextChange={(text) => update({ text, printed: false })}
                     onContextChange={(context) => update({ context, printed: false })}
                     onWorkspaceChange={(patch) => update((p) => ({ contextWorkspace: { ...p.contextWorkspace, ...(typeof patch === 'function' ? patch(p.contextWorkspace || {}) : patch) }, printed: false }))}
+                    onProjectChange={update}
+                    onPrioritiesToggle={(prioritiesEnabled) => update({ prioritiesEnabled, printed: false })}
                     onWeightsChange={(weights) => update({ weights, printed: false })}
                     summary={summary}
                     confirmed={confirmed}

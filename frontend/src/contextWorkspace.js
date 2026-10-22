@@ -29,7 +29,8 @@ export function reviewSignature(project) {
         text: project.text || '',
         context: project.context || { segments: {} },
         weights: project.weights || null,
-        workspace: project.contextWorkspace || {},
+        prioritiesEnabled: project.prioritiesEnabled !== false,
+        workspace: Object.fromEntries(['proposals', 'attachments', 'activities', 'operators', 'study_text', 'question_answers', 'source_policy'].filter((key) => project.contextWorkspace?.[key] !== undefined).map((key) => [key, project.contextWorkspace[key]])),
     }))
 }
 
@@ -54,6 +55,7 @@ export function organizeText(text) {
 
 const LABELS = { t_ciclo: 'Tiempo de ciclo', t_cycle_min: 'Tiempo de ciclo', demanda: 'Demanda', turnos: 'Turnos', operarios: 'Operarios', produccion: 'Producción', presupuesto: 'Presupuesto', count: 'Cantidad', t_setup: 'Tiempo de preparación', scrap: 'Rechazo', distancia: 'Distancia' }
 export function entryLabel(entry) {
+    if (entry.label) return entry.label
     const key = String(entry.key || 'Nota')
     const parts = key.split('.')
     if (TOPICS.some((topic) => topic.id === parts[0]) && parts.length > 1) return parts.slice(1).join('.')
@@ -110,6 +112,12 @@ export async function downloadAttachment(id) {
     link.download = record.name
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+export async function attachmentFile(id) {
+    const record = await attachmentStore('readonly', (store) => store.get(id))
+    if (!record?.file) throw new Error('Falta un original en este navegador. Vuelve a adjuntarlo antes de exportar el paquete.')
+    return record.file
 }
 
 export async function deleteAttachments(ids) {

@@ -1,3 +1,4 @@
+import ConstructionReview from '../components/context/ConstructionReview'
 import { useRef, useState } from 'react'
 import { fmt } from '../api'
 import WaitPanel from '../components/WaitPanel'
@@ -152,7 +153,7 @@ function SpatialNote({ spatial }) {
     )
 }
 
-export default function Story({ text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
+export default function Story({ needsContext, onVerify, constructionProgress, text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
     const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
@@ -189,7 +190,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                                 }}
                                 disabled={reading || empty}
                             >
-                                {reading ? 'Analizando…' : 'Crear plano desde mi descripción'}
+                                {reading ? 'Analizando…' : needsContext ? 'Organizar el contexto primero' : 'Construir el plano desde mi contexto'}
                             </Btn>
                         </div>
                     </div>
@@ -214,7 +215,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                 </Appear>
 
                 <div className="stack">
-                    {reading && <WaitPanel kind="story" title="Interpretando el acomodo de tu planta…" game="Juega mientras se analiza tu planta" />}
+                    {reading && <><WaitPanel kind="story" title={constructionProgress ? 'Construyendo y comprobando tu planta por partes…' : 'Interpretando el acomodo de tu planta…'} game="Juega mientras se analiza tu planta" />{constructionProgress && <p role="status">{({ building: 'Preparando el espacio', entities: 'Colocando áreas y equipos', routes: 'Conectando los recorridos', verifying: 'Comprobando el conjunto', review: 'Plano listo para revisión' })[constructionProgress.stage] || 'Preparando la construcción'}{constructionProgress.total ? ` · ${constructionProgress.completed} de ${constructionProgress.total}` : ''}</p>}</>}
 
                     {!reading && !info && (
                         <div className="block">
@@ -256,6 +257,9 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                 </div>
             </div>
 
+            {!reading && constructionProgress?.stage === 'blocked' && <ConstructionReview report={constructionProgress.verification} title="La construcción se detuvo en este lote; tu plano anterior sigue guardado" />}
+            {info?.verification && <ConstructionReview report={info.verification} stale={info.verificationDraftKey !== JSON.stringify(draft)} />}
+            {draft && onVerify && <button className="btn btn--ghost btn--small" type="button" onClick={onVerify}>Comprobar el plano contra el contexto</button>}
             {draft && (
                 <div ref={editorRef} style={{ marginTop: 48, scrollMarginTop: 24 }}>
                     <div className="chart-head" style={{ marginBottom: 16 }}>
@@ -278,7 +282,7 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
 
                     {context2 && (
                         <div className="context-review-card">
-                            <div><h3>Así entendimos tu planta</h3><p className="small">{context2.confirmed ? 'Confirmaste esta versión del plano, contexto y prioridades.' : 'Opcional: revisa el plano junto con los datos y las prioridades antes de analizar.'}</p></div>
+                            <div><h3>Así entendimos tu planta</h3><p className="small">{context2.confirmed ? 'Confirmaste esta versión del plano, contexto y prioridades.' : 'Revisa el plano junto con los datos y las prioridades antes de analizar.'}</p></div>
                             <Btn variant="ghost" size="small" onClick={() => onOpenContext('revision')}>
                                 {context2.confirmed ? 'Ver revisión' : 'Revisar y confirmar'}
                             </Btn>
@@ -286,13 +290,14 @@ export default function Story({ text, setText, info, draft, setDraft, catalog, r
                     )}
 
                     <div className="row" style={{ marginTop: 32 }}>
-                        <Btn onClick={onSave} disabled={saving || draft.stations.length === 0}>
+                        <Btn onClick={onSave} disabled={saving || draft.stations.length === 0 || (context2 && !context2.confirmed)}>
                             {saving ? 'Analizando…' : 'Guardar y ver en 3D'}
                         </Btn>
 
                         {metrics && <span className="small num">Una pieza recorre {fmt(metrics.piece_m, 1)} m en este plano.</span>}
                         
                         {draft.stations.length === 0 && <span className="small">Agrega al menos una máquina.</span>}
+                        {draft.stations.length > 0 && context2 && !context2.confirmed && <span className="small">Confirma «Así entendimos tu planta» para analizar.</span>}
                     </div>
                 </div>
             )}

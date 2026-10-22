@@ -1,5 +1,5 @@
 /* Resumen determinista, sin IA, de lo que el sistema entendió del plano. Se muestra en
-   «Así entendimos tu planta» dentro del contexto; confirmarlo es opcional. Solo cuenta y nombra. */
+   «Así entendimos tu planta» dentro del contexto antes de analizar. Solo cuenta y nombra. */
 
 const FLOW_LABEL = { material: 'material', personas: 'personas', vehiculos: 'vehículos', carga: 'carga' }
 

@@ -16,6 +16,48 @@ Funciona para cualquier rubro (vidrio, carpintería, metalmecánica, costura, al
 
 ---
 
+## Contexto, estudios y operadores conectados
+
+El recorrido maestro añade un intérprete general que delega a especialistas, una ronda de aclaraciones y un consolidador explícito. El maestro conserva entidades, afirmaciones, fuentes y dudas. La construcción usa sus datos aceptados y comprueba cada requisito del plano. Contrato: [CONTRATO-MAESTRO.md](coordinacion/CONTRATO-MAESTRO.md).
+
+Para probar: abre **Ver contexto de la planta**, pega el relato o adjunta documentos, organiza y revisa las propuestas. Confirma los datos y vuelve al paso inicial para construir. Después de editar el plano, usa **Comprobar el plano contra el contexto**; confirma la versión antes de analizar. Los requisitos incumplidos o desconocidos y las dimensiones ilustrativas quedan visibles.
+
+El plano se construye por lotes de cinco entidades o recorridos (`CAUCE_BUILD_BATCH_SIZE`, entre 1 y 20), con comprobación y avance recuperable en SQLite. La pantalla muestra las etapas; si un lote incumple el contexto o se solapa, se detiene y conserva el avance anterior. Volver a construir permite reanudar una interrupción cuando el maestro coincide; cambiar sus datos inicia una construcción nueva. El plano anterior permanece guardado hasta terminar correctamente.
+
+La prioridad general es texto para datos e imágenes para ubicación. Puedes indicar que las imágenes son la referencia principal de este proyecto. En ese caso se requiere interpretación de visión o revisión manual explícita; la aplicación no afirma haber leído una imagen con un modelo sin visión.
+
+El ensayo con el modelo real se ejecuta desde la raíz:
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 backend/evaluate_master.py
+```
+
+Registra el resultado y las trazas en `.cauce-data/master-evaluation.json`. Si Ollama no está listo, registra `not_run`; no utiliza un modelo simulado para sustituir esa prueba. Las anotaciones visuales de `pruebas/contexto-transformadores.expected.json` son referencias humanas de evaluación y no se envían al modelo como respuestas esperadas.
+
+`CAUCE_AGENT_CHUNK_CHARS` limita cada bloque de lectura de contexto/estudios (1000 caracteres por defecto, entre 256 y 4000). Las dudas y entregas internas se dividen en ciclos, con memoria auxiliar limitada y reserva de respuesta; no se reenvía todo el expediente en cada consulta. La estimación de tokens y los ciclos quedan en las trazas.
+
+`CAUCE_CONTEXT_CONCURRENCY` permite 1–4 consultas simultáneas de especialistas (2 por defecto). `CAUCE_OLLAMA_CONTEXT` fija la ventana solicitada al servidor (8192 por defecto), enviada como `options.num_ctx` según la [documentación de Ollama](https://github.com/ollama/ollama/blob/main/docs/faq.mdx). El ajuste de rendimiento y la fidelidad con el caso real quedan pendientes del ensayo con un proveedor activo.
+
+La rama de continuación `feature/data1` reúne el expediente local persistente en SQLite, con confirmación por lotes, documentos originales, trabajos de interpretación por bloques, estudios de más de cien actividades, base de operadores y entregables estructurados, junto con las mejoras de recinto, editor y presentación de Eduardo. Contrato, integración y próximos pasos: [CONTRATO-DATA.md](coordinacion/CONTRATO-DATA.md) y [PLAN-DATA.md](PLAN-DATA.md).
+
+Desde la raíz, con las dependencias de `backend/requirements-dev.txt` instaladas en `.venv`:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn main:app --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+En otra terminal: `cd frontend` y `npm run dev -- --host 127.0.0.1`. Abrir **Ver contexto de la planta**. El estado se guarda en el navegador; **Guardar copia del proyecto** persiste el expediente en el backend y **Exportar con archivos** permite trasladarlo. `CAUCE_DATA_DIR` cambia la carpeta de SQLite (por defecto `.cauce-data`, excluida de Git).
+
+La interpretación utiliza el proveedor existente del rol contexto: `OLLAMA_HOST`, `CAUCE_CONTEXT_PROVIDER` y `CAUCE_CONTEXT_MODEL`. Si el modelo no está disponible, el servicio lo explica y conserva captura manual y documentos. Las pruebas no necesitan Ollama: usan proveedores simulados. No se ha equiparado esa prueba con la calidad de un modelo real.
+
+En Windows también se puede usar `powershell -ExecutionPolicy Bypass -File .\iniciar.ps1`. Reutiliza `.venv` de la raíz o `backend/.venv`, inicia el backend oculto y deja el frontend en la terminal. El modelo se configura después; solo se descarga desde este script si se añade `-DescargarModelo`.
+
+Los porcentajes de operadores importados conservan su escala y procedencia; la eficiencia calculada requiere definir sus observaciones. Las duraciones desconocidas quedan sin dato. Un promedio de muestras se calcula en código y no se llama tiempo estándar. Los formatos sin extracción real y los PDFs escaneados siguen pendientes de lectura.
+
+Pruebas: `.venv\Scripts\python.exe -m pytest backend/tests -q`, y en frontend `npm test` / `npm run build`. La integración de navegador se comprueba con `backend/tests/serve_data_smoke.py` y `frontend/tests/data-smoke-server.mjs` en procesos separados, y después `node tests/data-backend.browser.mjs`; ese servidor de pruebas usa un expediente temporal y proveedor simulado, separado del servidor normal.
+
+---
+
 ## Índice
 
 1. [Idea y origen](#1-idea-y-origen)

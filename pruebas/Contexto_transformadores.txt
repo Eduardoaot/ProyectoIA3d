@@ -1,0 +1,339 @@
+Aquí tienes la documentación técnica integral de la planta y la empresa, estructurada detalladamente por cada uno de los 10 temas solicitados. Este documento integra todo el flujo de trabajo, capacidades, balance operacional, restricciones y decisiones de diseño que hemos definido y validado:
+
+---
+
+# DOCUMENTACIÓN INTEGRAL DE PLANTA Y OPERACIONES
+
+## Fabricación de Transformadores Industriales Tipo Seco
+
+---
+
+### 01. Negocio
+
+* **Giro de la Empresa:** Fabricación y ensamble industrial de transformadores de distribución e industriales tipo seco (aislamiento en resina/barniz, sin líquidos refrigerantes contaminantes).
+* **Propósito del Proyecto:** Diseño, balanceo de línea y optimización del *layout* de producción para una bodega industrial de **32 m x 16 m** (512 m²), orientados a maximizar el rendimiento (*throughput*), eliminar transportes innecesarios y simular la capacidad operativa por turno.
+* **Segmento de Mercado:** Sector industrial, comercial e infraestructura de energía que requiere transformadores seguros, de bajo mantenimiento y alta eficiencia dieléctrica.
+* **Estrategia Operativa:** Producción por lotes (*batch production*) en las fases térmicas e impregnación, acoplada con celdas de trabajo paralelas en embobinado y armado.
+
+---
+
+### 02. Operaciones
+
+* **Secuencia General del Proceso (11 Etapas):**
+1. **Recepción y Almacenamiento de Materia Prima:** Ingreso de rollos de cobre, núcleos laminados y aislamientos.
+2. **Embobinado:** Confección de bobinas de alta y baja tensión en celdas paralelas.
+3. **Estape y Espera de Bobinas:** Ubicación temporal en soportes/racks contiguos.
+4. **Ensamble / Armado de Núcleos:** Integración de láminas del núcleo con las bobinas de cobre.
+5. **Soldadura Estructural:** Fijación mecánica de herrajes, soportes y bastidores.
+6. **Pruebas Eléctricas Intermedias (Tester 1):** Verificación de continuidad y rigidez dieléctrica inicial.
+7. **Impregnación (VPI / Inmersión):** Sumergido de la unidad en tanque con resina/barniz mediante grúa viga.
+8. **Stock Central (Secado, Loteado y Enfriamiento):**
+* Goteo/secado inicial pre-horneado.
+* Acumulación de unidades para completar lote.
+* Enfriamiento posterior al horneado.
+
+
+9. **Horneado (Polimerización y Curado):** Tratamiento térmico en horno de alta capacidad.
+10. **Configuración Eléctrica y Ensamble de Gabinete:** Cableado de taps, conexiones finales y montaje de envolvente metálica.
+11. **Pruebas Eléctricas Finales (Tester 2) y Empaque:** Pruebas normativas completas, traslado con grúa pequeña a tornamesa circular y emplayado/empaquetado final.
+
+
+
+---
+
+### 03. Tiempos
+
+* **Tiempos Estimados de Ciclo (por Unidad / Lote):**
+* *Recepción / Almacén:* 15 – 30 min (por lote).
+* *Embobinado:* 1 – 2 horas (por juego de bobinas).
+* *Montaje / Armado en Núcleo:* 1.5 – 3 horas.
+* *Soldadura Estructural:* 30 – 45 min.
+* *Pruebas Intermedias (Tester 1):* 15 – 20 min.
+* *Impregnación:* 30 – 45 min (carga/descarga e inmersión).
+* *Horneado (Cuello de Botella Central):* 4 – 8 horas (por lote completo).
+* *Configuración y Gabinete:* 1 – 2 horas.
+* *Pruebas Finales (Tester 2):* 45 – 90 min.
+* *Empaque y Emplayado:* 30 – 45 min.
+
+
+* **Jornada Laboral Estándar:** Turnos de 8 horas.
+* **Rendimiento Estimado:** 2 a 5 transformadores terminados por turno de 8 horas (variable según la dimensión del lote en el horno).
+
+---
+
+### 04. Máquinas y Espacio
+
+* **Dimensiones de la Bodega:** 32 m de ancho × 16 m de profundidad (Área total: 512 m²).
+* **Parque de Maquinaria y Equipamiento Registrado:**
+* **10 Máquinas Embobinadoras Individuales** (6 ubicadas en el flanco izquierdo, 4 en el flanco derecho).
+
+
+* **10 Estaciones de *Staging* / Soportes Amarillos** contiguos a las embobinadoras.
+
+
+* **4 Estaciones de Armado / Montaje de Núcleo** (Verde Fuerte "A").
+
+
+* **4 Secciones de Soldadura** (Naranja "Sol").
+
+
+* **Estantes de Consumibles** (Verde Claro) para tornillería y piezas menores.
+* **1 Estación de Pruebas Intermedia** (Tester 1 - Morado "T").
+
+
+* **1 Sistema Central de Grúa / Polipasto sobre Riel (Viga) - Línea Café**.
+
+
+* **1 Sistema de Impregnación Cian** (Tanque de resina + foso de sumergimiento).
+
+
+* **1 Horno de Bache de Alta Capacidad** (Rosa).
+
+
+* **1 Zona Central de Stock y Secado** (Área multifuncional para goteo, junta de lote y enfriamiento).
+
+
+* **1 Línea Perimetral de Transportadores (*Conveyors*)**.
+
+
+* **4 Celdas de Configuración Eléctrica y Armado de Gabinete** (Café Claro).
+
+
+* **1 Estación de Pruebas Finales** (Tester 2 - Morado "T").
+
+
+* **1 Área de Empaque** (Círculo Rojo "E") equipada con tornamesa de emplayado y grúa pequeña dedicada.
+
+
+
+
+
+---
+
+### 05. Flujo de Materiales
+
+* **Patrón de Flujo:** Flujo en U perimetral y convergente al centro.
+* **Trayectoria del Material:**
+1. La materia prima ingresa por los accesos laterales/superiores a los flancos de embobinado.
+
+
+2. Pasa horizontalmente del embobinado a las estaciones de soporte amarillo y de ahí al armado del núcleo ("A").
+
+
+3. Se traslada a soldadura ("Sol") y se coloca en la banda transportadora perimetral (*conveyor*).
+
+
+4. La banda conduce la unidad a **Tester 1** para verificación dieléctrica inicial.
+
+
+5. Mediante la **Grúa Viga**, la unidad se mueve a la celda cian para **Impregnado**.
+
+
+6. La grúa traslada la unidad a la **Zona de Stock Central** para goteo/secado e integración del lote.
+
+
+7. Se ingresa al **Horno Rosa**; tras el curado, regresa al **Stock Central** para enfriarse.
+
+
+8. La grúa coloca el transformador en el segundo tramo del *conveyor*, alimentando las estaciones café claro para **Configuración Eléctrica y Montaje de Gabinete**.
+
+
+9. Avanza por *conveyor* hacia **Tester 2**.
+
+
+10. Llega al área de empaque ("E"), donde la grúa pequeña lo coloca en la plataforma giratoria para su emplayado y salida final por el portón central superior.
+
+
+
+
+
+---
+
+### 06. Personal
+
+* **Dotación Total por Turno:** 32 Operadores.
+* **Distribución de Personal por Estación:**
+* *Embobinado:* 10 operadores (1 por máquina).
+
+
+* *Montaje / Armado en Núcleo:* 4 operadores (1 por estación).
+
+
+* *Soldadura:* 4 operadores.
+
+
+* *Pruebas Intermedias (Tester 1):* 1 operador.
+
+
+* *Impregnación y Grúa Viga:* 1 operador de maniobras.
+
+
+* *Horno y Stock Central:* 1 operador de control de proceso.
+
+
+* *Configuración y Gabinetes:* 6 operadores (1 por sub-estación café).
+
+
+* *Pruebas Finales (Tester 2):* 1 operador.
+
+
+* *Empaque y Emplayado:* **2 operadores** (trabajo en equipo para emplaye y maniobra de grúa pequeña).
+
+
+* *Almacén y Manejo de Insumos:* 2 operadores.
+
+
+
+---
+
+### 07. Calidad
+
+* **Control en 2 Puntos Críticos (Doble Barrier Testing):**
+1. **Tester 1 (Control Intermedio):** Descarta cortocircuitos o fallas de aislamiento en los devanados antes de sellar y curar la pieza con resina en la impregnadora/horno. Evita desperdiciar horas de horneado en piezas defectuosas.
+
+
+2. **Tester 2 (Control Final / Normativo):** Evalúa la unidad completa dentro de su gabinete metálico bajo normas internacionales (rigidez dieléctrica, relación de transformación, pérdidas en vacío y bajo carga).
+
+
+
+
+* **Criterio de Resina y Aislamiento:** Verificación de goteo completo en la zona de *Stock* para prevenir burbujas de aire (*partial discharge*) durante el horneado.
+
+---
+
+### 08. Restricciones
+
+* **Restricción Operativa Principal (Cuello de Botella):** El **Horno de Bache**. Al ser un proceso cerrado de 4 a 8 horas que requiere juntar lote, dicta el ritmo de salida final de la planta.
+* **Restricción de Manipulación Pesada:** Los transformadores armados no se pueden mover manualmente; dependen 100% de la disponibilidad de la **Grúa Viga** central para la terna Impregnadora–Stock–Horno.
+
+
+* **Restricción Espacial:** El *layout* debe mantener libre la zona central de enfriamiento y los pasillos de recorrido del *conveyor* sin invadir radios de giro de carga.
+
+
+
+---
+
+### 09. Estudios del Trabajo
+
+* **Diagnóstico de Métodos e Ingeniería:**
+* **Descarte de Algoritmos Rígidos de "Línea Recta":** Se demostró que intentar acomodar el flujo en una sola línea recta aumentaba el recorrido por unidad de 86.5 m a 188.0 m (+117% de desperdicio de transporte).
+
+
+* **Optimización en Celdas + Layout U:** La distribución en "U" con centro térmico reduce los desplazamientos a **86.5 metros totales por pieza**.
+
+
+
+
+* **Equilibrio de Capacidades:**
+* La alta capacidad instalada en embobinado (10 máquinas) garantiza suministro constante para abastecer los lotes del horno sin generar paros por desabasto.
+
+
+
+---
+
+### 10. Imágenes y Layouts
+
+* **Plano Oficial CAD 2D de Planta:** Representación técnica generada a escala con fondo oscuro y líneas vectoriales a color según código operativo:
+* **Azul:** Embobinadoras laterales.
+
+
+* **Amarillo:** Racks/Staging de bobinas y núcleos.
+
+
+* **Verde Fuerte:** Mesas de armado de núcleo.
+
+
+* **Verde Claro:** Estantes de consumibles y herrajes.
+* **Naranja:** Módulos de soldadura estructural.
+
+
+* **Gris:** Red perimetral de transportadores (*conveyors*).
+
+
+* **Morado:** Estaciones blindadas de pruebas eléctricas (Tester 1 y 2).
+
+
+* **Línea Café:** Carril de grúa viga suspendida.
+
+
+* **Cian:** Equipo e inmersión de impregnado VPI.
+
+
+* **Rosa:** Horno industrial de curado.
+
+
+* **Contorno Blanco (Centro):** Área multifuncional de Stock, Secado y Enfriamiento.
+
+
+* **Café Claro:** Módulos de configuración eléctrica y gabinetes.
+
+
+* **Círculo Rojo:** Área de empaque final con tornamesa y grúa dedicada.
+
+
+
+
+
+---
+
+### Descripción Detallada de la Distribución y el Flujo de la Planta
+
+1. **Personal y Accesos Generales:**
+* **Puntitos:** Representan a los operadores asignados en cada estación de trabajo.
+
+
+* **Flechas:** Indican los puntos de entrada de materias primas y las salidas de producto terminado.
+
+
+
+
+2. **Área de Embobinado y Soporte Inicial (Flancos Laterales):**
+* **Recuadros azules ("Emb"):** Son las máquinas embobinadoras individuales ubicadas a los costados de la planta, las cuales reciben los carretes de cobre para devanar.
+
+
+* **Cuadros amarillos:** Son las estaciones de *stack* o soporte donde se colocan temporalmente las bobinas ya formadas.
+
+
+* **Estaciones verde fuerte ("A"):** Son las áreas individuales de montado o armado. Aquí los operadores reciben los núcleos y las bobinas procedentes de los cuadros amarillos cercanos para ensamblarlos.
+
+
+* **Estantes verde claro:** Están destinados al almacenamiento local de consumibles pequeños (como tornillos, herrajes y piezas de sujeción).
+* **Recuadros anaranjados ("S" / Soldadura):** Secciones dedicadas a las tareas de soldadura de componentes estructurales.
+
+
+
+
+3. **Zona Central de Tratamiento y Procesos Térmicos:**
+* **Línea café:** Representa la grúa/polipasto de viga suspendida, utilizada para trasladar las unidades pesadas entre los diferentes procesos centrales.
+
+
+* **Zona de *Stack* (Sin color con contorno delimitado):** Es un área central multifuncional y crítica que cumple tres propósitos clave:
+1. Permitir el goteo y **secado** inicial de la unidad tras salir del área de impregnación.
+2. **Juntar el lote** necesario de unidades antes de introducirlas al horno.
+3. Funcionar como zona de **enfriamiento** para los transformadores recién salidos del horneado.
+
+
+* **Impregnadora color cian:** Cuenta con un tanque de resina y un foso/recuadro donde se sumerge físicamente la unidad.
+
+
+* **Horno rosa:** Horno de bache de gran capacidad. Las unidades acumuladas en el área de *stack* entran a curarse térmicamente aquí y, al finalizar, regresan al área de *stack* para enfriarse.
+
+
+
+
+4. **Línea de Ensamble Final, Configuración y Pruebas:**
+* **Sistema de *Conveyor* gris y zonas café claro:** Una vez frías, las unidades pasan al transportador (*conveyor*). Las pequeñas secciones en **café claro** a lo largo de este trayecto representan las áreas donde los operadores realizan la **configuración eléctrica** y colocan el **gabinete** (envolvente metálica protectora).
+* **Recuadros morados ("T" / Tester):** Son las estaciones de pruebas eléctricas. Se ubican estratégicamente tanto en etapas intermedias como en el testeo final para garantizar la calidad y normatividad de las unidades ya armadas con su gabinete.
+
+
+
+
+5. **Área de Salida y Empaque:**
+* **Círculo rojo ("E"):** Es la zona final de empaque y emplayado. Está operada por **dos operadores** e incluye una **grúa pequeña** de apoyo para manipular el producto terminado antes de su despacho.
+
+
+
+
+
+---
+

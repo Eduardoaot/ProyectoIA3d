@@ -4,6 +4,7 @@ import FlowMark from '../brand/FlowMark'
 import Wordmark from '../brand/Wordmark'
 import FlowPlan from '../charts/FlowPlan'
 import RelChart from '../charts/RelChart'
+import { StudyDeliverables } from '../components/context/BackendPanels'
 import Cursograma from './Cursograma'
 
 const Delta = ({ before, after, up }) => {
@@ -112,11 +113,11 @@ export default function ReportDoc({ plant, analysis, chosen, notes = [], reportT
 				)}
 			</section>
 
-			<section className="doc-section doc-break">
-				<h2>Cursograma analítico</h2>
-				<p className="doc-note" style={{ marginBottom: 12 }}>Cada paso del material en el orden del proceso: operaciones, traslados, inspecciones, esperas y almacenamientos. Las distancias son por los pasillos.</p>
+			{analysis.studies?.source !== 'accepted_activities' && <section className="doc-section doc-break">
+				<h2>Borrador de cursograma desde el plano</h2>
+				<p className="doc-note" style={{ marginBottom: 12 }}>Clasificación inferida de estaciones y traslados; requiere revisar las actividades reales. Las filas enumeran ramas y retornos, sin representar una secuencia única observada. Las distancias conocidas salen de las rutas calculadas.</p>
 				<Cursograma plant={plant} legsNow={cur.legs || []} legsNew={m?.legs || null} nameNew={chosen?.name} />
-			</section>
+			</section>}
 
 			{chosen && (
 				<section className="doc-section doc-break">
@@ -203,6 +204,7 @@ export default function ReportDoc({ plant, analysis, chosen, notes = [], reportT
 				<span>Cauce · el recorrido de tu planta, en orden.</span>
 				<span>Los números salen del plano; confírmalos con datos medidos.</span>
 			</footer>
+			{analysis.studies && <StudyDeliverables result={analysis.studies} />}
 		</article>
 	)
 }

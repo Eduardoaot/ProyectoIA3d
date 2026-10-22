@@ -1,0 +1,26 @@
+{
+  "case": "transformadores-contexto-real",
+  "source": "pruebas/Contexto_transformadores.txt",
+  "images": ["pruebas/Images/ImagenPlanta-transformadoresSimple.png", "pruebas/Images/Plano-plantaTransformadores.jpeg"],
+  "source_policy": {
+    "default": "text",
+    "case_override": "images_for_existing_equipment_and_positions",
+    "user_clarification": "Generalmente dele prioridad a lo que diga el texto, y las imagenes solo par aubicación. Pero en este caso especifico la imagen es mas fiel a la distribución y lo que hay",
+    "image_review": "Revisión visual humana de referencia; no representa una ejecución del proveedor de visión."
+  },
+  "requirements": [
+    {"id": "building", "entity": "bodega", "field": "dimensions", "expected": [32, 16], "unit": "m", "evidence": "32 m de ancho × 16 m de profundidad"},
+    {"id": "winding", "entity": "embobinadoras", "field": "count", "expected": 12, "source": "image_review", "conflicts_with_text": 10, "positions": {"left": 6, "right": 6}},
+    {"id": "assembly", "entity": "armado", "field": "count", "expected": 6, "source": "image_review", "conflicts_with_text": 4},
+    {"id": "configuration", "entity": "configuracion", "field": "count", "expected": 6, "source": "image_review", "conflicts_with_text": 4},
+    {"id": "welding", "entity": "soldadura", "field": "count", "expected": 4, "evidence": "4 Secciones de Soldadura"},
+    {"id": "quality-distinct", "field": "distinct_entities", "expected": ["Tester 1", "Tester 2"]},
+    {"id": "thermal-loop", "field": "routes", "expected": [["impregnacion", "stock"], ["stock", "horno"], ["horno", "stock"], ["stock", "configuracion"]]},
+    {"id": "stock", "field": "location", "entity": "stock", "expected": "centro", "evidence": "Zona Central de Stock y Secado"},
+    {"id": "packing", "field": "location", "entity": "empaque", "expected": "salida superior", "source": "image_review"},
+    {"id": "reported-distance", "field": "reported_not_computed", "expected": [86.5, 188.0]},
+    {"id": "times", "field": "ranges_preserved", "entity": "horno", "expected": [4, 8], "unit": "h/lote"}
+  ],
+  "must_remain_unknown": ["coordenadas métricas de cada equipo", "dimensiones individuales de equipos", "capacidad del lote de horno", "tiempos observados frente a rangos estimados", "restricciones físicas fijas no declaradas"],
+  "acceptance": ["Conservar trazabilidad de ambas fuentes y de la aclaración del usuario", "La imagen de referencia nunca se declara interpretada por IA sin proveedor de visión", "Una relación desconocida o incumplida impide declarar una reconstrucción fiel", "Las distancias reportadas se contrastan con el motor sin reemplazar su cálculo"]
+}

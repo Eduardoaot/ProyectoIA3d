@@ -6,3 +6,7 @@ pydantic>=2.7
 
 # Simulación de eventos discretos (criterios §6): puro Python, sin dependencias.
 simpy>=4.1
+
+# Lectura de evidencia con texto y tablas; escaneados no se tratan como texto leído.
+pypdf>=5
+openpyxl>=3.1

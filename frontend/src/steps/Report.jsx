@@ -1,10 +1,18 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { api } from '../api'
 import { createPortal } from 'react-dom'
 import Btn from '../fx/Btn'
 import { Appear, RevealTitle } from '../fx/Reveal'
 import ReportDoc from '../report/ReportDoc'
 
-export default function Report({ plant, analysis, chosen, notes, report, catalog, onPrinted, onNext }) {
+export default function Report({ plant, analysis, chosen, notes, report, catalog, onPrinted, onNext, studyContext }) {
+    const [studies, setStudies] = useState(analysis.studies)
+    useEffect(() => {
+        if (!studyContext) return
+        let active = true
+        api.studies({ plant, analysis, context: studyContext, redesign: chosen && { metrics: chosen.metrics, name: chosen.name } }).then((result) => { if (active) setStudies(result) }).catch(() => {})
+        return () => { active = false }
+    }, [plant, analysis, chosen, studyContext])
     useEffect(() => {
         if (report.state === 'idle') report.run()
     }, [report.state])
@@ -16,7 +24,7 @@ export default function Report({ plant, analysis, chosen, notes, report, catalog
         return () => window.removeEventListener('afterprint', after)
     }, [onPrinted])
 
-    const doc = <ReportDoc plant={plant} analysis={analysis} chosen={chosen} notes={notes} reportText={report.state === 'running' ? '' : report.text} catalog={catalog} />
+    const doc = <ReportDoc plant={plant} analysis={studies ? { ...analysis, studies } : analysis} chosen={chosen} notes={notes} reportText={report.state === 'running' ? '' : report.text} catalog={catalog} />
 
     return (
         <section className="step">

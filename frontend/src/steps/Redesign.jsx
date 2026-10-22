@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, fmt, pct } from '../api'
-import { has } from '../capabilities'
 import FlowPlan from '../charts/FlowPlan'
 import Criteria from '../components/Criteria'
 import WaitPanel from '../components/WaitPanel'
@@ -11,7 +10,6 @@ import { Appear, RevealTitle } from '../fx/Reveal'
 import OptionPicker from '../components/OptionPicker'
 import { samePlant } from '../proposals'
 import PlantView from '../three/PlantView'
-import useCaps from '../useCaps'
 
 /* Lo que gana (o pierde) la opción aplicada frente a hoy, dicho en una frase y con cifras grandes. */
 function Outcome({ plant, cur, m, name, after, positions }) {
@@ -136,11 +134,10 @@ function worksDiff(base, other) {
 	return n
 }
 
-export default function Redesign({ plant, analysis, weights, onReweigh, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, onNext }) {
+export default function Redesign({ analysisContext, canOptimize = true, plant, analysis, weights, prioritiesEnabled = true, onOpenContext, redesign, setRedesign, onAddAlternative, catalog, analysisRev = 0, onNext }) {
 	const [picking, setPicking] = useState(false)
 	const cur = analysis.current
 	const alts = analysis.alternatives
-	const caps = useCaps()
 
 	const view = useRef(null)
 	const editorRef = useRef(null)
@@ -194,10 +191,11 @@ export default function Redesign({ plant, analysis, weights, onReweigh, redesign
 
 	// La opción con IA se pide solo cuando el usuario la quiere (tarda uno o dos minutos).
 	const askCompact = async () => {
+		if (!canOptimize) { setCompact({ loading: false, error: 'Revisa y confirma el plano y el contexto antes de optimizar.' }); return }
 		setCompact({ loading: true, error: null })
 		try {
 			const done = startWait('compact')
-			const alt = await api.compact(plant)
+			const alt = await api.compact(plant, analysisContext, canOptimize)
 			done()
 			onAddAlternative(alt)
 			setCompact({ loading: false, error: null })
@@ -251,13 +249,6 @@ export default function Redesign({ plant, analysis, weights, onReweigh, redesign
 			legs: m.legs,
 		}
 	}, [showing, metrics, cur, plant])
-
-	const [busy, setBusy] = useState(false)
-	const reweigh = async (w) => {
-		setBusy(true)
-		await onReweigh(w)
-		setBusy(false)
-	}
 
 	const aiAlt = alts.find((a) => a.id === 'ia')
 	// La ventana solo trae los acomodos calculados; la de IA y la tuya van en el cuadro principal.
@@ -317,7 +308,7 @@ export default function Redesign({ plant, analysis, weights, onReweigh, redesign
 								Aplicar
 							</Btn>
 						) : (
-							<Btn size="small" onClick={askCompact} disabled={compact.loading}>
+							<Btn size="small" onClick={askCompact} disabled={compact.loading || !canOptimize}>
 								{compact.loading ? 'Calculando…' : 'Calcular con IA'}
 							</Btn>
 						)
@@ -422,7 +413,11 @@ export default function Redesign({ plant, analysis, weights, onReweigh, redesign
 			)}
 
 			<Appear className="block" style={{ marginTop: 32 }}>
-				<Criteria key={analysis.plant_version + JSON.stringify(analysis.weights_used || {})} analysis={analysis} canWeigh={has(caps, 'weights') && !!onReweigh} weights={weights} onReweigh={reweigh} busy={busy} />
+				<div className="context-review-card">
+					<div><h3>Tus prioridades</h3><p className="small">{prioritiesEnabled ? 'Los pesos se revisan junto con el contexto y el plano antes de recalcular.' : 'Prioridades desactivadas: se usan los pesos base del motor.'}</p></div>
+					<button type="button" className="btn btn--ghost btn--small" onClick={() => onOpenContext('prioridades')}>Editar en contexto ↗</button>
+				</div>
+				<Criteria key={analysis.plant_version + JSON.stringify(analysis.weights_used || {})} analysis={analysis} canWeigh={false} weights={weights} />
 			</Appear>
 
 			{positions && (
