@@ -29,11 +29,15 @@ from cauce.workspace_routes import create_router
 
 # Un proveedor por rol (criterios §7.3); cada uno se configura con CAUCE_<ROL>_PROVIDER/MODEL.
 extractor = get_provider("extractor")  # historia -> JSON
+# Una planta con muchas áreas, cantidades y personal no cabe en los 900 tokens por defecto:
+# la respuesta se cortaba, el JSON quedaba incompleto y se caía a las reglas por palabras clave.
+extractor.max_output_tokens = 4096
 engineer = get_provider("chat")  # chat del ingeniero
 reporter = get_provider("informe")  # texto del informe
 missioner = get_provider("misiones")  # misiones del taller (JSON)
 editor = get_provider("editor")  # asistente del editor: instrucción -> operaciones
 spatial = get_provider("espacial")  # agentes que leen el espacio
+spatial.max_output_tokens = 2048
 seer = get_provider("vision")  # imágenes de referencia (solo si el modelo tiene visión)
 context_organizer = get_provider("contexto")  # especialistas por tema y consolidador
 context_organizer.max_output_tokens = 4096
@@ -229,6 +233,9 @@ async def story(body: StoryInterface):
 
     result = build_plant(body.text, extracted, reading)
     result["spatial"] = {**result["spatial"], "detail": score, "needed": MIN_CUES, "model": model, "errors": {k: v["error"] for k, v in (reading or {}).items() if v["error"]}}
+    if error or not extracted:
+        # Sin la lectura de la IA, el plano sale de palabras clave y puede traer áreas genéricas.
+        result["notes"].insert(0, "La IA no pudo completar la lectura de tu descripción. Este plano se armó con palabras clave del texto y puede incluir áreas genéricas que no tienes: revísalo o vuelve a intentarlo.")
     if body.context:
         result["notes"].append("Boceto a partir del contexto aceptado. Verifica dimensiones y posiciones: los datos no observados siguen siendo supuestos del boceto.")
     return {**result, "error": error, "extracted": extracted, "agents_raw": {k: v["data"] for k, v in (reading or {}).items()}, "context_version": context_version(body.context)}

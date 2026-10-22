@@ -276,6 +276,7 @@ def _station(i, name, kind, t=None, ops=None, dimensions=None):
 
 
 WEAK = {"recepcion": r"recep|materias? primas?|almacen de entrada", "despacho": r"despach|embarque|area de salida", "mesa": r"mesa de trabajo|banco de trabajo"}
+PROBLEM_WORDS = r"problem|falla|retras|demora|desperdic|desorden|cuello de botella|se acumul|amontona|cruce|se pierde|perdemos|tarda demasiado|queja|retrabaj|defect|merma|rechaz|paro|cuesta trabajo"
 RETURN_WORDS = r"regres|vuelve|devuelv|retrabaj|reproces|repite|se rehace|otra vez"
 
 
@@ -377,6 +378,10 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
         # "llega", "a mano" o "camión" no bastan para inventar una recepción, una mesa o un despacho
         # cuando la IA ya leyó las estaciones: hace falta el nombre del área.
         if found and kid in WEAK and not re.search(WEAK[kid], t):
+            continue
+        # Con varias estaciones ya leídas por la IA, una palabra relacionada («barniz», «pruebas»,
+        # «materia prima») no basta para agregar un área genérica: el texto debe nombrar esa área.
+        if len(found) >= 3 and not re.search(WORD_START + max(normalize(KIND[kid]["name"]).split(), key=len)[:5], t):
             continue
         pos = _where(KIND[kid]["name"], kid, t)
         found.append((pos if pos is not None else len(t), KIND[kid]["name"], kid, None, None, None))
@@ -639,7 +644,9 @@ def build_plant(text: str, ai: dict | None, spatial: dict | None = None) -> dict
     order = {sid: i for i, sid in enumerate(flow_order(plant))}
     plant["stations"].sort(key=lambda s: order.get(s["id"], 0))
 
-    ai_notes = [impersonal(x) for x in ai.get("problemas", []) or [] if str(x).strip()]
+    # Los problemas de la IA solo se muestran si la historia habla de problemas; si no, el modelo
+    # los inventa («fallas en el horno», «retrasos logísticos») y parecen hallazgos reales.
+    ai_notes = [impersonal(x) for x in ai.get("problemas", []) or [] if str(x).strip()] if re.search(PROBLEM_WORDS, t) else []
     return {
         "plant": plant,
         "assumptions": assumptions,
