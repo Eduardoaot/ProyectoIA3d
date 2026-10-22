@@ -23,6 +23,7 @@ otro. CAUCE_MODEL cambia todos a la vez.
 import os
 
 from .base import caps, missing  # noqa: F401
+from .gemini import GeminiProvider
 from .ollama import OllamaProvider
 
 DEFAULT_MODEL = "llama3.1:8b"
@@ -44,6 +45,8 @@ ROLE_CONFIG = {
 def _make(kind: str, model: str, temperature: float, timeout: float = 180):
     if kind == "ollama":
         return OllamaProvider(model=model, host=os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"), temperature=temperature, timeout=timeout)
+    if kind == "gemini":
+        return GeminiProvider(model=model, api_key=os.getenv("GEMINI_API_KEY", ""), temperature=temperature, timeout=timeout)
     raise ValueError(f"Proveedor de IA desconocido: {kind}")
 
 
@@ -58,8 +61,9 @@ def _setting(role: str, what: str, default: str) -> str:
 
 
 def get_provider(role: str):
+    from ..provider_activity import instrument
     _, _, temperature, timeout = ROLE_CONFIG[role]
-    return _make(_setting(role, "PROVIDER", "ollama"), _setting(role, "MODEL", DEFAULT_MODEL), temperature, timeout)
+    return instrument(_make(_setting(role, "PROVIDER", "ollama"), _setting(role, "MODEL", DEFAULT_MODEL), temperature, timeout), role)
 
 
 # Nombres de antes, para no romper a quien los use.

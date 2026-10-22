@@ -73,7 +73,7 @@ def fake(monkeypatch):
     import main
 
     f = FakeProvider()
-    for role in ("extractor", "engineer", "spatial", "editor", "reporter", "missioner", "seer", "analyst"):
+    for role in ("extractor", "engineer", "spatial", "editor", "reporter", "missioner", "seer", "context_organizer", "analyst"):
         if hasattr(main, role):
             monkeypatch.setattr(main, role, f)
     if hasattr(main, "providers_by_role"):

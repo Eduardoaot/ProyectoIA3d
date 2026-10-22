@@ -4,4 +4,6 @@ __pycache__/
 *.pyc
 dist/
 .env
+.env.*
+!.env.example
 .cauce-data/

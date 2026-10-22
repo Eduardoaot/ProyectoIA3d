@@ -9,6 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from cauce.env import load_project_env
+
+# Debe ejecutarse antes de crear proveedores: permite usar la raíz/.env al
+# iniciar con uvicorn, scripts de Windows o pruebas manuales.
+load_project_env()
+
 from cauce import catalog
 from cauce import criteria
 from cauce import context as ctxmod
@@ -64,6 +70,17 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Cauce", lifespan=lifespan)
+
+
+@app.middleware('http')
+async def identify_ai_session(request, call_next):
+    from cauce.provider_activity import session
+    key = request.cookies.get('cauce_ai_session', '')
+    token = session.set(key if len(key) == 36 else None)
+    try:
+        return await call_next(request)
+    finally:
+        session.reset(token)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(create_router(lambda: context_organizer))
 
@@ -146,13 +163,22 @@ async def capabilities():
 
 @app.get("/api/health")
 async def health():
-    ex, en, sp = await extractor.status(), await engineer.status(), await spatial.status()
+    ex, en, sp, co = await extractor.status(), await engineer.status(), await spatial.status(), await context_organizer.status()
     return {
         "extractor": {"provider": extractor.name, "model": extractor.model, **ex},
         "engineer": {"provider": engineer.name, "model": engineer.model, **en},
         "spatial": {"provider": spatial.name, "model": spatial.model, **sp},
+        "context": {"provider": context_organizer.name, "model": context_organizer.model, "online": co.get("online", False), "ready": co.get("ready", False)},
         "roles": {k: {"provider": v.name, "model": v.model, "capabilities": caps(v)} for k, v in (("informe", reporter), ("misiones", missioner), ("editor", editor))},
     }
+
+
+@app.get("/api/context/provider")
+async def context_provider_status():
+    """Identidad del proveedor de esta instancia, sin claves ni configuración privada."""
+    from cauce.provider_activity import activities, session
+    return {"provider": context_organizer.name, "model": context_organizer.model,
+            "calls": list(activities.get(session.get(), {}).values())}
 
 
 @app.get("/api/catalog")
@@ -540,7 +566,8 @@ async def read_reference(body: ReferenceInterface):
     """Lee una imagen de referencia solo si el proveedor tiene visión; si no, lo dice (no finge)."""
     if not provider_caps(seer)["vision"] or not hasattr(seer, "vision"):
         raise HTTPException(status_code=422, detail=f"El proveedor actual ({seer.model}) no tiene visión: la imagen se guarda como nota, sin interpretar.")
-    data = body.image.split(",", 1)[1] if body.image.startswith("data:") else body.image
+    # Ollama recibe base64 plano; Gemini conserva el data URL para respetar JPG/PNG/WebP.
+    data = body.image if getattr(seer, "name", "") == "gemini" else (body.image.split(",", 1)[1] if body.image.startswith("data:") else body.image)
     try:
         text = await seer.vision(REFERENCE_SYSTEM, body.note or "Describe la distribución.", [data])
     except Exception as e:  # noqa: BLE001
