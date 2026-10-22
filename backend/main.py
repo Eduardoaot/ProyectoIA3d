@@ -70,6 +70,17 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Cauce", lifespan=lifespan)
+
+
+@app.middleware('http')
+async def identify_ai_session(request, call_next):
+    from cauce.provider_activity import session
+    key = request.cookies.get('cauce_ai_session', '')
+    token = session.set(key if len(key) == 36 else None)
+    try:
+        return await call_next(request)
+    finally:
+        session.reset(token)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(create_router(lambda: context_organizer))
 
@@ -160,6 +171,14 @@ async def health():
         "context": {"provider": context_organizer.name, "model": context_organizer.model, "online": co.get("online", False), "ready": co.get("ready", False)},
         "roles": {k: {"provider": v.name, "model": v.model, "capabilities": caps(v)} for k, v in (("informe", reporter), ("misiones", missioner), ("editor", editor))},
     }
+
+
+@app.get("/api/context/provider")
+async def context_provider_status():
+    """Identidad del proveedor de esta instancia, sin claves ni configuración privada."""
+    from cauce.provider_activity import activities, session
+    return {"provider": context_organizer.name, "model": context_organizer.model,
+            "calls": list(activities.get(session.get(), {}).values())}
 
 
 @app.get("/api/catalog")

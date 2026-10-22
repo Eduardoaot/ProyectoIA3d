@@ -213,7 +213,7 @@ export default function Story({ saveError, onReadContext, onVerify, construction
                                 {onReadContext ? 'Ver contexto de la planta' : 'Iniciar proyecto avanzado'}
                             </Btn>
                             {onReadContext && (
-                                <Btn size="small" disabled={reading} onClick={async () => { if (await onReadContext()) scrollToEditor() }}>
+                                <Btn size="small" disabled={reading || !context2?.ready} onClick={async () => { if (await onReadContext()) scrollToEditor() }}>
                                     Construir el plano desde mi contexto
                                 </Btn>
                             )}
@@ -266,7 +266,8 @@ export default function Story({ saveError, onReadContext, onVerify, construction
 
             {!reading && constructionProgress?.stage === 'blocked' && <ConstructionReview report={constructionProgress.verification} title="La construcción se detuvo en este lote; tu plano anterior sigue guardado" />}
             {info?.verification && <ConstructionReview report={info.verification} stale={info.verificationDraftKey !== JSON.stringify(draft)} />}
-            {draft && onVerify && <button className="btn btn--ghost btn--small" type="button" onClick={onVerify}>Comprobar el plano contra el contexto</button>}
+            {onReadContext && !context2?.ready && <p className="small" role="status">{context2?.blockedReason} <button type="button" className="link-btn" onClick={() => onOpenContext('inicio')}>Abrir contexto para actualizarlo</button></p>}
+            {draft && onVerify && <button className="btn btn--ghost btn--small" type="button" disabled={reading || !context2?.ready} onClick={onVerify}>Comprobar el plano contra el contexto</button>}
             {draft && (
                 <div ref={editorRef} style={{ marginTop: 48, scrollMarginTop: 24 }}>
                     <div className="chart-head" style={{ marginBottom: 16 }}>

@@ -1,0 +1,107 @@
+Genera la distribución 3D de una planta de fabricación de transformadores basándote estrictamente en el plano de referencia “ImagenPlanta-transformadoresSimple”. Respeta la posición relativa, orientación, secuencia de proceso y pasillos; no inventes estaciones ni cambies el flujo de materiales.
+
+Objetivo:
+Crear un layout industrial claro, navegable y proporcionado, con maquinaria simplificada pero reconocible, zonas etiquetadas y transportadores que comuniquen las etapas del proceso.
+
+Distribución requerida:
+
+1. Laterales: embobinado
+- Coloca 6 máquinas de embobinado azules en una columna vertical junto al límite izquierdo y otras 6 simétricas junto al límite derecho.
+- Las máquinas deben mirar hacia el interior de la planta.
+- Añade flechas de entrada de material desde los bordes exteriores: desde la izquierda hacia las máquinas izquierdas y desde la derecha hacia las máquinas derechas.
+- Incluye un operador por máquina, representado mediante un marcador o figura pequeña azul.
+
+2. Parte superior
+- En la esquina superior izquierda y superior derecha, coloca una estación amarilla “Nucl”, con una flecha que indique flujo hacia abajo.
+- En la zona superior central, coloca la estación “E” como elemento circular rojo, con una estructura horizontal marrón y una flecha de flujo hacia arriba.
+- Incluye la estación “T” morada vertical próxima a la parte superior central-derecha.
+
+3. Área izquierda de proceso
+- A la derecha de las embobinadoras izquierdas, coloca pequeños módulos amarillos alineados verticalmente.
+- Ubica 3 estaciones verdes de armado “A” en una columna vertical, con operadores junto a cada una.
+- Coloca el almacén verde vertical “ALMACEN” junto a las estaciones A.
+- Debajo, agrega 2 estaciones naranjas “S”, con sus operadores.
+- En la parte inferior izquierda-central incluye una estación “T” morada horizontal.
+- Mantén corredores suficientes entre equipos y transportadores.
+
+4. Área derecha de proceso
+- A la izquierda de las embobinadoras derechas, coloca módulos amarillos alineados verticalmente.
+- Incluye 3 estaciones verdes de ensamblaje, con operadores.
+- Añade un módulo verde vertical intermedio.
+- Coloca 2 estaciones naranjas de soldadura etiquetadas “Sol”, con operadores azules.
+
+5. Zona central
+- Coloca un gran horno cuadrado rosa etiquetado “Horno” en la zona central-derecha.
+- A su lado superior-izquierdo coloca un área blanca rectangular “Stock y Secado”.
+- En la parte inferior central sitúa las estaciones cian “Impregnado”.
+- Añade una grúa/puente grúa marrón con polipasto vertical, destinada a manipular material entre Stock y Secado, Horno e Impregnado.
+
+6. Flujo y transportadores
+- Construye bandas transportadoras grises que conecten lógicamente las zonas de embobinado, armado, almacenamiento, proceso térmico, impregnado y soldadura.
+- Incluye una banda transportadora principal horizontal en la parte inferior, etiquetada “Banda conveyor”.
+- El flujo debe ser continuo, sin cruces imposibles ni equipos bloqueando pasillos.
+- Representa claramente las direcciones de movimiento con flechas discretas.
+
+Criterios visuales:
+- Estilo: planta industrial 3D simplificada, limpia y funcional.
+- Conserva el código de color: embobinado azul oscuro; armado/almacén verde; estaciones S y Sol naranja; horno rosa; impregnado cian; estaciones T moradas; Nucl amarillo; grúa marrón; bandas grises.
+- Incluye etiquetas legibles sobre cada zona principal.
+- Mantén simetría visual entre ambos laterales, aunque el proceso central sea asimétrico.
+- Prioriza una distribución físicamente plausible: dimensiones coherentes, separación entre máquinas, rutas de operarios y zonas de seguridad alrededor del horno y la grúa.
+
+
+
+==============================================
+VERSION 2
+===============================================
+
+Construye el plano completo de una planta de transformadores dentro de una bodega rectangular de 32 m de ancho por 16 m de fondo.
+
+No solicites confirmaciones, no agregues equipos, no agrupes máquinas bajo una sola entidad y no dejes ubicaciones o dimensiones “provisionales”. Crea cada equipo como una entidad individual, con la cantidad, posición y dimensiones indicadas. Todas las dimensiones siguientes son definitivas para este plano.
+
+Sistema de coordenadas:
+- Origen (0,0): esquina inferior izquierda de la bodega.
+- Eje X: izquierda a derecha, de 0 a 32 m.
+- Eje Y: abajo hacia arriba, de 0 a 16 m.
+- Mantén pasillos mínimos de 1 m y rutas libres para el movimiento de operadores y carga.
+
+1. Embobinado y staging
+- Crear exactamente 10 máquinas embobinadoras individuales, color azul oscuro, de 2.4 x 1.4 m.
+- Colocar 6 embobinadoras en el flanco izquierdo, centradas en X=2.0 m, mirando hacia el centro, con centros en Y=1.5, 4.0, 6.5, 9.0, 11.5 y 14.0 m.
+- Colocar 4 embobinadoras en el flanco derecho, centradas en X=30.0 m, mirando hacia el centro, con centros en Y=2.0, 5.5, 9.0 y 12.5 m.
+- Crear exactamente 10 racks de staging amarillos de 0.8 x 1.0 m: uno junto al lado interior de cada embobinadora.
+- Asignar un operador a cada embobinadora.
+
+2. Armado y soldadura
+- Crear exactamente 4 estaciones de armado de núcleo, color verde fuerte, de 1.5 x 1.8 m.
+- Ubicar 3 estaciones de armado en el lado izquierdo, centradas en X=7.8 m, con centros en Y=9.0, 11.3 y 13.6 m.
+- Ubicar 1 estación de armado en el lado derecho, centrada en X=24.2 m, Y=11.3 m.
+- Asignar un operador a cada estación de armado.
+- Crear 2 estantes de consumibles verde claro de 1.2 x 3.0 m: uno en X=8.0, Y=5.0 y otro en X=24.0, Y=6.0.
+- Crear exactamente 3 estaciones de soldadura estructural, color naranja, de 1.8 x 2.0 m: dos a la izquierda en X=10.0, Y=4.0 y Y=6.5; una a la derecha en X=22.0, Y=4.0.
+- Asignar un operador a cada estación de soldadura.
+
+3. Pruebas, impregnación, horno y almacenamiento
+- Crear exactamente 1 estación de pruebas intermedias “Tester 1”, color morado, de 1.5 x 1.5 m, en X=10.0, Y=1.8 m.
+- Crear exactamente 1 sistema de impregnación, color cian, de 3.0 x 3.0 m, en X=16.5, Y=3.2 m.
+- Crear exactamente 1 zona de Stock y Secado, de 5.0 x 2.5 m, en X=15.0, Y=9.5 m.
+- Crear exactamente 1 horno industrial, color rosa, de 4.5 x 4.0 m, en X=19.0, Y=6.5 m.
+- Crear exactamente 1 grúa viga con polipasto, color marrón, que cubra el recorrido entre Impregnado, Stock y Secado y Horno. Su riel debe estar libre de obstáculos.
+- Crear exactamente 1 estación de pruebas finales “Tester 2”, color morado, de 1.5 x 1.5 m, en X=20.5, Y=14.0 m.
+
+4. Configuración, gabinete y empaque
+- Crear exactamente 4 celdas de configuración eléctrica y montaje de gabinete, color café claro, de 1.5 x 1.5 m, alineadas en la parte superior central, alrededor de X=13.5, 16.0, 18.5 y 21.0 m; Y=13.0 m.
+- Crear exactamente 1 estación de empaque, identificada como “E”, de 2.5 x 2.5 m, en X=15.5, Y=14.2 m.
+- Asignar exactamente 2 operadores a la estación de empaque.
+- Incluir una grúa pequeña o ayuda de manipulación junto a empaque.
+
+5. Transportadores y flujo
+- Crear una sola red de banda transportadora gris, con un tramo principal horizontal en la parte inferior, desde X=7.0 hasta X=25.0 y Y=0.8 m, etiquetado “Banda conveyor”.
+- Conectar mediante transportadores o rutas claramente señaladas: embobinado → staging → armado → soldadura → Tester 1 → impregnado → Stock y Secado → horno → Stock y Secado → configuración y gabinete → Tester 2 → empaque.
+- Representar el flujo en forma de U y sin cruces imposibles.
+- Añadir entradas de materia prima en los laterales y salida de producto terminado por el portón superior central.
+
+6. Presentación
+- Aplicar el código de color: azul oscuro embobinado; amarillo staging; verde armado; verde claro consumibles; naranja soldadura; morado pruebas; cian impregnación; rosa horno; café grúa y configuración; rojo empaque; gris transportadores.
+- Etiquetar equipos y áreas principales.
+- El resultado debe ser un plano funcional completo, no una propuesta parcial ni una lista de supuestos.

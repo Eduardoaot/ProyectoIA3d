@@ -61,8 +61,9 @@ def _setting(role: str, what: str, default: str) -> str:
 
 
 def get_provider(role: str):
+    from ..provider_activity import instrument
     _, _, temperature, timeout = ROLE_CONFIG[role]
-    return _make(_setting(role, "PROVIDER", "ollama"), _setting(role, "MODEL", DEFAULT_MODEL), temperature, timeout)
+    return instrument(_make(_setting(role, "PROVIDER", "ollama"), _setting(role, "MODEL", DEFAULT_MODEL), temperature, timeout), role)
 
 
 # Nombres de antes, para no romper a quien los use.

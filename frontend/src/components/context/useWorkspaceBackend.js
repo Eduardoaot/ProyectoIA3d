@@ -105,5 +105,10 @@ export default function useWorkspaceBackend(project, activeId, onProjectChange) 
     const clearNotice = () => setNotice('')
     const retry = () => job && interpret(job.text, job.kind, job.source_id, job.topic, job.id)
     const saveCopy = () => run(async () => { await save(); setNotice('Copia del proyecto guardada.'); return true })
-    return { id, busy, notice, job, questions, deliverables, run, save, saveCopy, confirm, interpret, upload, review, restore, exportProject, importProject, importOperators, cancel, clearNotice, retry }
+    const integrateNew = () => run(async () => {
+        await save()
+        mark(await request(`/${id}/integrate-new`, { method: 'POST', body: { expected_revision: revision.current } }), true)
+        setNotice('Datos nuevos interpretados. Revisa y confirma las propuestas nuevas; el maestro anterior y el plano se conservaron.')
+    })
+    return { id, busy, notice, job, questions, deliverables, run, save, saveCopy, integrateNew, confirm, interpret, upload, review, restore, exportProject, importProject, importOperators, cancel, clearNotice, retry }
 }

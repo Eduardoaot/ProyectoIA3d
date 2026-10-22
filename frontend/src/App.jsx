@@ -9,6 +9,7 @@ import { summarize } from './context2'
 import { deleteAttachments, reviewSignature } from './contextWorkspace'
 import { acceptedContext, constructWorkspace, workspaceRequest } from './workspaceApi'
 import ContextWorkspace from './components/context/ContextWorkspace'
+import ContextProviderStatus from './components/ContextProviderStatus'
 import './components/context/context-entry.css'
 import FlowMark from './brand/FlowMark'
 import DialogHost, { ask } from './components/Dialog'
@@ -155,8 +156,19 @@ export default function App() {
     // Construir desde el contexto es otra opción, disponible cuando ya hay un maestro aceptado.
     const contextMaster = acceptedContext(project).master
     const contextReady = has(caps, 'construction_jobs') && contextMaster?.status === 'accepted' && !contextMaster.pending_manual_ids?.length && !contextMaster.pending_source_policy
+    const contextBlockedReason = !contextMaster || contextMaster.status !== 'accepted'
+        ? 'Organiza la información y confirma los datos propuestos en el contexto antes de construir.'
+        : contextMaster.pending_manual_ids?.length
+            ? 'Añadiste datos manuales que aún no están integrados al contexto maestro. Abre el contexto, vuelve a organizar la información y revisa y confirma las propuestas nuevas.'
+            : contextMaster.pending_source_policy
+                ? 'Cambió la prioridad de las fuentes. Vuelve a organizar el contexto y confirma las propuestas antes de construir.'
+                : ''
 
     const read = async (fromContext = false) => {
+        if (fromContext && !contextReady) {
+            setError(contextBlockedReason)
+            return false
+        }
         setReading(true)
         setConstructionProgress(null)
         setError(null)
@@ -273,13 +285,13 @@ export default function App() {
             reading={reading}
             error={error}
             onRead={() => read(false)}
-            onReadContext={contextReady ? () => read(true) : undefined}
+            onReadContext={has(caps, 'construction_jobs') ? () => read(true) : undefined}
             constructionProgress={constructionProgress}
-            onVerify={contextReady ? verifyDraft : undefined}
+            onVerify={has(caps, 'context_master') ? verifyDraft : undefined}
             onBlank={blank}
             onOpenContext={openContext}
             pending={(project.contextWorkspace?.proposals || []).filter((proposal) => proposal.status === 'pending').length}
-            context2={{ confirmed }}
+            context2={{ confirmed, ready: contextReady, blockedReason: contextBlockedReason }}
             onSave={save}
             saveError={saveError}
             saving={saving}
@@ -351,6 +363,7 @@ export default function App() {
                             Ver contexto de la planta <span aria-hidden="true">↗</span>
                         </button>
                     </div>
+                    <ContextProviderStatus />
                     <AnimatePresence mode="wait">
                         <motion.div key={`${library.activeId}-${ready ? step : 0}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
                           {ready && step > 0 && stale && (

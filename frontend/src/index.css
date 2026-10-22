@@ -3478,3 +3478,6 @@ details.how ul {
   background: var(--black);
   color: var(--white);
 }
+/* Proveedor visible desde la pantalla inicial, sin abrir un proyecto. */
+.context-provider-summary { margin: 12px 24px; padding: 12px 16px; border: 1px solid #aaa; font-size: 13px; overflow-wrap: anywhere; }
+.context-provider-summary small { display: block; margin-top: 4px; color: #666; font-size: 11px; }

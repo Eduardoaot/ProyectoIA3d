@@ -163,6 +163,20 @@ def create_router(provider):
             raise HTTPException(422, "Tipo de revisión no reconocido")
         return translate(lambda: store.mutate(workspace_id, body.expected_revision, lambda p: service.confirm(p, body.ids, body.target)))
 
+    @router.post('/{workspace_id}/integrate-new')
+    async def integrate_new(workspace_id: str, body: RevisionInput):
+        from .master_increment import integrate
+        saved = translate(lambda: store.read(workspace_id))
+        if saved['revision'] != body.expected_revision:
+            raise HTTPException(409, 'El expediente cambió. Recarga antes de integrar.')
+        try:
+            result = await integrate(saved['project'], provider())
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, 'No se pudieron interpretar los datos nuevos. El maestro anterior se conserva.') from exc
+        return translate(lambda: store.mutate(workspace_id, body.expected_revision, lambda p: service.merge_result(p, result) if result else None))
+
     @router.get("/{workspace_id}/coverage")
     def coverage(workspace_id: str):
         return translate(lambda: service.coverage(store.read(workspace_id)["project"]))

@@ -79,6 +79,8 @@
 .cw-story-footer { display: flex; gap: 16px; flex-wrap: wrap; justify-content: space-between; align-items: center; }
 .cw-story-footer > span { font-size: 10px; color: #777; }
 .cw-method { font-size: 10px; color: #777; margin-top: 14px; line-height: 1.6; }
+.cw-provider-status { display: grid; gap: 6px; padding: 14px 16px; margin-bottom: 20px; border: 2px solid var(--black, #151515); font-size: 14px; overflow-wrap: anywhere; }
+.cw-provider-status small { font-size: 12px; color: var(--g500, #777); }
 .cw-button { display: inline-flex; justify-content: center; align-items: center; gap: 16px; background: #151515; color: #fff; border: 1px solid #151515; padding: 12px 17px; min-height: 42px; font-size: 12px; font-weight: 650; line-height: 1.35; white-space: normal; }
 .cw-button:hover:not(:disabled) { background: #3b3b3b; }
 .cw-button--outline { background: #fff; color: #161616; border-color: #c6c6c6; }
