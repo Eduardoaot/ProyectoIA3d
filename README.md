@@ -52,7 +52,7 @@ La interpretación utiliza el proveedor existente del rol contexto: `OLLAMA_HOST
 
 ### Gemini: texto e imágenes
 
-El backend admite Gemini sin cambiar el código de los agentes. Copia `.env.example` a `.env`, define `GEMINI_API_KEY` y carga esas variables en la terminal que inicia el backend. Para habilitar la lectura de imágenes basta con `CAUCE_VISION_PROVIDER=gemini` y `CAUCE_VISION_MODEL=gemini-2.5-flash`; para roles de texto configura el mismo par `CAUCE_CONTEXT_*`, `CAUCE_CHAT_*` o `CAUCE_EXTRACT_*`. La clave se manda solo al endpoint de Gemini y `.env` permanece ignorado por Git.
+El backend admite Gemini sin cambiar el código de los agentes. Copia `.env.example` a `.env` y define `GEMINI_API_KEY`; el backend carga ese archivo automáticamente al arrancar. Para habilitar la lectura de imágenes basta con `CAUCE_VISION_PROVIDER=gemini` y `CAUCE_VISION_MODEL=gemini-2.5-flash`; para roles de texto configura el mismo par `CAUCE_CONTEXT_*`, `CAUCE_CHAT_*` o `CAUCE_EXTRACT_*`. La clave se manda solo al endpoint de Gemini y `.env` permanece ignorado por Git.
 
 En Windows también se puede usar `powershell -ExecutionPolicy Bypass -File .\iniciar.ps1`. Reutiliza `.venv` de la raíz o `backend/.venv`, inicia el backend oculto y deja el frontend en la terminal. El modelo se configura después; solo se descarga desde este script si se añade `-DescargarModelo`.
 

@@ -9,6 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from cauce.env import load_project_env
+
+# Debe ejecutarse antes de crear proveedores: permite usar la raíz/.env al
+# iniciar con uvicorn, scripts de Windows o pruebas manuales.
+load_project_env()
+
 from cauce import catalog
 from cauce import criteria
 from cauce import context as ctxmod
