@@ -191,11 +191,11 @@ export default function Redesign({ analysisContext, canOptimize = true, plant, a
 
 	// La opción con IA se pide solo cuando el usuario la quiere (tarda uno o dos minutos).
 	const askCompact = async () => {
-		if (!canOptimize) { setCompact({ loading: false, error: 'Revisa y confirma el plano y el contexto antes de optimizar.' }); return }
+		if (!canOptimize) { setCompact({ loading: false, error: 'Los resultados están desactualizados: vuelve al paso 1 y pulsa «Guardar y ver en 3D».' }); return }
 		setCompact({ loading: true, error: null })
 		try {
 			const done = startWait('compact')
-			const alt = await api.compact(plant, analysisContext, canOptimize)
+			const alt = await api.compact(plant, analysisContext, !!analysisContext)
 			done()
 			onAddAlternative(alt)
 			setCompact({ loading: false, error: null })

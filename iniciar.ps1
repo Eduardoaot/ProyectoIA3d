@@ -1,4 +1,4 @@
-# Arranca la app completa: Ollama (IA), backend (puerto 8000) oculto y frontend (puerto 5173) en esta.
+﻿# Arranca la app completa: Ollama (IA), backend (puerto 8000) oculto y frontend (puerto 5173) en esta.
 # Uso, desde la raíz del proyecto:  powershell -ExecutionPolicy Bypass -File .\iniciar.ps1
 param([switch]$DescargarModelo)
 $root = $PSScriptRoot

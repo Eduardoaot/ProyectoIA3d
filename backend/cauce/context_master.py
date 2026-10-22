@@ -27,6 +27,44 @@ def entity_id(name):
     return "ent-" + digest(normalize(name))[:16]
 
 
+MARKUP = set("*_#>`|")
+QUANTITIES = ("count", "width", "depth", "x", "z", "operators")
+
+
+def locate(excerpt, text):
+    """Busca la evidencia aunque el modelo haya cambiado espacios, mayúsculas, acentos o
+    quitado el formato markdown. Devuelve (posición, texto literal de la fuente) o (-1, '')."""
+    offset = text.find(excerpt)
+    if offset >= 0:
+        return offset, excerpt
+    import unicodedata
+
+    def fold(value):
+        chars, origin = [], []
+        for index, char in enumerate(value):
+            if char in MARKUP:
+                continue
+            char = "".join(c for c in unicodedata.normalize("NFD", char) if unicodedata.category(c) != "Mn").lower()
+            if char.isspace():
+                if not chars or chars[-1] == " ":
+                    continue
+                char = " "
+            for c in char:
+                chars.append(c)
+                origin.append(index)
+        return "".join(chars), origin
+
+    folded_text, origin = fold(text)
+    folded_excerpt = fold(excerpt)[0].strip()
+    if len(folded_excerpt) < 8:
+        return -1, ""
+    found = folded_text.find(folded_excerpt)
+    if found < 0:
+        return -1, ""
+    start, end = origin[found], origin[found + len(folded_excerpt) - 1] + 1
+    return start, text[start:end]
+
+
 def clean_fact(raw, source, topic=None):
     """El modelo interpreta; la evidencia y las magnitudes se comprueban en código."""
     if not isinstance(raw, dict):
@@ -39,13 +77,23 @@ def clean_fact(raw, source, topic=None):
         raise ValueError("Tema, entidad, propiedad o alcance inválido")
     if not all(row[k] for k in ("label", "value", "excerpt", "entity")):
         raise ValueError("Falta descripción, entidad o evidencia")
-    offset = source["text"].find(row["excerpt"])
+    offset, literal = locate(row["excerpt"], source["text"])
     if offset < 0:
         raise ValueError("La evidencia no aparece en la fuente original")
+    # Se guarda el texto tal como está en la fuente, no la versión que reescribió el modelo.
+    row["excerpt"] = literal
     from .story import words_to_digits
     extract_numbers = lambda text: {float(n.replace(",", ".")) for n in re.findall(r"(?<!\w)-?\d+(?:[.,]\d+)?", words_to_digits(normalize(text)))}
     if not extract_numbers(row["value"]).issubset(extract_numbers(row["excerpt"])):
         raise ValueError("La explicación añade cifras que su evidencia no contiene")
+    if row["field"] in QUANTITIES and row["number"] is None:
+        # El modelo puso la cifra en el valor y no en `number`: se toma si es la única que comparten
+        # valor y evidencia. Si no hay una sola, el dato se conserva como descripción, sin medida.
+        shared = extract_numbers(row["value"]) & extract_numbers(row["excerpt"])
+        if len(shared) == 1:
+            row["number"] = shared.pop()
+        else:
+            row["field"] = "description"
     if row["number"] is not None:
         number = row["number"]
         numbers = extract_numbers(row["excerpt"])

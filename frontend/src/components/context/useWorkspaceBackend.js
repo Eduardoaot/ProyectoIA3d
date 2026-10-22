@@ -33,7 +33,9 @@ export default function useWorkspaceBackend(project, activeId, onProjectChange) 
     const confirm = (ids, target = 'proposals') => run(async () => {
         await save()
         const saved = mark(await request(`/${id}/confirm`, { method: 'POST', body: { expected_revision: revision.current, ids, target } }), true)
-        setNotice(`${saved.result.accepted.length} aceptados.${saved.result.blocked.length ? ` ${saved.result.blocked.length} requieren corrección.` : ''}`)
+        const accepted = saved.result.accepted.length
+        const blocked = saved.result.blocked.length
+        setNotice(`${accepted === 1 ? '1 dato confirmado.' : `${accepted} datos confirmados.`}${blocked ? ` ${blocked === 1 ? 'Uno necesita' : `${blocked} necesitan`} que elijas un valor o completes su nombre antes de confirmarlo.` : ''}`)
         return saved
     })
     const interpret = (text, kind = 'context', sourceId = null, topic = null, retryId = null) => run(async () => {
@@ -47,7 +49,7 @@ export default function useWorkspaceBackend(project, activeId, onProjectChange) 
         }
         if (!['done', 'partial'].includes(work.status)) throw new Error(work.error || (work.status === 'cancelled' ? 'Interpretación cancelada. Los originales siguen guardados.' : 'No se pudo interpretar. Revisa el proveedor e inténtalo de nuevo.'))
         mark(await request(`/${id}`), true)
-        setNotice(work.status === 'partial' ? 'Resultado parcial: revisa los bloques con errores antes de usarlo.' : 'Información organizada. Puedes revisar y confirmar el conjunto.')
+        setNotice(work.status === 'partial' ? 'Información organizada. Algunas partes no se pudieron leer; revisa los datos propuestos y, si falta algo, reintenta o agrégalo a mano.' : 'Información organizada. Revisa y confirma los datos propuestos.')
         return work
     })
     const upload = async (file, topic) => {

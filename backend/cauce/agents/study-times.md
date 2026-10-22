@@ -1,2 +1,4 @@
 Especialidad: hojas de tiempos. Conserva las observaciones repetidas explícitas de cada actividad en time_samples, con su unidad original. Si el fragmento indica tres observaciones de 10, 12 y 11 minutos, devuelve esas tres observaciones; el código calculará el promedio.
 No confundas tiempo observado, valoración de ritmo, tiempo normal, suplementos y tiempo estándar. No deduzcas uno de otro ni inventes observaciones. time solo se llena si el original declara un tiempo único; no escribas un promedio calculado por ti. No incluyas número de actividad, cantidad de piezas o porcentajes de ritmo como muestras de duración.
+
+Idioma: escribe label, value, preguntas y cualquier texto libre en español, aunque el modelo piense en otro idioma. No traduzcas el excerpt: se copia literal de la fuente. Para un mismo dato usa siempre la misma redacción del valor (por ejemplo «10 unidades», no «There are 10 units»).

@@ -8,7 +8,8 @@ import time
 from pathlib import Path
 
 from ..agent_input import InputBudget, chunk_limit, entity_memory, memory_slice, split_text
-from ..context_master import FACT_SCHEMA, TOPICS, assemble, clean_fact
+from ..context_master import FACT_SCHEMA, TOPICS, assemble, clean_fact, locate
+from ..workspace import normalize
 from ..versions import digest
 
 PROMPTS = Path(__file__).parent
@@ -23,6 +24,37 @@ CONSOLIDATE_SCHEMA = {"type": "object", "properties": {
     "decisions": {"type": "array", "items": {"type": "object", "properties": {"id": {"type": "string"}, "topic": {"type": "string", "enum": list(TOPICS)}, "label": {"type": "string"}, "value": {"type": "string"}, "duplicate_of": {"type": "string"}}, "required": ["id", "topic", "label", "value", "duplicate_of"], "additionalProperties": False}},
     "summary": {"type": "string"}, "questions": {"type": "array", "items": {"type": "string"}},
 }, "required": ["decisions", "summary", "questions"], "additionalProperties": False}
+
+
+# Señales por tema para no depender solo del intérprete al repartir el trabajo.
+TOPIC_CUES = {
+    "negocio": ("negocio", "cliente", "demanda", "venta", "pedido", "producto", "empresa", "mercado"),
+    "operaciones": ("operacion", "proceso", "ensambl", "fabricacion", "etapa", "secuencia", "montaje"),
+    "tiempos": ("tiempo", "minuto", "hora", "segundo", "ciclo", "turno", "takt", "espera"),
+    "maquinas": ("maquina", "equipo", "estacion", "nave", "metro", "dimension", "area", "superficie"),
+    "flujo": ("flujo", "material", "recorrido", "transporte", "traslado", "almacen", "montacarga", "ruta"),
+    "personal": ("personal", "operador", "operari", "supervisor", "trabajador", "plantilla"),
+    "calidad": ("calidad", "inspeccion", "prueba", "defecto", "retrabajo", "rechazo"),
+    "restricciones": ("restriccion", "fijo", "no se puede", "no puede moverse", "limite", "presupuesto", "norma"),
+    "estudios": ("estudio", "cursograma", "cronometr", "hoja de tiempos", "diagrama de proceso"),
+    "referencias": ("imagen", "foto", "plano adjunto", "layout"),
+}
+TOPIC_NAMES = {"negocio": "negocio", "operaciones": "operaciones", "tiempos": "tiempos", "maquinas": "maquinas", "flujo": "flujo de materiales", "personal": "personal", "calidad": "calidad", "restricciones": "restricciones", "estudios": "estudios del trabajo", "referencias": "imagenes y layouts"}
+
+
+def topic_hits(topic, text):
+    """Cuántas señales del tema hay en el texto; un encabezado con su nombre pesa más."""
+    folded = normalize(text)
+    hits = sum(folded.count(cue) for cue in TOPIC_CUES.get(topic, ()))
+    headings = [normalize(line) for line in text.splitlines() if line.lstrip().startswith("#")]
+    if any(TOPIC_NAMES[topic].split()[0] in heading for heading in headings):
+        hits += 10
+    return hits
+
+
+def source_for(excerpt, sources):
+    """Fuente que contiene la evidencia, aunque el modelo haya cambiado espacios o formato."""
+    return next(s for s in sources if excerpt and locate(excerpt, s["text"])[0] >= 0)
 
 
 def semantic_sources(text, source_id=None, limit=None):
@@ -74,7 +106,7 @@ async def organize(text, provider, source_id=None, progress=None, previous=None,
             if "facts" in schema.get("properties", {}):
                 for raw in result["facts"]:
                     try:
-                        clean_fact(raw, next(s for s in sources if raw.get("excerpt") and raw["excerpt"] in s["text"]))
+                        clean_fact(raw, source_for(raw.get("excerpt"), sources))
                     except (ValueError, StopIteration):
                         valid_delivery = False
             if "decisions" in schema.get("properties", {}):
@@ -112,6 +144,16 @@ async def organize(text, provider, source_id=None, progress=None, previous=None,
         assignments.extend({**task, "source": source} for task in plan["assignments"])
         questions.extend(doubt(q, "interprete", source) for q in plan["questions"])
         await phase("interpreting", completed=index + 1, total=len(sources))
+    # Un modelo pequeño suele dejar temas sin delegar. Cada tema con señales en el texto se
+    # encarga, como mínimo, en las dos fuentes donde más aparece.
+    covered = {task["topic"] for task in assignments}
+    for topic in TOPICS:
+        if topic in covered:
+            continue
+        ranked = sorted(((topic_hits(topic, source["text"]), index) for index, source in enumerate(sources)), reverse=True)
+        for hits, index in ranked[:2]:
+            if hits >= 2:
+                assignments.append({"topic": topic, "source": sources[index], "instructions": f"Extrae los datos de {TOPIC_NAMES[topic]} que aparecen en esta fuente, cada uno con su evidencia literal."})
     if not assignments:
         raise ValueError("El intérprete no pudo delegar la lectura. No se generará un contexto vacío como si estuviera completo.")
     await phase("specialists", completed=0, total=len(assignments))
@@ -174,7 +216,7 @@ async def organize(text, provider, source_id=None, progress=None, previous=None,
             for batch in budget.pages(previous_rows, payload, specialist_prompt, SPECIALIST_SCHEMA, max_items=2):
                 try:
                     amended = await ask("especialista:revision:" + handover["specialist"], specialist_prompt, payload(batch), SPECIALIST_SCHEMA)
-                    revised = [clean_fact(f, next(s for s in sources if f.get("excerpt") and f["excerpt"] in s["text"])) for f in amended["facts"]]
+                    revised = [clean_fact(f, source_for(f.get("excerpt"), sources)) for f in amended["facts"]]
                     for row in revised:
                         # Una revisión parcial no borra el resto de la entrega.
                         identity = ("entity_id", "field", "target", "scope")
@@ -233,6 +275,8 @@ async def organize(text, provider, source_id=None, progress=None, previous=None,
         fact_map[old["id"]] = old
     old_sources = (previous or {}).get("sources", []) if isinstance(previous, dict) else []
     all_sources = list({s["id"]: s for s in [*old_sources, *sources]}.values())
+    # La misma duda puede surgir de varios agentes sobre la misma fuente: se conserva una vez.
+    questions = list({q["id"]: q for q in questions}.values())
     master = assemble([f for f in fact_map.values() if not f.get("duplicate_of")], all_sources, questions, "\n".join(f"{s['topic']}: {s['text']}" for s in summaries), trace, handovers)
     master["errors"] = errors
     master["processing"] = {"chunk_chars": chunk_limit(), "source_chunks": len(sources), "cycles": len(trace), "context_window": budget.window, "reserved_output_tokens": budget.output, "token_estimate": "utf8_bytes/3+128"}

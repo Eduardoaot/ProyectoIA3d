@@ -153,7 +153,7 @@ function SpatialNote({ spatial }) {
     )
 }
 
-export default function Story({ needsContext, onVerify, constructionProgress, text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
+export default function Story({ onReadContext, onVerify, constructionProgress, text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
     const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
@@ -190,7 +190,7 @@ export default function Story({ needsContext, onVerify, constructionProgress, te
                                 }}
                                 disabled={reading || empty}
                             >
-                                {reading ? 'Analizando…' : needsContext ? 'Organizar el contexto primero' : 'Construir el plano desde mi contexto'}
+                                {reading ? 'Analizando…' : 'Crear plano desde mi descripción'}
                             </Btn>
                         </div>
                     </div>
@@ -208,9 +208,16 @@ export default function Story({ needsContext, onVerify, constructionProgress, te
                                 <button type="button" className="link-btn" onClick={() => onOpenContext('inicio')}>Revisarlos</button>
                             </p>
                         )}
-                        <Btn variant="ghost" size="small" onClick={() => onOpenContext('inicio')}>
-                            Iniciar proyecto avanzado
-                        </Btn>
+                        <div className="row">
+                            <Btn variant="ghost" size="small" onClick={() => onOpenContext('inicio')}>
+                                {onReadContext ? 'Ver contexto de la planta' : 'Iniciar proyecto avanzado'}
+                            </Btn>
+                            {onReadContext && (
+                                <Btn size="small" disabled={reading} onClick={async () => { if (await onReadContext()) scrollToEditor() }}>
+                                    Construir el plano desde mi contexto
+                                </Btn>
+                            )}
+                        </div>
                     </div>
                 </Appear>
 
@@ -282,7 +289,7 @@ export default function Story({ needsContext, onVerify, constructionProgress, te
 
                     {context2 && (
                         <div className="context-review-card">
-                            <div><h3>Así entendimos tu planta</h3><p className="small">{context2.confirmed ? 'Confirmaste esta versión del plano, contexto y prioridades.' : 'Revisa el plano junto con los datos y las prioridades antes de analizar.'}</p></div>
+                            <div><h3>Así entendimos tu planta</h3><p className="small">{context2.confirmed ? 'Confirmaste esta versión del plano, contexto y prioridades.' : 'Opcional: revisa el plano junto con los datos y las prioridades antes de analizar.'}</p></div>
                             <Btn variant="ghost" size="small" onClick={() => onOpenContext('revision')}>
                                 {context2.confirmed ? 'Ver revisión' : 'Revisar y confirmar'}
                             </Btn>
@@ -290,14 +297,13 @@ export default function Story({ needsContext, onVerify, constructionProgress, te
                     )}
 
                     <div className="row" style={{ marginTop: 32 }}>
-                        <Btn onClick={onSave} disabled={saving || draft.stations.length === 0 || (context2 && !context2.confirmed)}>
+                        <Btn onClick={onSave} disabled={saving || draft.stations.length === 0}>
                             {saving ? 'Analizando…' : 'Guardar y ver en 3D'}
                         </Btn>
 
                         {metrics && <span className="small num">Una pieza recorre {fmt(metrics.piece_m, 1)} m en este plano.</span>}
                         
                         {draft.stations.length === 0 && <span className="small">Agrega al menos una máquina.</span>}
-                        {draft.stations.length > 0 && context2 && !context2.confirmed && <span className="small">Confirma «Así entendimos tu planta» para analizar.</span>}
                     </div>
                 </div>
             )}
