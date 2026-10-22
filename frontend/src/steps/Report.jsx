@@ -72,7 +72,7 @@ export default function Report({ plant, analysis, chosen, notes, report, catalog
 
                 <Appear className="report-summary-action">
                     <Btn onClick={onNext}>
-                        Saltar a resumen
+                        Continuar al resumen
                     </Btn>
                 </Appear>
             </div>

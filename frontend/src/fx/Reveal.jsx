@@ -35,7 +35,9 @@ export function Appear({ children, delay = 0, y = 28, className, style, as = 'di
             style={style}
             initial={{ opacity: 0, y }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.15 }}
+            // 'some': aparece en cuanto se asoma. Con un porcentaje, un bloque más alto que la
+            // pantalla (la vista previa del reporte) podía quedarse invisible para siempre.
+            viewport={{ once: true, amount: 'some' }}
             transition={{ duration: 0.8, delay, ease: EASE }}
         >
             {children}

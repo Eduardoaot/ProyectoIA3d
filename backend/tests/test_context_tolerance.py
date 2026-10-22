@@ -54,3 +54,28 @@ def test_temas_que_el_interprete_no_delega_se_encargan_igual():
     except ValueError:
         pass  # sin afirmaciones el pipeline se detiene; aquí solo importa a quién se encargó
     assert "negocio" in asked and "tiempos" in asked
+
+
+def test_un_relato_corto_tambien_se_reparte_entre_temas():
+    text = "Fabricamos transformadores. Tenemos 10 embobinadoras. Trabajan 20 operadores en dos turnos."
+    asked = []
+
+    class Provider:
+        model = "prueba"
+        capabilities = {"max_context": 8192}
+
+        async def json(self, system, prompt, schema):
+            props = schema.get("properties", {})
+            if "assignments" in props:
+                return {"entities": [], "assignments": [], "questions": []}
+            if "facts" in props:
+                import json as j
+                asked.append(j.loads(prompt)["topic"])
+                return {"facts": [], "questions": []}
+            return {"answers": [], "decisions": [], "summary": "", "questions": []}
+
+    try:
+        asyncio.run(organize(text, Provider()))
+    except ValueError as exc:
+        assert "delegar" not in str(exc)
+    assert {"maquinas", "personal"} <= set(asked)

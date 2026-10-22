@@ -219,10 +219,11 @@ export default function App() {
     // Alternativas que se calculan a pedido (la compacta con IA) se suman al análisis guardado.
     const addAlternative = useCallback((alt) => update((p) => ({ analysis: { ...p.analysis, alternatives: [...p.analysis.alternatives.filter((a) => a.id !== alt.id), alt] } })), [update])
 
+    // El navegador avisa «terminó de imprimir» también cuando se cancela el diálogo: no se puede
+    // saber si se guardó el PDF, así que no se avanza solo; se habilita el resumen y la persona sigue.
     const onPrinted = useCallback(() => {
         update({ printed: true })
-        go(5)
-    }, [update, go])
+    }, [update])
 
     const restart = async () => {
         if (!(await ask('Se borrará el plano, el rediseño y el reporte de este navegador.', { title: '¿Empezar otra planta?', ok: 'Sí, borrar todo' }))) return

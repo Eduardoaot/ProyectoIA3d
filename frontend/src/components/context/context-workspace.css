@@ -443,3 +443,11 @@
 .cw-backend-tools > button:hover:not(:disabled), .cw-backend-tools > label:hover { background: var(--black); color: var(--white); }
 .cw-backend-tools > label input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .cw-source-policy { margin-top: 0; margin-bottom: 28px; max-width: 700px; }
+
+/* Mientras los agentes trabajan, solo el bloque de avance (con el juego) responde. */
+.cw-content-inner.is-busy > :not(.cw-progress-area) { pointer-events: none; opacity: .5; transition: opacity .3s; }
+.cw-progress-area { margin: 32px 0; }
+.cw-progress-area .cw-wait { margin-bottom: 0; }
+.cw-progress-area .cw-job-status:not(:empty) { margin-top: 0; border-left: 4px solid var(--black); }
+/* Una propuesta en conflicto se distingue de un vistazo. */
+.cw-proposal.is-blocked { border-left: 4px solid var(--black); padding-left: 16px; background: var(--g100); }

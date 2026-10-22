@@ -28,10 +28,10 @@ CONSOLIDATE_SCHEMA = {"type": "object", "properties": {
 
 # Señales por tema para no depender solo del intérprete al repartir el trabajo.
 TOPIC_CUES = {
-    "negocio": ("negocio", "cliente", "demanda", "venta", "pedido", "producto", "empresa", "mercado"),
+    "negocio": ("negocio", "cliente", "demanda", "venta", "pedido", "producto", "empresa", "mercado", "fabricamos", "producimos", "fabricacion de"),
     "operaciones": ("operacion", "proceso", "ensambl", "fabricacion", "etapa", "secuencia", "montaje"),
     "tiempos": ("tiempo", "minuto", "hora", "segundo", "ciclo", "turno", "takt", "espera"),
-    "maquinas": ("maquina", "equipo", "estacion", "nave", "metro", "dimension", "area", "superficie"),
+    "maquinas": ("maquina", "equipo", "estacion", "nave", "metro", "dimension", "area", "superficie", "horno", "prensa", "torno", "cortadora", "embobinad", "soldador", "tanque", "grua", "banda", "conveyor", "mesa de"),
     "flujo": ("flujo", "material", "recorrido", "transporte", "traslado", "almacen", "montacarga", "ruta"),
     "personal": ("personal", "operador", "operari", "supervisor", "trabajador", "plantilla"),
     "calidad": ("calidad", "inspeccion", "prueba", "defecto", "retrabajo", "rechazo"),
@@ -147,12 +147,15 @@ async def organize(text, provider, source_id=None, progress=None, previous=None,
     # Un modelo pequeño suele dejar temas sin delegar. Cada tema con señales en el texto se
     # encarga, como mínimo, en las dos fuentes donde más aparece.
     covered = {task["topic"] for task in assignments}
+    # Si no delegó nada (pasa con relatos cortos), basta una señal y «operaciones» va siempre;
+    # si ya delegó, solo se agregan los temas con señales claras.
+    threshold, fallback = (2, False) if assignments else (1, True)
     for topic in TOPICS:
         if topic in covered:
             continue
         ranked = sorted(((topic_hits(topic, source["text"]), index) for index, source in enumerate(sources)), reverse=True)
         for hits, index in ranked[:2]:
-            if hits >= 2:
+            if hits >= threshold or (fallback and topic == "operaciones" and index == ranked[0][1]):
                 assignments.append({"topic": topic, "source": sources[index], "instructions": f"Extrae los datos de {TOPIC_NAMES[topic]} que aparecen en esta fuente, cada uno con su evidencia literal."})
     if not assignments:
         raise ValueError("El intérprete no pudo delegar la lectura. No se generará un contexto vacío como si estuviera completo.")
