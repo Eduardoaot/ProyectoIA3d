@@ -153,7 +153,7 @@ function SpatialNote({ spatial }) {
     )
 }
 
-export default function Story({ needsContext, onVerify, text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
+export default function Story({ needsContext, onVerify, constructionProgress, text, setText, info, draft, setDraft, catalog, reading, error, onRead, onBlank, onSave, saving, onOpenContext, context2, pending = 0 }) {
     const empty = !text.trim()
     const [metrics, setMetrics] = useState(null)
     const editorRef = useRef(null)
@@ -215,7 +215,7 @@ export default function Story({ needsContext, onVerify, text, setText, info, dra
                 </Appear>
 
                 <div className="stack">
-                    {reading && <WaitPanel kind="story" title="Interpretando el acomodo de tu planta…" game="Juega mientras se analiza tu planta" />}
+                    {reading && <><WaitPanel kind="story" title={constructionProgress ? 'Construyendo y comprobando tu planta por partes…' : 'Interpretando el acomodo de tu planta…'} game="Juega mientras se analiza tu planta" />{constructionProgress && <p role="status">{({ building: 'Preparando el espacio', entities: 'Colocando áreas y equipos', routes: 'Conectando los recorridos', verifying: 'Comprobando el conjunto', review: 'Plano listo para revisión' })[constructionProgress.stage] || 'Preparando la construcción'}{constructionProgress.total ? ` · ${constructionProgress.completed} de ${constructionProgress.total}` : ''}</p>}</>}
 
                     {!reading && !info && (
                         <div className="block">
@@ -257,6 +257,7 @@ export default function Story({ needsContext, onVerify, text, setText, info, dra
                 </div>
             </div>
 
+            {!reading && constructionProgress?.stage === 'blocked' && <ConstructionReview report={constructionProgress.verification} title="La construcción se detuvo en este lote; tu plano anterior sigue guardado" />}
             {info?.verification && <ConstructionReview report={info.verification} stale={info.verificationDraftKey !== JSON.stringify(draft)} />}
             {draft && onVerify && <button className="btn btn--ghost btn--small" type="button" onClick={onVerify}>Comprobar el plano contra el contexto</button>}
             {draft && (

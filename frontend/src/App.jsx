@@ -7,7 +7,7 @@ import { isStale, samePlant } from './proposals'
 import { contextPayload } from './context'
 import { summarize } from './context2'
 import { deleteAttachments, reviewSignature } from './contextWorkspace'
-import { acceptedContext, workspaceRequest } from './workspaceApi'
+import { acceptedContext, constructWorkspace, workspaceRequest } from './workspaceApi'
 import ContextWorkspace from './components/context/ContextWorkspace'
 import './components/context/context-entry.css'
 import FlowMark from './brand/FlowMark'
@@ -65,6 +65,7 @@ export default function App() {
     const [step, setStep] = useState(0)
     const [catalog, setCatalog] = useState(null)
     const [reading, setReading] = useState(false)
+    const [constructionProgress, setConstructionProgress] = useState(null)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState(null)
     const [chat, setChat] = useState(false)
@@ -158,11 +159,20 @@ export default function App() {
             return false
         }
         setReading(true)
+        setConstructionProgress(null)
         setError(null)
 
         try {
             const done = startWait('story')
-            const r = await api.story(project.text, has(available, 'context_workspace') ? acceptedContext(project) : undefined)
+            const r = has(available, 'construction_jobs') && accepted?.status === 'accepted'
+                ? await constructWorkspace(project, library.activeId, {
+                    onProgress: (work) => {
+                        setConstructionProgress({ stage: work.stage, ...work.stage_progress })
+                        update({ constructionJob: { id: work.id, status: work.status } })
+                    },
+                    onSaved: (saved) => update({ serverWorkspaceId: saved.id, serverRevision: saved.revision }),
+                })
+                : await api.story(project.text, has(available, 'context_workspace') ? acceptedContext(project) : undefined)
             done()
             const built = upgradePlant(r.plant)
             update({ draft: built, info: { source: r.source, notes: r.notes, error: r.error, spatial: r.spatial, verification: r.verification, verificationDraftKey: JSON.stringify(built) } })
@@ -170,6 +180,7 @@ export default function App() {
 
             return true
         } catch (error) {
+            if (error.job?.verification) setConstructionProgress({ stage: 'blocked', verification: error.job.verification })
             setError(`Error al analizar el proceso: ${error instanceof Error ? error.message : 'Error desconocido.'}`)
             setReading(false)
             return false
@@ -261,6 +272,7 @@ export default function App() {
             error={error}
             onRead={read}
             needsContext={has(caps, 'context_master') && acceptedContext(project).master?.status !== 'accepted'}
+            constructionProgress={constructionProgress}
             onVerify={has(caps, 'context_master') && acceptedContext(project).master?.status === 'accepted' ? verifyDraft : undefined}
             onBlank={blank}
             onOpenContext={openContext}

@@ -152,6 +152,10 @@ try {
     const point=built.layout[built.stations[0].id]
     assert.ok(point[0]>32*2/3 && point[1]<16/3)
     assert.equal(await stored('.info.verification.status'),'verified')
+    assert.equal(await stored('.constructionJob.status'),'done')
+    const steps=await stored('.draft.construction.steps')
+    assert.deepEqual(steps.map(s=>s.stage),['building','entities','verifying'])
+    assert.ok(steps.every(s=>s.totals.unmet===0))
     console.log('Passed: accepted master builds the requested layout and shows requirement verification without another model extraction.')
     assert.deepEqual(exceptions,[])
     console.log('Data backend browser integration passed.')

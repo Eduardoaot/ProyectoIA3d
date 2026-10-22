@@ -25,6 +25,14 @@ STUDY_SCHEMA = {"type": "object", "properties": {"activities": {"type": "array",
 }}}, "required": ["activities"], "additionalProperties": False}
 
 
+def progress_view(value):
+    """No retransmite el maestro y sus trazas completas en cada consulta de avance."""
+    result = {k: v for k, v in value.items() if k not in ("master", "agent_cache", "checkpoint", "result")}
+    if value["kind"] == "construction" and value["status"] == "done":
+        result["result"] = value["result"]
+    return result
+
+
 def blocks(text, limit=None):
     """No trunca: cada carácter pertenece a un bloque con desplazamiento original."""
     return [{"index": index, **part} for index, part in enumerate(split_text(text, limit))]
@@ -128,6 +136,26 @@ async def run(workspace_id, job_id, provider):
     value.update(status="running")
     store.save_job(workspace_id, value)
     try:
+        if value["kind"] == "construction":
+            from .master_builder import build_steps, ConstructionBlocked
+            try:
+                for event in build_steps(value["master"], value.get("checkpoint")):
+                    if store.job(workspace_id, job_id)["status"] == "cancelled":
+                        raise asyncio.CancelledError()
+                    value.update(stage=event["stage"], stage_progress={k: event[k] for k in ("completed", "total", "status", "totals")}, checkpoint=event["checkpoint"])
+                    if "result" in event:
+                        value["result"] = event["result"]
+                    store.save_job(workspace_id, value)
+                    await asyncio.sleep(0)
+            except ConstructionBlocked as exc:
+                value.update(status="blocked", error=str(exc), checkpoint=exc.checkpoint, verification=exc.report)
+                return
+            def apply(project):
+                result = value["result"]
+                project.update(draft=result["plant"], info={k: result[k] for k in ("source", "notes", "error", "spatial", "verification")})
+            saved = store.mutate(workspace_id, value["base_revision"], apply)
+            value.update(status="done", stage="review", applied_revision=saved["revision"])
+            return
         if value["kind"] == "context":
             from .agents.context_pipeline import organize
             from .context_master import accepted_master
@@ -196,6 +224,29 @@ def launch(workspace_id, body, provider):
     saved = store.read(workspace_id)
     if saved["revision"] != body.expected_revision:
         raise store.Conflict("El expediente cambió antes de iniciar la interpretación.")
+    if body.kind == "construction":
+        from .context_master import accepted_master
+        from .master_builder import current_facts, construction_signature
+        master = accepted_master(saved["project"])
+        current_facts(master)
+        value = {"id": uuid.uuid4().hex, "kind": "construction", "master": master,
+                 "base_revision": saved["revision"], "status": "queued", "created": store.now(), "result": {}, "errors": []}
+        if body.retry_job_id:
+            previous = store.job(workspace_id, body.retry_job_id)
+            if previous["kind"] != "construction":
+                raise ValueError("El trabajo a reanudar no es una construcción")
+            if previous["status"] in ("queued", "running"):
+                previous["status"] = "cancelled"
+                store.save_job(workspace_id, previous)
+                if previous["id"] in TASKS:
+                    TASKS[previous["id"]].cancel()
+            checkpoint = previous.get("checkpoint")
+            if checkpoint and checkpoint.get("master_signature") == construction_signature(master):
+                value["checkpoint"] = checkpoint
+                value["resumed_from"] = previous["id"]
+        store.save_job(workspace_id, value)
+        TASKS[value["id"]] = asyncio.create_task(run(workspace_id, value["id"], provider))
+        return value
     text = body.text
     if body.source_id:
         document, _ = store.document(workspace_id, body.source_id)

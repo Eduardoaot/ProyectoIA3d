@@ -97,6 +97,7 @@ def test_capabilities_coherente(client):
     # Cada función anunciada tiene con qué funcionar.
     needs = {
         "context_master": lambda: __import__("cauce.agents.context_pipeline"),
+        "construction_jobs": lambda: __import__("cauce.master_builder"),
         "report_validation": lambda: __import__("cauce.validate"),
         "segmented_context": lambda: __import__("cauce.context"),
         "count": lambda: __import__("cauce.units"),

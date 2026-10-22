@@ -127,7 +127,7 @@ def verify_master_layout(body: PlantInterface):
 
 # Funciones nuevas del contrato v3 que ya están implementadas. El frontend las consulta
 # en /api/capabilities y oculta lo que no aparece aquí. Se completa fase por fase.
-FEATURES: list[str] = ["context_master", "report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors", "simulate", "context_agents", "context_workspace", "context_jobs", "context_documents", "work_studies", "operator_import"]
+FEATURES: list[str] = ["construction_jobs", "context_master", "report_validation", "segmented_context", "count", "locked", "plan_ops", "weights", "flows", "conveyors", "simulate", "context_agents", "context_workspace", "context_jobs", "context_documents", "work_studies", "operator_import"]
 
 
 def provider_caps(p) -> dict:

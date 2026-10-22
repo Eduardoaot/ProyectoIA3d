@@ -22,6 +22,8 @@ El recorrido maestro añade un intérprete general que delega a especialistas, u
 
 Para probar: abre **Ver contexto de la planta**, pega el relato o adjunta documentos, organiza y revisa las propuestas. Confirma los datos y vuelve al paso inicial para construir. Después de editar el plano, usa **Comprobar el plano contra el contexto**; confirma la versión antes de analizar. Los requisitos incumplidos o desconocidos y las dimensiones ilustrativas quedan visibles.
 
+El plano se construye por lotes de cinco entidades o recorridos (`CAUCE_BUILD_BATCH_SIZE`, entre 1 y 20), con comprobación y avance recuperable en SQLite. La pantalla muestra las etapas; si un lote incumple el contexto o se solapa, se detiene y conserva el avance anterior. Volver a construir permite reanudar una interrupción cuando el maestro coincide; cambiar sus datos inicia una construcción nueva. El plano anterior permanece guardado hasta terminar correctamente.
+
 La prioridad general es texto para datos e imágenes para ubicación. Puedes indicar que las imágenes son la referencia principal de este proyecto. En ese caso se requiere interpretación de visión o revisión manual explícita; la aplicación no afirma haber leído una imagen con un modelo sin visión.
 
 El ensayo con el modelo real se ejecuta desde la raíz:

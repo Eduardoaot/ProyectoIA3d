@@ -42,7 +42,7 @@ export default function useWorkspaceBackend(project, activeId, onProjectChange) 
         setJob(work)
         while (work.status === 'queued' || work.status === 'running') {
             await delay(700)
-            work = await request(`/${id}/jobs/${work.id}`)
+            work = await request(`/${id}/jobs/${work.id}?summary=true`)
             setJob(work)
         }
         if (!['done', 'partial'].includes(work.status)) throw new Error(work.error || (work.status === 'cancelled' ? 'Interpretación cancelada. Los originales siguen guardados.' : 'No se pudo interpretar. Revisa el proveedor e inténtalo de nuevo.'))

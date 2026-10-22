@@ -3,7 +3,7 @@ import copy
 import pytest
 
 from cauce.context_master import assemble, clean_fact, entity_id
-from cauce.master_builder import build, verify
+from cauce.master_builder import build, build_steps, verify, ConstructionBlocked
 
 
 def master(extra=()):
@@ -137,3 +137,133 @@ def test_verify_endpoint_reports_changes_without_rebuilding_the_client_plan(clie
     response = client.post("/api/master/verify", json={"plant": plant, "context": {"master": data}})
     assert response.status_code == 200 and response.json()["status"] == "verified"
     assert plant == original
+
+
+def many_equipment(count=8):
+    extra = []
+    for i in range(count):
+        for field, number in [("count", 1), ("width", 1), ("depth", 1), ("x", 2 + i % 8 * 3), ("z", 2 + i // 8 * 3)]:
+            extra.append({"entity": f"Equipo {i}", "field": field, "number": number, "value": f"{field}: {number} m", "excerpt": f"Equipo {i}, {field}: {number} m."})
+    return master(extra)
+
+
+def test_construction_checks_small_batches_and_resumes_without_rebuilding_completed_parts():
+    data = many_equipment(20)
+    events = list(build_steps(data, batch_size=2))
+    counts = [len(e["checkpoint"]["completed_entities"]) for e in events if e["stage"] == "entities"]
+    assert all(b - a <= 2 for a, b in zip([0, *counts], counts))
+    assert len(events[-1]["result"]["plant"]["stations"]) == 21
+    assert all(e["totals"]["unmet"] == 0 for e in events)
+    checkpoint = next(e["checkpoint"] for e in events if e["stage"] == "entities")
+    resumed = list(build_steps(data, checkpoint=checkpoint, batch_size=2))
+    assert resumed[0]["completed"] > len(checkpoint["completed_entities"])
+    assert resumed[-1]["result"]["plant"] == events[-1]["result"]["plant"]
+    changed = copy.deepcopy(data)
+    changed["facts"][0]["value"] = "Corrección del usuario"
+    with pytest.raises(ValueError, match="maestro cambió"):
+        list(build_steps(changed, checkpoint=checkpoint))
+
+
+def test_invalid_batch_stops_before_later_equipment_and_keeps_last_valid_checkpoint():
+    data = master([
+        {"entity": "Horno", "field": "x", "number": 28, "value": "x 28 m", "excerpt": "Horno x 28 m."},
+        {"entity": "Horno", "field": "z", "number": 2, "value": "z 2 m", "excerpt": "Horno z 2 m."},
+        *[{"entity": "Equipo que colisiona", "field": field, "number": number, "value": f"{field} {number} m", "excerpt": f"Equipo que colisiona: {field} {number} m."} for field, number in [("count", 1), ("width", 2), ("depth", 2), ("x", 28), ("z", 2)]],
+        {"entity": "Equipo posterior", "field": "count", "number": 1, "value": "1 equipo posterior", "excerpt": "Hay 1 equipo posterior."},
+    ])
+    with pytest.raises(ConstructionBlocked) as error:
+        list(build_steps(data, batch_size=1))
+    checkpoint = error.value.checkpoint
+    assert len(checkpoint["plant"]["stations"]) == 1
+    assert checkpoint["plant"]["stations"][0]["name"] == "Horno"
+    assert error.value.report["totals"]["unmet"] > 0
+
+
+def accepted_project(data):
+    from cauce import workspace as service
+    project = service.prepare({"draft": {"original": True}})
+    service.merge_result(project, {"master": data, "proposals": [{**f, "status": "pending"} for f in data["facts"]]})
+    service.confirm(project, [f["id"] for f in data["facts"]])
+    return project
+
+
+def test_construction_job_preserves_checkpoint_on_interruption_then_resumes(tmp_path, monkeypatch):
+    import asyncio
+    from cauce import workspace_jobs as jobs, workspace_store as store
+    from cauce.context_master import accepted_master
+    from cauce.workspace_routes import JobInput
+    monkeypatch.setenv("CAUCE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("CAUCE_BUILD_BATCH_SIZE", "2")
+    saved = store.write("case", accepted_project(many_equipment()), 0)
+    original_save = store.save_job
+    interrupted = []
+    def save_and_interrupt(workspace, value):
+        result = original_save(workspace, value)
+        if value.get("stage") == "entities" and not interrupted:
+            interrupted.append(True)
+            raise asyncio.CancelledError()
+        return result
+    monkeypatch.setattr(store, "save_job", save_and_interrupt)
+    work = {"id": "first", "kind": "construction", "master": accepted_master(saved["project"]), "base_revision": saved["revision"], "status": "queued", "errors": [], "result": {}}
+    store.save_job("case", work)
+    asyncio.run(jobs.run("case", "first", None))
+    first = store.job("case", "first")
+    assert first["status"] == "cancelled" and len(first["checkpoint"]["completed_entities"]) == 2
+    assert store.read("case")["project"]["draft"] == {"original": True}
+    async def resume():
+        work = jobs.launch("case", JobInput(kind="construction", expected_revision=saved["revision"], retry_job_id="first"), None)
+        await jobs.TASKS[work["id"]]
+        return store.job("case", work["id"])
+    result = asyncio.run(resume())
+    assert result["status"] == "done" and result["resumed_from"] == "first"
+    assert len(store.read("case")["project"]["draft"]["stations"]) == 9
+
+
+def test_construction_route_works_without_ollama(client, monkeypatch, tmp_path):
+    import time
+    import main
+    from cauce import workspace_store as store
+    monkeypatch.setenv("CAUCE_DATA_DIR", str(tmp_path))
+    class Offline:
+        async def status(self):
+            raise AssertionError("La construcción no necesita consultar el modelo")
+    monkeypatch.setattr(main, "context_organizer", Offline())
+    store.write("case", accepted_project(many_equipment()), 0)
+    with client:
+        response = client.post("/api/workspaces/case/jobs", json={"kind": "construction", "expected_revision": 1})
+        assert response.status_code == 200, response.text
+        work = response.json()
+        for _ in range(100):
+            work = client.get(f"/api/workspaces/case/jobs/{work['id']}").json()
+            if work["status"] not in ("queued", "running"):
+                break
+            time.sleep(.01)
+        assert work["status"] == "done", work
+        assert work["checkpoint"]["plant"]["construction"]["steps"]
+        summary = client.get(f"/api/workspaces/case/jobs/{work['id']}?summary=true").json()
+        assert "master" not in summary and "checkpoint" not in summary
+        assert summary["result"]["plant"] == work["result"]["plant"]
+        assert store.read("case")["revision"] == 2
+
+
+def test_construction_conflict_keeps_user_edits_and_recoverable_result(tmp_path, monkeypatch):
+    import asyncio
+    from cauce import workspace_jobs as jobs, workspace_store as store
+    from cauce.context_master import accepted_master
+    monkeypatch.setenv("CAUCE_DATA_DIR", str(tmp_path))
+    saved = store.write("case", accepted_project(many_equipment()), 0)
+    original_save = store.save_job
+    edited = []
+    def save_and_edit(workspace, value):
+        result = original_save(workspace, value)
+        if value.get("stage") == "entities" and not edited:
+            edited.append(True)
+            store.write("case", {**saved["project"], "name": "Corrección durante la construcción"}, saved["revision"])
+        return result
+    monkeypatch.setattr(store, "save_job", save_and_edit)
+    store.save_job("case", {"id": "work", "kind": "construction", "master": accepted_master(saved["project"]), "base_revision": saved["revision"], "status": "queued", "errors": [], "result": {}})
+    asyncio.run(jobs.run("case", "work", None))
+    result = store.job("case", "work")
+    assert result["status"] == "conflict" and result["checkpoint"] and result["result"]["plant"]
+    assert store.read("case")["project"]["draft"] == {"original": True}
+    assert store.read("case")["project"]["name"] == "Corrección durante la construcción"

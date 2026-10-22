@@ -14,6 +14,29 @@ export async function workspaceRequest(path, { method = 'GET', body, signal, bin
     return response.json()
 }
 
+export async function constructWorkspace(project, activeId, { onProgress = () => {}, onSaved = () => {}, request = workspaceRequest, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
+    const id = project.serverWorkspaceId || activeId
+    const { serverRevision: _revision, serverWorkspaceId: _id, ...payload } = project
+    const saved = await request(`/${id}`, { method: 'PUT', body: { project: payload, expected_revision: project.serverRevision || 0 } })
+    onSaved(saved)
+    const previous = project.constructionJob
+    const retry = previous && ['error', 'blocked', 'interrupted', 'cancelled', 'running', 'queued'].includes(previous.status) ? previous.id : null
+    let work = await request(`/${id}/jobs`, { method: 'POST', body: { kind: 'construction', expected_revision: saved.revision, retry_job_id: retry } })
+    onProgress(work)
+    while (['queued', 'running'].includes(work.status)) {
+        await wait(250)
+        work = await request(`/${id}/jobs/${work.id}?summary=true`)
+        onProgress(work)
+    }
+    if (work.status !== 'done' || !work.result?.plant) {
+        const error = new Error(work.error || 'La construcción se detuvo. El plano anterior permanece guardado y puedes reintentar desde el avance conservado.')
+        error.job = work
+        throw error
+    }
+    onSaved(await request(`/${id}`))
+    return work.result
+}
+
 export function acceptedContext(project, segmented = true) {
     const original = project.context || { segments: {} }
     const context = typeof original === 'string' ? { story: original, segments: {} } : original

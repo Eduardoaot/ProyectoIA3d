@@ -127,15 +127,17 @@ def create_router(provider):
 
     @router.post("/{workspace_id}/jobs")
     async def start_job(workspace_id: str, body: JobInput):
-        if body.kind not in ("context", "studies"):
+        if body.kind not in ("context", "studies", "construction"):
             raise HTTPException(422, "Tipo de interpretación no reconocido")
-        if not (await provider().status()).get("ready"):
+        if body.kind != "construction" and not (await provider().status()).get("ready"):
             raise HTTPException(503, "El proveedor de contexto no está disponible. Puedes guardar datos manuales y volver a interpretar después.")
-        return translate(lambda: jobs.launch(workspace_id, body, provider()))
+        value = translate(lambda: jobs.launch(workspace_id, body, provider()))
+        return jobs.progress_view(value) if body.kind == "construction" else value
 
     @router.get("/{workspace_id}/jobs/{job_id}")
-    def read_job(workspace_id: str, job_id: str):
-        return translate(lambda: store.job(workspace_id, job_id))
+    def read_job(workspace_id: str, job_id: str, summary: bool = False):
+        value = translate(lambda: store.job(workspace_id, job_id))
+        return jobs.progress_view(value) if summary else value
 
     @router.post("/{workspace_id}/jobs/{job_id}/cancel")
     async def cancel_job(workspace_id: str, job_id: str):
